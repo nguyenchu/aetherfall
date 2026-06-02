@@ -1,0 +1,19 @@
+{
+  "name": "aetherfall",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Aetherfall - et historiedrevet roguelite-JRPG (Hades-modell).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.87.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  }
+}
