@@ -17,8 +17,6 @@ bindKeyboard();
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: GAME.width * 2,
-  height: GAME.height * 2,
   pixelArt: true,
   antialias: false,
   roundPixels: true,
@@ -29,8 +27,10 @@ new Phaser.Game({
     roundPixels: true,
   },
   scale: {
-    mode: Phaser.Scale.NONE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.NO_CENTER,
+    width: GAME.width * 2,
+    height: GAME.height * 2,
   },
   scene: [BootScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, DialogueScene, GameMenuScene],
 });

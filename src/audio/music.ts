@@ -114,7 +114,7 @@ function midiToFreq(m: number): number {
 class MusicEngine {
   private ctx?: AudioContext;
   private master?: GainNode;
-  private enabled = true;
+  private enabled = false;
   private current: TrackName | null = null;
   private timer?: number;
 

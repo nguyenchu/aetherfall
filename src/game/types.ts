@@ -81,6 +81,7 @@ export interface BattleEvent {
   actorId?: string;
   targetId?: string;
   amount?: number; // damage (positive) or healing (negative)
+  element?: string; // for spell visual effects
 }
 
 export type BattlePhase = 'input' | 'resolving' | 'won' | 'lost' | 'fled';

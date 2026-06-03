@@ -37,6 +37,7 @@ const PALETTE: Record<string, number> = {
   n: 0x46506a, // gray shadow
   D: 0x3a5a8a, // boss deep blue
   d: 0x24385a, // boss shadow
+  r: 0x993311, // ember shadow
 };
 
 // Each value is top-to-bottom rows. Width is the longest row.
@@ -290,6 +291,40 @@ const SPRITES: Record<string, string[]> = {
     '....oDDdDDDDdDDo....',
     '.....ooDDDDDDoo.....',
     '.......oooooo.......',
+  ],
+
+  // --- Ember Hound: low crouching fire-wolf, orange body, glowing eyes ---
+  e_ember: [
+    '....oooooo....',
+    '...oRRRRRRo...',
+    '..oRRrrRRRRo..',
+    '..oRRRRRRRRo..',
+    '..oRXRRRRXRo..',
+    '..oRRRRRRRRo..',
+    '.oRRrRRRRrRRo.',
+    'oRRRRRRRRRRRRo',
+    'oRooRRRRRRooRo',
+    '..oRRRRRRRRo..',
+    '..oRRrrrrRRo..',
+    '..oRo....oRo..',
+    '..oo......oo..',
+  ],
+
+  // --- Cinder Wraith: dark floating form with ember glow ---
+  e_cinder: [
+    '....oooooo....',
+    '...onnnnnnoo..',
+    '..onXnnnXnno..',
+    '..onnnnnnnnoo.',
+    '..onnnnnnnno..',
+    '..oonnnnnoo...',
+    '...onnnnno....',
+    '....onnnno....',
+    '....oXnnXo....',
+    '....onnnnoo...',
+    '...onnnoRoo...',
+    '..ooRoo..ooo..',
+    '..oo......oo..',
   ],
 
   // --- Tide Crawler: crab-like, orange claws, glowing eyes ---

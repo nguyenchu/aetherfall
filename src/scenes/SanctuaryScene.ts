@@ -32,9 +32,9 @@ type Facing = 'down' | 'up' | 'left' | 'right';
 const MAP = [
   '##############################',
   '#............................#',
-  '#..........................D.#',
-  '#....K.............L......DD.#',
-  '#..........................D.#',
+  '#..###..............###......#',
+  '#..###...K.......L..###...DD.#',
+  '#..###..............###...D..#',
   '#............................#',
   '#............................#',
   '#.........C.......V..........#',
@@ -55,12 +55,16 @@ interface Npc {
   scriptId?: string;
 }
 
-const NPCS: Record<string, Npc> = {
-  K: { spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue', scriptId: 'npc_keeper' },
-  L: { spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue', scriptId: 'npc_scholar' },
-  C: { spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue', scriptId: 'npc_child' },
-  V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
-};
+function npcs(): Record<string, Npc> {
+  const ch2Done = hasFlag('ch2_complete');
+  const ch1Done = hasFlag('ch1_complete');
+  return {
+    K: { spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue', scriptId: ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper' },
+    L: { spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue', scriptId: ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar' },
+    C: { spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue', scriptId: 'npc_child' },
+    V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
+  };
+}
 
 type State = 'roam' | 'shop' | 'busy';
 
@@ -97,28 +101,24 @@ export class SanctuaryScene extends Phaser.Scene {
     this.grid = MAP;
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
-    this.drawMap();
+    this.drawMap(npcs());
+    this.placePortalLabels();
     this.spawnPlayer();
     this.bindInput();
     attachTouchControls(this);
 
     music.play('explore');
 
-    // Arrival story: intro the first time, victory scene after the boss.
-    let arrival: string | undefined;
+    // Arrival story: only intro on first visit. Chapter wins play from BattleScene.
     if (!hasFlag('intro_seen')) {
       setFlag('intro_seen');
-      arrival = 'intro';
-    } else if (hasFlag('stratum1_cleared') && !hasFlag('stratum1_win_seen')) {
-      setFlag('stratum1_win_seen');
-      arrival = 'stratum1_win';
+      this.openDialogue('intro');
     }
-    if (arrival) this.openDialogue(arrival);
   }
 
   // --- Map and figures ------------------------------------------------------
 
-  private drawMap() {
+  private drawMap(npcDefs: Record<string, Npc>) {
     for (let r = 0; r < this.grid.length; r++) {
       const row = this.grid[r];
       for (let c = 0; c < row.length; c++) {
@@ -137,7 +137,7 @@ export class SanctuaryScene extends Phaser.Scene {
           this.px = c;
           this.py = r;
         }
-        const npc = NPCS[ch];
+        const npc = npcDefs[ch];
         if (npc) {
           this.npcAt.set(`${c},${r}`, npc);
           this.add.ellipse(x + GAME.tile / 2, y + GAME.tile / 2 + 7, 14, 5, 0x000000, 0.34).setDepth(3);
@@ -201,14 +201,21 @@ export class SanctuaryScene extends Phaser.Scene {
     const ny = this.py + d.y;
     const ch = this.grid[ny]?.[nx] ?? '#';
 
-    const npc = this.npcAt.get(`${nx},${ny}`);
-    if (npc) {
-      this.moveLockedUntil = time + 220;
-      this.interact(npc);
+    if (ch === 'D') { this.descend(); return; }
+
+    if (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y) {
+      this.descendToChapter2();
       return;
     }
-    if (ch === 'D') {
-      this.descend();
+    if (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y) {
+      this.descendToChapter3();
+      return;
+    }
+
+    const npc = this.npcAt.get(`${nx},${ny}`);
+    if (npc && npc.name) {
+      this.moveLockedUntil = time + 220;
+      this.interact(npc);
       return;
     }
     if (ch === '#' || ch === undefined) {
@@ -281,9 +288,56 @@ export class SanctuaryScene extends Phaser.Scene {
 
   // --- Descent --------------------------------------------------------------
 
+  private placePortalLabels() {
+    // Label the Ashenveil Forest portal.
+    const dTiles: { c: number; r: number }[] = [];
+    for (let r = 0; r < this.grid.length; r++)
+      for (let c = 0; c < this.grid[r].length; c++)
+        if (this.grid[r][c] === 'D') dTiles.push({ c, r });
+    if (dTiles.length > 0) {
+      const mid = dTiles[Math.floor(dTiles.length / 2)];
+      this.add.text(mid.c * GAME.tile + GAME.tile / 2, mid.r * GAME.tile - 6, 'Ashenveil Forest',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#a58cff' })).setOrigin(0.5, 1).setDepth(5);
+    }
+
+    // Chapter 2 portal — north of town, only after ch1 complete.
+    if (hasFlag('ch1_complete')) {
+      const px = 14, py = 1;
+      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
+        .setOrigin(0, 0).setTint(0x4488ff).setDepth(1);
+      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Sunken City',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6699ff' })).setOrigin(0.5, 1).setDepth(5);
+      this.ch2PortalPos = { x: px, y: py };
+    }
+
+    if (hasFlag('ch2_complete')) {
+      const px = 2, py = 7;
+      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
+        .setOrigin(0, 0).setTint(0xff6622).setDepth(1);
+      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Ashen Peaks',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff8844' })).setOrigin(0.5, 1).setDepth(5);
+      this.ch3PortalPos = { x: px, y: py };
+    }
+  }
+
+  private ch2PortalPos: { x: number; y: number } | null = null;
+  private ch3PortalPos: { x: number; y: number } | null = null;
+
   private descend() {
     this.state = 'busy';
     getRun().depth = 1;
+    this.scene.start('Descent');
+  }
+
+  private descendToChapter2() {
+    this.state = 'busy';
+    getRun().depth = 3;
+    this.scene.start('Descent');
+  }
+
+  private descendToChapter3() {
+    this.state = 'busy';
+    getRun().depth = 5;
     this.scene.start('Descent');
   }
 

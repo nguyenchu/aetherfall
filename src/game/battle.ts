@@ -136,13 +136,13 @@ export class Battle {
           const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
           const heal = Math.round(spell.power + actor.stats.int * 0.5);
           target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
-          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal });
+          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element });
         } else {
           const target = this.aliveTargetOr(cmd.targetId, actor.side === 'party' ? 'enemy' : 'party');
           if (!target) return;
           const dmg = this.spellDamage(actor, target, spell.power);
           this.applyDamage(target, dmg);
-          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} takes ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg });
+          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} takes ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg, element: spell.element });
           this.maybeKo(target, events);
         }
         return;

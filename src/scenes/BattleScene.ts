@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { ITEMS, SPELLS } from '../game/content';
-import { completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
+import { getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
@@ -518,20 +518,23 @@ export class BattleScene extends Phaser.Scene {
     this.refreshStatus();
 
     const boss = this.battle.enemies.some((e) => e.isBoss);
-    const loot = grantBattleLoot(run.depth, boss);
+    const depth = run.depth;
+    const loot = grantBattleLoot(depth, boss);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
     if (boss) {
-      setFlag('stratum1_cleared');
-      completeQuest('defeat_leviathan');
+      const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
+      setFlag(flag);
     }
     saveProgress();
     music.fanfare('victory');
     this.ui = 'over';
 
     this.time.delayedCall(boss ? 1000 : 1500, () => {
-      if (boss) this.toTown();
-      else {
-        this.scene.resume('Descent');
+      if (boss) {
+        const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : 'ch3_win';
+        this.scene.launch('Dialogue', { scriptId: winScript, onDone: () => this.toTown() });
+      } else {
+        this.scene.resume('Descent', { won: true });
         this.scene.stop();
       }
     });
@@ -597,17 +600,50 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  private static spellColor(element?: string): number {
+    switch (element) {
+      case 'fire':  return 0xff4422;
+      case 'ice':   return 0x44aaff;
+      case 'holy':  return 0xffe866;
+      default:      return 0x8a6cf0;
+    }
+  }
+
   private animateEvent(ev: BattleEvent) {
     if (ev.kind === 'attack' && ev.actorId && ev.targetId) {
       this.attackAnim(ev.actorId, ev.targetId);
+      if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
-      if ((ev.amount ?? 0) < 0) this.healAnim(ev.targetId, 0x6cf0a0);
-      else this.projectileAnim(ev.actorId, ev.targetId, 0x8a6cf0);
+      const isHeal = (ev.amount ?? 0) < 0;
+      if (isHeal) {
+        this.healAnim(ev.targetId, 0x6cf0a0);
+        this.floatNumber(ev.targetId, ev.amount ?? 0);
+      } else {
+        const color = BattleScene.spellColor(ev.element);
+        this.projectileAnim(ev.actorId, ev.targetId, color);
+        if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
+      }
     } else if (ev.kind === 'item' && ev.targetId) {
       this.healAnim(ev.targetId, 0xf0d36c);
+      if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
     } else if (ev.kind === 'defend' && ev.actorId) {
       this.guardAnim(ev.actorId);
     }
+  }
+
+  private floatNumber(targetId: string, amount: number) {
+    const img = this.sprites.get(targetId);
+    if (!img || amount === 0) return;
+    const isHeal = amount < 0;
+    const label = isHeal ? `+${Math.abs(amount)}` : `-${amount}`;
+    const color = isHeal ? '#66ffaa' : '#ff6655';
+    const txt = this.add.text(img.x + Phaser.Math.Between(-6, 6), img.y - 18, label,
+      { fontFamily: 'monospace', fontSize: '11px', color, stroke: '#07060e', strokeThickness: 3 })
+      .setOrigin(0.5, 1).setDepth(40);
+    this.tweens.add({
+      targets: txt, y: txt.y - 22, alpha: 0, duration: 900,
+      ease: 'Sine.easeOut', onComplete: () => txt.destroy(),
+    });
   }
 
   private attackAnim(actorId: string, targetId: string) {
@@ -628,6 +664,7 @@ export class BattleScene extends Phaser.Scene {
       onComplete: () => actor.setPosition(ox, oy),
     });
     this.slashAt(target.x, target.y);
+    this.cameras.main.shake(70, 0.003);
   }
 
   private projectileAnim(actorId: string, targetId: string, color: number) {
@@ -698,6 +735,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private burstAt(x: number, y: number, color: number) {
+    this.cameras.main.shake(90, 0.005);
     for (let i = 0; i < 6; i++) {
       const p = this.add.circle(x, y, 2, color, 0.9).setDepth(32);
       const angle = (Math.PI * 2 * i) / 6;
