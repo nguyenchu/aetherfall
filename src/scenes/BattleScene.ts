@@ -584,6 +584,7 @@ export class BattleScene extends Phaser.Scene {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
       setFlag(flag);
       if (flag === 'ch1_complete') completeQuest('clear_ch1');
+      if (flag === 'ch2_complete') completeQuest('clear_ch2');
       if (flag === 'ch3_complete') completeQuest('defeat_ashbrand');
     }
     saveProgress();
@@ -660,7 +661,14 @@ export class BattleScene extends Phaser.Scene {
       const home = this.spriteHome.get(c.id);
       if (!img || !home) continue;
       this.tweens.killTweensOf(img);
-      this.tweens.add({ targets: img, x: home.x, y: home.y, duration: 120, ease: 'Sine.easeOut' });
+      this.tweens.add({
+        targets: img, x: home.x, y: home.y, duration: 120, ease: 'Sine.easeOut',
+        onComplete: () => {
+          if (img.active) {
+            this.tweens.add({ targets: img, y: { from: home.y - 2, to: home.y + 2 }, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+          }
+        },
+      });
     }
   }
 

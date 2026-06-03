@@ -18,6 +18,7 @@ type Facing = 'down' | 'up' | 'left' | 'right';
  */
 export class DescentScene extends Phaser.Scene {
   private map: string[] = [];
+  private currentThemeId = '';
   private player!: Phaser.GameObjects.Image;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private tileImages = new Map<string, Phaser.GameObjects.Image>();
@@ -47,6 +48,7 @@ export class DescentScene extends Phaser.Scene {
     this.map = area.map;
 
     applyDescentModifier();
+    this.currentThemeId = area.theme.id;
     this.buildThemeTiles(area.theme);
     this.drawAtmosphere(area.theme);
     this.drawMap();
@@ -100,9 +102,9 @@ export class DescentScene extends Phaser.Scene {
       this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
       g.destroy();
     };
-    mk('th_floor', theme.floor, theme.accent, 0.12);
-    mk('th_floorAlt', theme.floorAlt, theme.accent, 0.10);
-    mk('th_wall', theme.wall, theme.accent, 0.18);
+    mk(`th_floor_${theme.id}`, theme.floor, theme.accent, 0.12);
+    mk(`th_floorAlt_${theme.id}`, theme.floorAlt, theme.accent, 0.10);
+    mk(`th_wall_${theme.id}`, theme.wall, theme.accent, 0.18);
   }
 
   private drawAtmosphere(theme: AreaTheme) {
@@ -133,7 +135,8 @@ export class DescentScene extends Phaser.Scene {
       for (let c = 0; c < this.map[r].length; c++) {
         const ch = this.map[r][c];
         const isWall = ch === '#';
-        const texKey = isWall ? 'th_wall' : (r + c) % 2 === 0 ? 'th_floor' : 'th_floorAlt';
+        const tid = this.currentThemeId;
+        const texKey = isWall ? `th_wall_${tid}` : (r + c) % 2 === 0 ? `th_floor_${tid}` : `th_floorAlt_${tid}`;
         this.add.image(c * GAME.tile, r * GAME.tile, texKey).setOrigin(0, 0).setDepth(0);
 
         if (ch === 'P') { this.px = c; this.py = r; }

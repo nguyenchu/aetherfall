@@ -92,11 +92,12 @@ export class Battle {
       events.push({ kind: 'flee-fail', text: 'Could not flee!' });
     }
 
-    // Turn order: highest AGI first, with a little randomness to avoid stiffness.
+    // Turn order: highest AGI first, with a small random tiebreaker per actor.
     const order = [...this.commands.keys()]
-      .map((id) => this.byId(id)!)
-      .filter((c) => c.stats.hp > 0)
-      .sort((a, b) => b.stats.agi + rnd(0, 3) - (a.stats.agi + rnd(0, 3)));
+      .map((id) => ({ c: this.byId(id)!, jitter: rnd(0, 3) }))
+      .filter(({ c }) => c.stats.hp > 0)
+      .sort((a, b) => (b.c.stats.agi + b.jitter) - (a.c.stats.agi + a.jitter))
+      .map(({ c }) => c);
 
     for (const actor of order) {
       if (actor.stats.hp <= 0) continue; // may have fallen earlier in the round
@@ -131,9 +132,10 @@ export class Battle {
       }
       case 'spell': {
         const spell = SPELLS[cmd.spellId];
+        if (!spell) return;
         const mod = getRun().modifier;
         const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) : 0));
-        if (!spell || actor.stats.mp < effectiveCost) return;
+        if (actor.stats.mp < effectiveCost) return;
         actor.stats.mp -= effectiveCost;
         if (spell.kind === 'heal') {
           const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
@@ -242,10 +244,6 @@ export class Battle {
   }
 
   private spellDamage(a: Combatant, t: Combatant, power: number): number {
-    const mod = getRun().modifier;
-    const costDelta = a.side === 'party' ? (mod.spellCostDelta ?? 0) : 0;
-    // spellCostDelta was already applied to MP cost check in execute; just note it here for reference.
-    void costDelta;
     let dmg = power + a.stats.int * 0.8 - t.stats.int * 0.2;
     dmg *= rnd(0.9, 1.1) * this.modMult(a, t);
     if (t.defending) dmg *= 0.75;

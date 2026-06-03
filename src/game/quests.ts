@@ -25,6 +25,12 @@ export const QUESTS: QuestDef[] = [
     rewards: { gold: 50, items: { tonic: 2 } },
   },
   {
+    id: 'clear_ch2',
+    title: 'Drain the Flooded Keep',
+    text: 'Defeat the Tide Warden at the heart of the Sunken City.',
+    rewards: { gold: 90, items: { tonic: 3, potion: 1 } },
+  },
+  {
     id: 'defeat_ashbrand',
     title: 'Silence the Ashbrand',
     text: 'Defeat the ancient fire spirit bound to the Summit Shrine.',

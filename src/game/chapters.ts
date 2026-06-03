@@ -72,6 +72,7 @@ export function makeChapter1Encounter(group: EncounterGroup): Combatant[] {
 // ---------------------------------------------------------------------------
 
 export interface AreaTheme {
+  id: string;        // used for tile texture cache keys
   bg: number;        // background fill
   floor: number;     // primary floor tile
   floorAlt: number;  // alternate floor tile
@@ -94,6 +95,7 @@ export interface AreaDef {
 
 export const THEMES: Record<string, AreaTheme> = {
   forest: {
+    id: 'forest',
     bg: 0x050e07,
     floor: 0x131f14, floorAlt: 0x172318,
     wall: 0x081008,
@@ -101,6 +103,7 @@ export const THEMES: Record<string, AreaTheme> = {
     fogColor: 0x3a8a4a, fogAlpha: 0.14,
   },
   sunken: {
+    id: 'sunken',
     bg: 0x060b12,
     floor: 0x111a26, floorAlt: 0x162030,
     wall: 0x080e18,
@@ -108,6 +111,7 @@ export const THEMES: Record<string, AreaTheme> = {
     fogColor: 0x2a5a8a, fogAlpha: 0.16,
   },
   ashen: {
+    id: 'ashen',
     bg: 0x0e0705,
     floor: 0x1e1008, floorAlt: 0x24140a,
     wall: 0x100804,

@@ -22,6 +22,7 @@ const HP_PER_BLESSING = 8;
 
 let save: SaveData = loadSave();
 let state: RunState = buildRun();
+let modifierApplied = false;
 
 function buildRun(): RunState {
   const party = makeParty();
@@ -258,11 +259,14 @@ export function returnToTown(): void {
   restoreParty();
   state.depth = 1;
   state.modifier = rollModifier();
+  modifierApplied = false;
   saveProgress();
 }
 
-/** Called when the player starts descending — applies startHpFactor. */
+/** Called in DescentScene.create() — applies startHpFactor once per run. */
 export function applyDescentModifier(): void {
+  if (modifierApplied) return;
+  modifierApplied = true;
   const f = state.modifier.startHpFactor;
   if (!f) return;
   for (const c of state.party) {
