@@ -287,7 +287,14 @@ export class DescentScene extends Phaser.Scene {
     setFlag(`story_${getRun().depth}_${tileKey}`);
     markSeen(scriptId);
     this.scene.pause();
-    this.scene.launch('Dialogue', { scriptId, caller: this.scene.key });
+    this.scene.launch('Dialogue', {
+      scriptId,
+      onDone: () => {
+        this.busy = false;
+        this.scene.resume();
+        this.moveLockedUntil = this.time.now + 300;
+      },
+    });
   }
 
   private advanceArea() {
