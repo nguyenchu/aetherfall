@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
-import { getRun, returnToTown, saveProgress, hasFlag, setFlag } from '../game/run';
+import { getRun, applyDescentModifier, returnToTown, saveProgress, hasFlag, setFlag } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -46,6 +46,7 @@ export class DescentScene extends Phaser.Scene {
     const area = getArea(getRun().depth);
     this.map = area.map;
 
+    applyDescentModifier();
     this.buildThemeTiles(area.theme);
     this.drawAtmosphere(area.theme);
     this.drawMap();
@@ -204,6 +205,12 @@ export class DescentScene extends Phaser.Scene {
     this.add.text(4, 18, areaName, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5' })).setDepth(10);
     this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })).setOrigin(1, 0).setDepth(10);
+    // Active modifier
+    const mod = run.modifier;
+    if (mod.id !== 'none') {
+      this.add.text(GAME.width - 4, 18, `✦ ${mod.name}`,
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: mod.color })).setOrigin(1, 0).setDepth(10);
+    }
   }
 
   private bindInput() {
@@ -234,6 +241,11 @@ export class DescentScene extends Phaser.Scene {
     this.facing = this.facingFromDir(d.x, d.y);
     this.walkPlayerTo(this.tileCenter(this.px), this.tileCenter(this.py), () => this.resolveTile());
     this.moveLockedUntil = time + 110;
+    // Dark Drain modifier
+    const drain = getRun().modifier.hpDrainPerStep;
+    if (drain) {
+      for (const c of getRun().party) c.stats.hp = Math.max(1, c.stats.hp - drain);
+    }
   }
 
   private resolveTile() {

@@ -517,8 +517,9 @@ export class BattleScene extends Phaser.Scene {
     this.pushLog(ev.text);
     this.animateEvent(ev);
     if (ev.kind === 'attack') sfx.play('hit');
-    else if (ev.kind === 'spell') sfx.play((ev.amount ?? 0) < 0 ? 'magic' : 'magic');
+    else if (ev.kind === 'spell') sfx.play('magic');
     else if (ev.kind === 'item') sfx.play('chest');
+    else if (ev.kind === 'phase') this.playPhaseTransition(ev.actorId);
 
     if (ev.amount != null && ev.targetId) {
       const cur = this.hpDisplay.get(ev.targetId) ?? 0;
@@ -812,6 +813,38 @@ export class BattleScene extends Phaser.Scene {
         onComplete: () => p.destroy(),
       });
     }
+  }
+
+  private playPhaseTransition(bossId?: string) {
+    // Full-screen flash + heavy shake
+    const bossColors: Record<string, number> = {
+      forest_shade: 0x220033,
+      tide_warden:  0x003344,
+      ashbrand:     0x440800,
+    };
+    const color = bossId ? (bossColors[bossId] ?? 0x111122) : 0x111122;
+    const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, color, 0.85)
+      .setOrigin(0, 0).setDepth(50);
+    this.tweens.add({ targets: flash, alpha: 0, duration: 900, ease: 'Expo.easeOut', onComplete: () => flash.destroy() });
+    this.cameras.main.shake(500, 0.018);
+    // Burst from boss sprite
+    if (bossId) {
+      const img = this.sprites.get(bossId);
+      if (img) {
+        for (let i = 0; i < 10; i++) {
+          const angle = (Math.PI * 2 * i) / 10;
+          const p = this.add.circle(img.x, img.y, 3, 0xeef2ff, 0.9).setDepth(52);
+          this.tweens.add({
+            targets: p, x: img.x + Math.cos(angle) * 50, y: img.y + Math.sin(angle) * 30,
+            alpha: 0, duration: 500, ease: 'Quad.easeOut', onComplete: () => p.destroy(),
+          });
+        }
+        // Tint the boss sprite red/dark briefly
+        img.setTintFill(0xff2200);
+        this.time.delayedCall(350, () => img.clearTint());
+      }
+    }
+    sfx.play('levelup'); // dramatic sound
   }
 
   private fadeKo(id: string) {

@@ -8,6 +8,7 @@
 // stats and returns BattleEvents for the scene to play with text and animation.
 
 import { ITEMS, SPELLS } from './content';
+import { getRun } from './run';
 import type { BattleEvent, BattlePhase, Combatant, Command } from './types';
 
 function rnd(min: number, max: number): number {
@@ -130,8 +131,10 @@ export class Battle {
       }
       case 'spell': {
         const spell = SPELLS[cmd.spellId];
-        if (!spell || actor.stats.mp < spell.cost) return;
-        actor.stats.mp -= spell.cost;
+        const mod = getRun().modifier;
+        const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) : 0));
+        if (!spell || actor.stats.mp < effectiveCost) return;
+        actor.stats.mp -= effectiveCost;
         if (spell.kind === 'heal') {
           const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
           const heal = Math.round(spell.power + actor.stats.int * 0.5);
@@ -145,6 +148,10 @@ export class Battle {
           events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} takes ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg, element: spell.element });
           this.maybeKo(target, events);
         }
+        return;
+      }
+      case 'phase': {
+        for (const ev of this.executeBossPhase(actor)) events.push(ev);
         return;
       }
       case 'item': {
@@ -164,18 +171,83 @@ export class Battle {
     }
   }
 
+  // --- Boss Phase Transitions -----------------------------------------------
+
+  private executeBossPhase(boss: Combatant): BattleEvent[] {
+    const events: BattleEvent[] = [];
+
+    switch (boss.id) {
+      case 'forest_shade': {
+        events.push({ kind: 'phase', text: 'The Forest Shade tears apart — shadows pour from its wound!', actorId: boss.id });
+        const dmg = Math.round(12 + boss.stats.int * 0.7);
+        for (const t of this.living('party')) {
+          this.applyDamage(t, dmg);
+          events.push({ kind: 'spell', text: `Shadow Veil engulfs ${t.name}! −${dmg} HP`, actorId: boss.id, targetId: t.id, amount: dmg, element: 'none' });
+          this.maybeKo(t, events);
+          if (this.living('party').length === 0) break;
+        }
+        boss.stats.int = Math.round(boss.stats.int * 1.3);
+        events.push({ kind: 'info', text: 'The Shade\'s power surges — it grows more dangerous!' });
+        break;
+      }
+      case 'tide_warden': {
+        events.push({ kind: 'phase', text: 'The Tide Warden roars — the chamber floods in an instant!', actorId: boss.id });
+        const surge = Math.round(18 + boss.stats.int * 0.8);
+        for (const t of this.living('party')) {
+          this.applyDamage(t, surge);
+          events.push({ kind: 'spell', text: `Tidal Surge crashes into ${t.name}! −${surge} HP`, actorId: boss.id, targetId: t.id, amount: surge, element: 'ice' });
+          this.maybeKo(t, events);
+          if (this.living('party').length === 0) break;
+        }
+        const heal = Math.round(boss.stats.maxHp * 0.12);
+        boss.stats.hp = Math.min(boss.stats.maxHp, boss.stats.hp + heal);
+        events.push({ kind: 'info', text: `The Warden draws the tide back into itself — +${heal} HP!` });
+        break;
+      }
+      case 'ashbrand': {
+        events.push({ kind: 'phase', text: 'Ashbrand ignites — the entire shrine becomes fire!', actorId: boss.id });
+        const fire = Math.round(24 + boss.stats.int * 0.9);
+        for (const t of this.living('party')) {
+          this.applyDamage(t, fire);
+          events.push({ kind: 'spell', text: `Conflagration scorches ${t.name}! −${fire} HP`, actorId: boss.id, targetId: t.id, amount: fire, element: 'fire' });
+          this.maybeKo(t, events);
+          if (this.living('party').length === 0) break;
+        }
+        boss.stats.str = Math.round(boss.stats.str * 1.25);
+        boss.stats.int = Math.round(boss.stats.int * 1.25);
+        events.push({ kind: 'info', text: 'Ashbrand burns with primal fury — all power amplified!' });
+        break;
+      }
+      default:
+        events.push({ kind: 'phase', text: `${boss.name} transforms!`, actorId: boss.id });
+    }
+
+    return events;
+  }
+
   // --- Damage Formulas (FF1-inspired) --------------------------------------
+
+  private modMult(actor: Combatant, target: Combatant): number {
+    const mod = getRun().modifier;
+    if (actor.side === 'party' && mod.dmgMult) return mod.dmgMult;
+    if (target.side === 'party' && mod.dmgTakenMult) return mod.dmgTakenMult;
+    return 1;
+  }
 
   private physicalDamage(a: Combatant, t: Combatant): number {
     let dmg = a.stats.str * 1.6 - t.stats.vit * 0.6;
-    dmg *= rnd(0.85, 1.15);
+    dmg *= rnd(0.85, 1.15) * this.modMult(a, t);
     if (t.defending) dmg *= 0.5;
     return Math.max(1, Math.round(dmg));
   }
 
   private spellDamage(a: Combatant, t: Combatant, power: number): number {
+    const mod = getRun().modifier;
+    const costDelta = a.side === 'party' ? (mod.spellCostDelta ?? 0) : 0;
+    // spellCostDelta was already applied to MP cost check in execute; just note it here for reference.
+    void costDelta;
     let dmg = power + a.stats.int * 0.8 - t.stats.int * 0.2;
-    dmg *= rnd(0.9, 1.1);
+    dmg *= rnd(0.9, 1.1) * this.modMult(a, t);
     if (t.defending) dmg *= 0.75;
     return Math.max(1, Math.round(dmg));
   }
@@ -195,12 +267,21 @@ export class Battle {
   private enemyAi(e: Combatant): Command {
     const targets = this.living('party');
     if (targets.length === 0) return { type: 'defend' };
-    const target = targets[Math.floor(Math.random() * targets.length)];
 
-    // Cast occasionally if MP allows it.
+    // Boss phase 2 triggers once when HP drops below 50 %.
+    if (e.isBoss && !e.phaseTriggered && e.stats.hp <= e.stats.maxHp / 2) {
+      e.phaseTriggered = true;
+      return { type: 'phase' };
+    }
+
+    // Target the weakest living party member.
+    const target = targets.reduce((w, c) => c.stats.hp < w.stats.hp ? c : w);
+
+    // Cast occasionally if MP allows; bosses cast more often.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
-    if (castable.length > 0 && Math.random() < 0.4) {
-      return { type: 'spell', spellId: castable[0], targetId: target.id };
+    const castChance = e.isBoss ? 0.55 : 0.4;
+    if (castable.length > 0 && Math.random() < castChance) {
+      return { type: 'spell', spellId: castable[Math.floor(Math.random() * castable.length)], targetId: target.id };
     }
     return { type: 'attack', targetId: target.id };
   }
@@ -216,8 +297,9 @@ export class Battle {
 
   private checkEnd(events: BattleEvent[]): boolean {
     if (this.living('enemy').length === 0) {
-      this.goldWon = this.enemies.reduce((sum, e) => sum + (e.goldReward ?? 0), 0);
-      this.xpWon = this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0);
+      const mod = getRun().modifier;
+      this.goldWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.goldReward ?? 0), 0) * (mod.goldMult ?? 1));
+      this.xpWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0) * (mod.xpMult ?? 1));
       events.push({ kind: 'info', text: `Victory! +${this.goldWon} gold, +${this.xpWon} XP.` });
       this.phase = 'won';
       return true;

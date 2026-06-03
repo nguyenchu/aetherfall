@@ -49,6 +49,7 @@ export interface Combatant {
   goldReward?: number; // enemies only
   xpReward?: number; // enemies only
   isBoss?: boolean;
+  phaseTriggered?: boolean; // boss phase 2 already activated
   // Progression (party only):
   level?: number;
   xp?: number;
@@ -62,7 +63,8 @@ export type Command =
   | { type: 'spell'; spellId: string; targetId: string }
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
-  | { type: 'flee' };
+  | { type: 'flee' }
+  | { type: 'phase' };
 
 export type EventKind =
   | 'attack'
@@ -72,7 +74,8 @@ export type EventKind =
   | 'flee-ok'
   | 'flee-fail'
   | 'ko'
-  | 'info';
+  | 'info'
+  | 'phase';
 
 /** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {

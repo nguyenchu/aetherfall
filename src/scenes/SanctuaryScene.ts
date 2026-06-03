@@ -258,7 +258,9 @@ export class SanctuaryScene extends Phaser.Scene {
       const ch = this.grid[ny]?.[nx] ?? '#';
       if (ch === 'D' || (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y)
         || (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y)) {
-        label = 'Z / tap  ·  enter'; break;
+        const mod = getRun().modifier;
+        const modTag = mod.id !== 'none' ? `  [${mod.name}]` : '';
+        label = `Z / tap  ·  enter${modTag}`; break;
       }
       if (this.npcAt.has(`${nx},${ny}`)) {
         const npc = this.npcAt.get(`${nx},${ny}`)!;

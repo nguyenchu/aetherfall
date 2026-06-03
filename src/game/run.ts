@@ -4,6 +4,7 @@
 
 import { ITEMS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, type EquipSlot } from './equipment';
+import { rollModifier, type RunModifier } from './modifiers';
 import { restoreLevel } from './progression';
 import { QUESTS, questRewardText } from './quests';
 import { loadSave, writeSave, wipeSave, type SaveData } from './save';
@@ -13,7 +14,8 @@ export interface RunState {
   party: Combatant[];
   gold: number;
   inventory: Record<string, number>;
-  depth: number; // current stratum depth in the descent
+  depth: number;
+  modifier: RunModifier;
 }
 
 const HP_PER_BLESSING = 8;
@@ -32,7 +34,7 @@ function buildRun(): RunState {
     }
     applyEquipment(c);
   }
-  return { party, gold: save.gold, inventory: { ...save.items }, depth: 1 };
+  return { party, gold: save.gold, inventory: { ...save.items }, depth: 1, modifier: rollModifier() };
 }
 
 export function getRun(): RunState {
@@ -251,11 +253,21 @@ export function restoreParty(): void {
   }
 }
 
-/** Back to Sanctuary: full healing and reset depth. */
+/** Back to Sanctuary: full healing, reset depth, roll new modifier. */
 export function returnToTown(): void {
   restoreParty();
   state.depth = 1;
+  state.modifier = rollModifier();
   saveProgress();
+}
+
+/** Called when the player starts descending — applies startHpFactor. */
+export function applyDescentModifier(): void {
+  const f = state.modifier.startHpFactor;
+  if (!f) return;
+  for (const c of state.party) {
+    c.stats.hp = Math.max(1, Math.round(c.stats.maxHp * f));
+  }
 }
 
 export function partyWiped(): boolean {
