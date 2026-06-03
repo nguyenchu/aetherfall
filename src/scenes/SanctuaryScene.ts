@@ -107,7 +107,7 @@ export class SanctuaryScene extends Phaser.Scene {
     this.bindInput();
     attachTouchControls(this);
 
-    music.play('explore');
+    music.play('sanctuary');
 
     // Arrival story: only intro on first visit. Chapter wins play from BattleScene.
     if (!hasFlag('intro_seen')) {
@@ -363,16 +363,15 @@ export class SanctuaryScene extends Phaser.Scene {
         enabled: () => getRun().gold >= (ITEMS.tonic.buyPrice ?? 0),
         action: () => buyItem('tonic'),
       },
-      {
+      ...(hasFlag('ch1_complete') ? [{
         label: () => `Buy Reef Mail   ${equipmentPrice('reef_mail')} gold`,
         enabled: () => getRun().gold >= (equipmentPrice('reef_mail') ?? 0) && !ownedEquipment().some((e) => e.id === 'reef_mail'),
-        action: () => buyEquipment('reef_mail'),
-      },
-      {
+        action: () => { buyEquipment('reef_mail'); return true; },
+      }, {
         label: () => `Buy Tide Ring   ${equipmentPrice('tide_ring')} gold`,
         enabled: () => getRun().gold >= (equipmentPrice('tide_ring') ?? 0) && !ownedEquipment().some((e) => e.id === 'tide_ring'),
-        action: () => buyEquipment('tide_ring'),
-      },
+        action: () => { buyEquipment('tide_ring'); return true; },
+      }] : []),
     ];
     for (const [id, count] of Object.entries(inv).filter(([, n]) => n > 0)) {
       const item = ITEMS[id];

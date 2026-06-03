@@ -19,16 +19,16 @@ export const QUESTS: QuestDef[] = [
     rewards: { gold: 15, items: { potion: 1 } },
   },
   {
-    id: 'reach_depth_2',
-    title: 'Find the Lower Streets',
-    text: 'Use the aether stairs to reach depth 2.',
-    rewards: { gold: 30, items: { tonic: 1 } },
+    id: 'clear_ch1',
+    title: 'Clear the Ancient Grove',
+    text: 'Defeat the corrupted spirit at the heart of Ashenveil Forest.',
+    rewards: { gold: 50, items: { tonic: 2 } },
   },
   {
-    id: 'defeat_leviathan',
-    title: 'Silence the Leviathan',
-    text: 'Defeat the boss at the bottom of the Sunken City.',
-    rewards: { gold: 120, equipment: ['oracle_lantern'], items: { warden_sigils: 1 } },
+    id: 'defeat_ashbrand',
+    title: 'Silence the Ashbrand',
+    text: 'Defeat the ancient fire spirit bound to the Summit Shrine.',
+    rewards: { gold: 150, equipment: ['oracle_lantern'], items: { warden_sigils: 2 } },
   },
 ];
 

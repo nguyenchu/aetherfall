@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { ITEMS, SPELLS } from '../game/content';
-import { getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
+import { completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music } from '../audio/music';
@@ -565,6 +565,8 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
       setFlag(flag);
+      if (flag === 'ch1_complete') completeQuest('clear_ch1');
+      if (flag === 'ch3_complete') completeQuest('defeat_ashbrand');
     }
     saveProgress();
     music.fanfare('victory');
@@ -573,7 +575,10 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(boss ? 1000 : 1500, () => {
       if (boss) {
         const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : 'ch3_win';
-        this.scene.launch('Dialogue', { scriptId: winScript, onDone: () => this.toTown() });
+        const afterWin = depth > 4
+          ? () => this.scene.launch('Dialogue', { scriptId: 'ending', onDone: () => this.toTown() })
+          : () => this.toTown();
+        this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
       } else {
         this.scene.resume('Descent', { won: true });
         this.scene.stop();

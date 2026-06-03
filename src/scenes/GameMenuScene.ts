@@ -49,6 +49,7 @@ export class GameMenuScene extends Phaser.Scene {
         this.renderContent();
       }, undefined, '8px');
     });
+    this.button(GAME.width - 52, 22, 44, 'Close', () => this.close(), undefined, '8px');
 
     this.renderContent();
 

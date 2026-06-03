@@ -111,6 +111,16 @@ export const SCRIPTS: Record<string, Script> = {
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Nine more. But tonight we rest.' },
     { text: 'The Ashen Peaks grow quiet for the first time in living memory.', color: NARRATOR },
   ],
+
+  ending: [
+    { text: 'Three anchors restored. Three corrupted guardians returned to the light.', color: NARRATOR },
+    { text: 'The world still sinks — but slower now. Sanctuary stands.', color: NARRATOR },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Nine anchors remain. We know what we\'re doing now.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Aether is responding. Every anchor we restore is one more thread holding the world together.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'We rest. Then we keep going. Together.' },
+    { text: '— The story continues in a future update —', color: NARRATOR },
+    { text: 'Thank you for playing Aetherfall.', color: NARRATOR },
+  ],
 };
 
 // Tracks scripts seen in this session, such as avoiding a repeated intro after death.

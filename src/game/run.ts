@@ -187,7 +187,7 @@ export function grantBattleLoot(depth: number, boss: boolean): string[] {
     addItem('tonic', 1);
     drops.push('Aether Tonic x1');
   }
-  const gear = boss ? 'oracle_lantern' : Math.random() < 0.12 ? 'tide_ring' : undefined;
+  const gear = !boss && Math.random() < 0.12 ? 'tide_ring' : undefined;
   if (gear && grantEquipment(gear)) drops.push(`${EQUIPMENT[gear].name} x1`);
   saveProgress();
   return drops;

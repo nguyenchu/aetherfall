@@ -142,4 +142,5 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
 
   mk(440, cy - 6, 'A', 'confirm', 15);
   mk(414, cy + 14, 'B', 'cancel', 13);
+  mk(460, cy + 18, '≡', 'menu', 11);
 }

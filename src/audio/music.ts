@@ -8,7 +8,7 @@
 // Replace with recorded tracks later by swapping this module while keeping
 // the play/stop/toggle API stable.
 
-export type TrackName = 'explore' | 'battle';
+export type TrackName = 'explore' | 'battle' | 'sanctuary';
 
 interface TrackDef {
   bpm: number;
@@ -63,7 +63,24 @@ const BATTLE: TrackDef = {
   bassVol: 0.2,
 };
 
-const TRACKS: Record<TrackName, TrackDef> = { explore: EXPLORE, battle: BATTLE };
+// --- Sanctuary: warm C major hub theme. Triangle waves, slow pulse.
+//     C - Am - F - G: rising arpeggio melody over held bass notes.
+const SANCTUARY: TrackDef = {
+  bpm: 66,
+  melody: flat([
+    q(76), q(79), q(81), q(79), // C:  E5 G5 A5 G5
+    q(69), q(72), q(76), q(72), // Am: A4 C5 E5 C5
+    q(65), q(69), q(72), q(69), // F:  F4 A4 C5 A4
+    q(67), q(71), q(74), q(71), // G:  G4 B4 D5 B4
+  ]),
+  bass: flat([bar(48), bar(45), bar(41), bar(43)]), // C3 A2 F2 G2
+  melodyWave: 'triangle',
+  bassWave: 'triangle',
+  melodyVol: 0.14,
+  bassVol: 0.18,
+};
+
+const TRACKS: Record<TrackName, TrackDef> = { explore: EXPLORE, battle: BATTLE, sanctuary: SANCTUARY };
 
 export type StingName = 'victory' | 'defeat';
 
