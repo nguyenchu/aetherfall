@@ -29,6 +29,7 @@ export class DescentScene extends Phaser.Scene {
   private moveLockedUntil = 0;
   private pendingEncounterKey: string | null = null;
   private unsubs: (() => void)[] = [];
+  private hintText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Descent');
@@ -36,6 +37,7 @@ export class DescentScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
+    this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
     this.unsubs = [];
     this.tileImages.clear();
@@ -150,6 +152,7 @@ export class DescentScene extends Phaser.Scene {
   }
 
   update(time: number) {
+    if (!this.busy) this.updateHint();
     if (this.busy || time < this.moveLockedUntil) return;
     const d = input.dir();
     if (d.x === 0 && d.y === 0) return;
@@ -220,7 +223,40 @@ export class DescentScene extends Phaser.Scene {
     if (this.busy) return;
     this.busy = true;
     returnToTown();
-    this.scene.start('Sanctuary');
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Sanctuary'));
+  }
+
+  private updateHint() {
+    const depth = getRun().depth;
+    const dirs = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+    let label = '';
+    for (const d of dirs) {
+      const nx = this.px + d.x;
+      const ny = this.py + d.y;
+      const ch = this.map[ny]?.[nx];
+      if (!ch) continue;
+      if (ch === '>') { label = 'Z / tap  ·  descend'; break; }
+      if (ch === '<') { label = 'Z / tap  ·  return home'; break; }
+      if ((ch === 'E' || ch === 'B') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
+        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  encounter'; break;
+      }
+      if (ch === 'S' && !hasFlag(`story_${depth}_${nx},${ny}`)) {
+        label = 'Z / tap  ·  examine'; break;
+      }
+    }
+    if (label) {
+      if (!this.hintText) {
+        this.hintText = this.add.text(GAME.width / 2, GAME.height - 18, label,
+          sharpText({ fontFamily: FONT, fontSize: '9px', color: '#6cf0c2' }))
+          .setOrigin(0.5, 1).setDepth(20).setAlpha(0);
+        this.tweens.add({ targets: this.hintText, alpha: 1, duration: 180 });
+      } else {
+        this.hintText.setText(label).setVisible(true);
+      }
+    } else if (this.hintText?.visible) {
+      this.hintText.setVisible(false);
+    }
   }
 
   private tileCenter(n: number): number { return n * GAME.tile + GAME.tile / 2; }

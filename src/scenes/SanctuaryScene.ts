@@ -88,6 +88,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private shopBox?: Phaser.GameObjects.Container;
   private shopIndex = 0;
   private shopOptions: { label: () => string; action: () => boolean; enabled: () => boolean }[] = [];
+  private hintText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Sanctuary');
@@ -95,6 +96,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
+    this.cameras.main.fadeIn(300, 7, 6, 14);
     this.state = 'roam';
     this.unsubs = [];
     this.npcAt.clear();
@@ -107,7 +109,7 @@ export class SanctuaryScene extends Phaser.Scene {
     this.bindInput();
     attachTouchControls(this);
 
-    music.play('sanctuary');
+    music.play('sanctuary'); // resumes/switches if returning from dungeon
 
     // Arrival story: only intro on first visit. Chapter wins play from BattleScene.
     if (!hasFlag('intro_seen')) {
@@ -193,6 +195,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
   update(time: number) {
     if (this.state !== 'roam') return;
+    this.updateHint();
     if (time < this.moveLockedUntil) return;
     const d = input.dir();
     if (d.x === 0 && d.y === 0) return;
@@ -227,6 +230,36 @@ export class SanctuaryScene extends Phaser.Scene {
     this.facing = this.facingFromDir(d.x, d.y);
     this.walkPlayerTo(this.px * GAME.tile + GAME.tile / 2, this.py * GAME.tile + GAME.tile / 2);
     this.moveLockedUntil = time + 120;
+  }
+
+  private updateHint() {
+    const dirs = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+    let label = '';
+    for (const d of dirs) {
+      const nx = this.px + d.x;
+      const ny = this.py + d.y;
+      const ch = this.grid[ny]?.[nx] ?? '#';
+      if (ch === 'D' || (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y)
+        || (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y)) {
+        label = 'Z / tap  ·  enter'; break;
+      }
+      if (this.npcAt.has(`${nx},${ny}`)) {
+        const npc = this.npcAt.get(`${nx},${ny}`)!;
+        label = `Z / tap  ·  ${npc.kind === 'vendor' ? 'shop' : 'talk'}`; break;
+      }
+    }
+    if (label) {
+      if (!this.hintText) {
+        this.hintText = this.add.text(GAME.width / 2, GAME.height - 18, label,
+          sharpText({ fontFamily: FONT, fontSize: '9px', color: '#6cf0c2' }))
+          .setOrigin(0.5, 1).setDepth(20).setAlpha(0);
+        this.tweens.add({ targets: this.hintText, alpha: 1, duration: 180 });
+      } else {
+        this.hintText.setText(label).setVisible(true);
+      }
+    } else if (this.hintText?.visible) {
+      this.hintText.setVisible(false);
+    }
   }
 
   private walkPlayerTo(x: number, y: number) {
@@ -326,19 +359,22 @@ export class SanctuaryScene extends Phaser.Scene {
   private descend() {
     this.state = 'busy';
     getRun().depth = 1;
-    this.scene.start('Descent');
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
   private descendToChapter2() {
     this.state = 'busy';
     getRun().depth = 3;
-    this.scene.start('Descent');
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
   private descendToChapter3() {
     this.state = 'busy';
     getRun().depth = 5;
-    this.scene.start('Descent');
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
   // --- Merchant shop --------------------------------------------------------

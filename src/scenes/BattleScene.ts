@@ -5,7 +5,7 @@ import { ITEMS, SPELLS } from '../game/content';
 import { completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
-import { music } from '../audio/music';
+import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import type { BattleEvent, Combatant, Command } from '../game/types';
 
@@ -167,13 +167,13 @@ export class BattleScene extends Phaser.Scene {
 
   private buildPanels() {
     // Log box on the left, status box on the right.
-    const panelY = GAME.height - 104;
-    const statusX = GAME.width - 184;
-    this.panel(4, panelY, GAME.width - 200, 100);
-    this.panel(statusX - 6, panelY, 190, 100);
-    this.promptText = this.add.text(8, panelY + 5, '', sharpText({ fontFamily: FONT, fontSize: '10px', color: '#a58cff' })).setDepth(15);
-    this.logText = this.add.text(8, panelY + 22, '', sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', lineSpacing: 3, wordWrap: { width: GAME.width - 212 } })).setDepth(15);
-    this.statusText = this.add.text(statusX, panelY + 8, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5', lineSpacing: 11 })).setDepth(15);
+    const panelY = GAME.height - 118;
+    const statusX = GAME.width - 196;
+    this.panel(4, panelY, GAME.width - 212, 114);
+    this.panel(statusX - 6, panelY, 202, 114);
+    this.promptText = this.add.text(10, panelY + 7, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#a58cff' })).setDepth(15);
+    this.logText = this.add.text(10, panelY + 26, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#dfe4f5', lineSpacing: 5, wordWrap: { width: GAME.width - 226 } })).setDepth(15);
+    this.statusText = this.add.text(statusX, panelY + 8, '', sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', lineSpacing: 13 })).setDepth(15);
     this.buildPartyBars();
   }
 
@@ -197,14 +197,14 @@ export class BattleScene extends Phaser.Scene {
 
   private buildPartyBars() {
     this.battle.party.forEach((c, i) => {
-      const statusX = GAME.width - 184;
-      const y = GAME.height - 85 + i * 20;
-      const hpBg = this.add.rectangle(statusX, y, 78, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
-      const hpFill = this.add.rectangle(statusX + 1, y, 76, 2, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
+      const statusX = GAME.width - 196;
+      const y = GAME.height - 95 + i * 24;
+      const hpBg = this.add.rectangle(statusX, y, 88, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
+      const hpFill = this.add.rectangle(statusX + 1, y, 86, 3, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
       this.partyHpBars.set(c.id, { bg: hpBg, fill: hpFill });
 
-      const xpBg = this.add.rectangle(statusX + 84, y, 62, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
-      const xpFill = this.add.rectangle(statusX + 85, y, 60, 2, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
+      const xpBg = this.add.rectangle(statusX + 94, y, 68, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
+      const xpFill = this.add.rectangle(statusX + 95, y, 66, 3, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
       this.partyXpBars.set(c.id, { bg: xpBg, fill: xpFill });
     });
   }
@@ -243,8 +243,8 @@ export class BattleScene extends Phaser.Scene {
     this.clearMenuText();
     this.options.forEach((o, i) => {
       const color = !o.enabled ? '#5a6080' : i === this.menuIndex ? '#f0d36c' : '#c9cee8';
-      const prefix = i === this.menuIndex ? '> ' : '  ';
-      const t = this.add.text(12, GAME.height - 79 + i * 14, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '10px', color })).setDepth(16);
+      const prefix = i === this.menuIndex ? '▶ ' : '  ';
+      const t = this.add.text(12, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
     this.cursor.setVisible(false);
@@ -252,7 +252,7 @@ export class BattleScene extends Phaser.Scene {
 
     if (isTouchDevice()) {
       this.options.forEach((_o, i) => {
-        const zone = this.add.rectangle(4, GAME.height - 83 + i * 14, GAME.width - 200, 16, 0xffffff, 0)
+        const zone = this.add.rectangle(4, GAME.height - 114 + i * 18, GAME.width - 212, 18, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.options[i].enabled) return;
@@ -270,14 +270,14 @@ export class BattleScene extends Phaser.Scene {
     this.clearMenuText();
     this.subItems.forEach((o, i) => {
       const color = !o.enabled ? '#5a6080' : i === this.subIndex ? '#f0d36c' : '#c9cee8';
-      const prefix = i === this.subIndex ? '> ' : '  ';
-      const t = this.add.text(12, GAME.height - 79 + i * 14, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '10px', color })).setDepth(16);
+      const prefix = i === this.subIndex ? '▶ ' : '  ';
+      const t = this.add.text(12, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
 
     if (isTouchDevice()) {
       this.subItems.forEach((_o, i) => {
-        const zone = this.add.rectangle(4, GAME.height - 83 + i * 14, GAME.width - 200, 16, 0xffffff, 0)
+        const zone = this.add.rectangle(4, GAME.height - 114 + i * 18, GAME.width - 212, 18, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.subItems[i].enabled) return;
@@ -327,11 +327,14 @@ export class BattleScene extends Phaser.Scene {
     if (this.ui === 'menu') {
       this.menuIndex = this.wrap(this.menuIndex, dir, this.options.length);
       this.renderMenu(this.promptText.text);
+      sfx.play('cursor');
     } else if (this.ui === 'submenu') {
       this.subIndex = this.wrap(this.subIndex, dir, this.subItems.length);
       this.renderSubmenu(this.promptText.text);
+      sfx.play('cursor');
     } else if (this.ui === 'target' || this.ui === 'subtarget') {
       this.navTarget(dir);
+      sfx.play('cursor');
     }
   }
 
@@ -346,12 +349,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private confirm() {
+    sfx.play('confirm');
     if (this.ui === 'menu') this.confirmMenu();
     else if (this.ui === 'submenu') this.confirmSubmenu();
     else if (this.ui === 'target' || this.ui === 'subtarget') this.confirmTarget();
   }
 
   private cancel() {
+    sfx.play('cancel');
     if (this.ui === 'submenu') {
       this.openMenu();
     } else if (this.ui === 'target') {
@@ -504,6 +509,9 @@ export class BattleScene extends Phaser.Scene {
     const ev = events[i];
     this.pushLog(ev.text);
     this.animateEvent(ev);
+    if (ev.kind === 'attack') sfx.play('hit');
+    else if (ev.kind === 'spell') sfx.play((ev.amount ?? 0) < 0 ? 'magic' : 'magic');
+    else if (ev.kind === 'item') sfx.play('chest');
 
     if (ev.amount != null && ev.targetId) {
       const cur = this.hpDisplay.get(ev.targetId) ?? 0;
@@ -551,7 +559,9 @@ export class BattleScene extends Phaser.Scene {
     const run = getRun();
     run.gold += this.battle.goldWon;
     // Award XP and show level-up events in the log.
-    for (const ev of grantXp(run.party, this.battle.xpWon)) this.pushLog(ev.text);
+    const xpEvents = grantXp(run.party, this.battle.xpWon);
+    for (const ev of xpEvents) this.pushLog(ev.text);
+    if (xpEvents.length > 0) sfx.play('levelup');
     for (const c of this.battle.all()) {
       this.hpDisplay.set(c.id, c.stats.hp);
       this.mpDisplay.set(c.id, c.stats.mp);

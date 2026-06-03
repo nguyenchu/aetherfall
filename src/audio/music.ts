@@ -303,3 +303,46 @@ class MusicEngine {
 }
 
 export const music = new MusicEngine();
+
+// ---------------------------------------------------------------------------
+// Sound effects — short one-shot bursts, no files needed.
+// ---------------------------------------------------------------------------
+
+export type SfxName = 'cursor' | 'confirm' | 'cancel' | 'hit' | 'magic' | 'levelup' | 'chest';
+
+interface SfxDef { notes: StingNote[] }
+
+const SFX: Record<SfxName, SfxDef> = {
+  cursor:  { notes: [{ midi: 76, t: 0, dur: 0.04, wave: 'square', vol: 0.09 }] },
+  confirm: { notes: [{ midi: 72, t: 0, dur: 0.05, wave: 'square', vol: 0.11 }, { midi: 79, t: 0.05, dur: 0.07, wave: 'square', vol: 0.11 }] },
+  cancel:  { notes: [{ midi: 65, t: 0, dur: 0.05, wave: 'square', vol: 0.1 }, { midi: 60, t: 0.05, dur: 0.07, wave: 'square', vol: 0.1 }] },
+  hit:     { notes: [{ midi: 48, t: 0, dur: 0.06, wave: 'sawtooth', vol: 0.13 }, { midi: 44, t: 0.04, dur: 0.05, wave: 'sawtooth', vol: 0.1 }] },
+  magic:   { notes: [{ midi: 84, t: 0, dur: 0.06, wave: 'triangle', vol: 0.1 }, { midi: 88, t: 0.06, dur: 0.1, wave: 'triangle', vol: 0.09 }, { midi: 91, t: 0.14, dur: 0.12, wave: 'triangle', vol: 0.08 }] },
+  levelup: { notes: [{ midi: 60, t: 0, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 64, t: 0.08, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 67, t: 0.16, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 72, t: 0.24, dur: 0.18, wave: 'square', vol: 0.13 }] },
+  chest:   { notes: [{ midi: 72, t: 0, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 76, t: 0.07, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 79, t: 0.14, dur: 0.1, wave: 'triangle', vol: 0.1 }] },
+};
+
+class SfxEngine {
+  play(name: SfxName): void {
+    if (!music.isEnabled()) return;
+    // Re-use the music engine's context by accessing it indirectly.
+    const ctx = (music as unknown as { ctx?: AudioContext }).ctx;
+    const master = (music as unknown as { master?: GainNode }).master;
+    if (!ctx || !master) return;
+    const t0 = ctx.currentTime + 0.01;
+    for (const n of SFX[name].notes) {
+      const osc = ctx.createOscillator();
+      osc.type = n.wave;
+      osc.frequency.value = midiToFreq(n.midi);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0 + n.t);
+      g.gain.linearRampToValueAtTime(n.vol, t0 + n.t + 0.006);
+      g.gain.linearRampToValueAtTime(0, t0 + n.t + n.dur);
+      osc.connect(g).connect(master);
+      osc.start(t0 + n.t);
+      osc.stop(t0 + n.t + n.dur + 0.01);
+    }
+  }
+}
+
+export const sfx = new SfxEngine();
