@@ -9,6 +9,7 @@ import { BattleScene } from './scenes/BattleScene';
 import { DialogueScene } from './scenes/DialogueScene';
 import { GameMenuScene } from './scenes/GameMenuScene';
 import { TitleScene } from './scenes/TitleScene';
+import { IntroScene } from './scenes/IntroScene';
 
 // 2× gives 1280×720 canvas. CSS fills the remaining fraction via image-rendering: pixelated.
 setRenderScale(2);
@@ -33,5 +34,5 @@ new Phaser.Game({
     width: GAME.width * 2,
     height: GAME.height * 2,
   },
-  scene: [BootScene, TitleScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, DialogueScene, GameMenuScene],
+  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, DialogueScene, GameMenuScene],
 });

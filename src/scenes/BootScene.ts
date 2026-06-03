@@ -29,7 +29,7 @@ export class BootScene extends Phaser.Scene {
     // Pixel sprites for the hero, party, and enemies.
     buildCharacterSprites(this);
 
-    this.scene.start('Title');
+    this.scene.start('Intro');
   }
 
   private makeTile(key: string, color: number) {
