@@ -3,16 +3,23 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Aetherfall - et historiedrevet roguelite-JRPG (Hades-modell).",
+  "description": "Aetherfall - a story-driven roguelite JRPG in the Hades model.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync": "pnpm build && cap sync",
+    "android": "pnpm build && cap sync android && cap open android",
+    "ios": "pnpm build && cap sync ios && cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "phaser": "^3.87.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.3.4",
     "typescript": "^5.6.3",
     "vite": "^6.0.0"
   }

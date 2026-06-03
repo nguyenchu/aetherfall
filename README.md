@@ -1,45 +1,45 @@
 # Aetherfall
 
-Et historiedrevet roguelite-JRPG inspirert av Final Fantasy 1 — bygget på
-**«Hades-modellen»**: håndlaget historie og verden, prosedyre-genererte
-nedstigninger.
+A story-driven roguelite JRPG inspired by Final Fantasy 1, built around the
+**Hades model**: handmade story and world, procedural descents.
 
-> Arbeidstittel. Lett å endre (mappenavn + `package.json` + tittel i `index.html`).
+> Working title. Easy to change via folder name, `package.json`, and the title in `index.html`.
 
-## Premiss
+## Premise
 
-Aether — den lysende substansen som holder verden oppe og gir krystallene
-kraft — har falt. Verden synker, lag for lag, ned i dypet. Du er en av Lysets
-siste krigere, bundet til den siste hele krystallen: hver gang du dør, trekker
-krystallen deg tilbake til **Helligdommen** (hub), og du stiger ned igjen for å
-nå bunnen og gjenreise Aether.
+Aether, the luminous substance that holds the world aloft and empowers the
+crystals, has fallen. The world sinks layer by layer into the deep. You are one
+of the last Warriors of Light, bound to the final whole crystal: every time you
+die, the crystal draws you back to **Sanctuary**, the hub, and you descend again
+to reach the bottom and restore Aether.
 
-- **Fast ramme:** Helligdom (hub, NPC-er, historie, oppgraderinger) + navngitt
-  hovedperson + mål + en faktisk slutt.
-- **Strata:** håndlagde verdener (Stratum I – Den Sunkne By → Ashen Dyp →
-  Krystallkjernen …) med egen stemning og boss. Rommene _inni_ genereres.
-- **Narrativ permadeath:** krystallen henter deg = roguelite-løkka forklart i
-  fiksjonen.
+- **Fixed frame:** Sanctuary hub, NPCs, story, upgrades, a named protagonist,
+  a goal, and a real ending.
+- **Strata:** handmade worlds (Stratum I - The Sunken City, Ashen Deep,
+  Crystal Core, and beyond) with distinct mood and bosses. Rooms inside each
+  stratum are generated.
+- **Narrative permadeath:** the crystal brings you home, explaining the
+  roguelite loop in fiction.
 
-## Teknologi
+## Technology
 
-- **Phaser 3 + TypeScript + Vite** — spillet (kjører i nettleser)
-- **Capacitor** (senere) → iOS/Android med AdMob (rewarded ads) + kjøp i app
-- Backend (valgfritt, senere): egen server + Postgres for lagring/leaderboard
+- **Phaser 3 + TypeScript + Vite** for the browser game
+- **Capacitor** for later iOS/Android builds with rewarded ads and IAP
+- Optional backend later: own server + Postgres for saves and leaderboards
 
-## Kjøre lokalt
+## Run Locally
 
 ```bash
 pnpm install
 pnpm dev      # http://localhost:5173
-pnpm build    # typesjekk + produksjonsbygg til dist/
+pnpm build    # typecheck + production build to dist/
 ```
 
 ## Roadmap
 
-1. **Skjelett** ← nå: prosedyre-descent + rutenett-bevegelse
-2. **Kamp:** turbasert FF1-kamp (party, fiender, ATB, magi, items)
-3. **Run-loop:** permadeath, loot, valuta, oppgradering i Helligdommen
-4. **Innhold:** klasser, fiende-variasjon, strata, boss, lyd, balansering
-5. **Validering:** deploy til nguyenchu.com, mål retention/feedback
-6. **Monetisering:** Capacitor → app-butikk, AdMob rewarded + IAP
+1. **Skeleton:** procedural descent + grid movement
+2. **Battle:** turn-based FF1-style combat with party, enemies, magic, and items
+3. **Run loop:** permadeath fiction, loot, currency, upgrades in Sanctuary
+4. **Content:** classes, enemy variation, strata, bosses, audio, balancing
+5. **Validation:** deploy to nguyenchu.com and measure retention/feedback
+6. **Monetization:** Capacitor app stores, AdMob rewarded ads, and IAP

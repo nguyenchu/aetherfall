@@ -1,18 +1,18 @@
-// Prosedyre-generert chiptune-musikk via Web Audio — ingen lydfiler, original
-// (juss-trygt jf. context.md), looper evig og bytter mellom utforskning og kamp.
+// Procedural chiptune music via Web Audio. No audio files, fully original,
+// loops indefinitely, and switches between exploration and battle.
 //
-// Sporene er skrevet som åttendedels-rutenett: hvert tall er en MIDI-note,
-// 0 = pause, -1 = hold (forleng forrige note). En lookahead-planlegger
-// (standard Web Audio-mønster) skedulerer noter litt før de skal spilles.
+// Tracks are written as eighth-note grids: each number is a MIDI note,
+// 0 = rest, -1 = hold the previous note. A lookahead scheduler queues notes
+// shortly before they should play.
 //
-// Bytt ut med innspilte spor senere ved å erstatte denne modulen — API-et
-// (play/stop/toggle) holdes stabilt.
+// Replace with recorded tracks later by swapping this module while keeping
+// the play/stop/toggle API stable.
 
 export type TrackName = 'explore' | 'battle';
 
 interface TrackDef {
   bpm: number;
-  melody: number[]; // åttendedels-rutenett: MIDI, 0=pause, -1=hold
+  melody: number[]; // eighth-note grid: MIDI, 0=rest, -1=hold
   bass: number[];
   melodyWave: OscillatorType;
   bassWave: OscillatorType;
@@ -20,12 +20,12 @@ interface TrackDef {
   bassVol: number;
 }
 
-// Hjelpere for å skrive mønstre kompakt.
-const q = (n: number): number[] => [n, -1]; // fjerdedelsnote (to åttendedeler)
-const bar = (n: number): number[] => [n, -1, -1, -1, -1, -1, -1, -1]; // helnote over én takt
+// Helpers for compact patterns.
+const q = (n: number): number[] => [n, -1]; // quarter note (two eighths)
+const bar = (n: number): number[] => [n, -1, -1, -1, -1, -1, -1, -1]; // whole note across one bar
 const flat = (xs: number[][]): number[] => xs.flat();
 
-// --- Utforskning: rolig Am – F – C – G, fjerdedels-melodi over liggende bass.
+// --- Explore: calm Am - F - C - G, quarter-note melody over sustained bass.
 const EXPLORE: TrackDef = {
   bpm: 82,
   melody: flat([
@@ -41,18 +41,18 @@ const EXPLORE: TrackDef = {
   bassVol: 0.22,
 };
 
-// --- Kamp: drivende Dm – Bb – C – A med pulserende bass og skarpere riff.
-const p = 0; // pause-snarvei
+// --- Battle: driving Dm - Bb - C - A with pulsing bass and a sharper riff.
+const p = 0; // rest shorthand
 const BATTLE: TrackDef = {
   bpm: 150,
   melody: [
     74, p, 77, 74, 81, p, 77, 74, // Dm: D5 . F5 D5 A5 . F5 D5
     70, p, 74, 70, 77, p, 74, 70, // Bb: Bb4 . D5 Bb4 F5 . D5 Bb4
     72, p, 76, 72, 79, p, 76, 72, // C:  C5 . E5 C5 G5 . E5 C5
-    69, p, 73, 69, 76, p, 73, 69, // A:  A4 . C#5 A4 E5 . C#5 A4 (dominant-spenning)
+    69, p, 73, 69, 76, p, 73, 69, // A:  A4 . C#5 A4 E5 . C#5 A4 (dominant tension)
   ],
   bass: [
-    50, 50, 50, 50, 50, 50, 50, 50, // D3 åttendedelspuls
+    50, 50, 50, 50, 50, 50, 50, 50, // D3 eighth-note pulse
     46, 46, 46, 46, 46, 46, 46, 46, // Bb2
     48, 48, 48, 48, 48, 48, 48, 48, // C3
     45, 45, 45, 45, 45, 45, 45, 45, // A2
@@ -67,7 +67,7 @@ const TRACKS: Record<TrackName, TrackDef> = { explore: EXPLORE, battle: BATTLE }
 
 export type StingName = 'victory' | 'defeat';
 
-// Engangs-fanfarer (ikke loopet). Absolutte starttider (t) og varighet i sek.
+// One-shot fanfares, not looped. Absolute start times (t) and duration in sec.
 interface StingNote {
   midi: number;
   t: number;
@@ -76,27 +76,27 @@ interface StingNote {
   vol: number;
 }
 
-// Seier: lys, triumferende C-dur — stigende arpeggio som lander på en helakkord,
-// med en V–I-bass (G→C) som gir oppløsning.
+// Victory: bright C major, rising arpeggio landing on a full chord,
+// with a V-I bass motion (G to C) for resolution.
 const VICTORY: StingNote[] = [
   { midi: 43, t: 0.0, dur: 0.54, wave: 'triangle', vol: 0.22 }, // G2 (dominant)
-  { midi: 48, t: 0.54, dur: 0.62, wave: 'triangle', vol: 0.24 }, // C3 (tonika)
+  { midi: 48, t: 0.54, dur: 0.62, wave: 'triangle', vol: 0.24 }, // C3 (tonic)
   { midi: 72, t: 0.0, dur: 0.12, wave: 'square', vol: 0.18 }, // C5
   { midi: 76, t: 0.12, dur: 0.12, wave: 'square', vol: 0.18 }, // E5
   { midi: 79, t: 0.24, dur: 0.12, wave: 'square', vol: 0.18 }, // G5
   { midi: 84, t: 0.36, dur: 0.12, wave: 'square', vol: 0.18 }, // C6
-  { midi: 83, t: 0.48, dur: 0.06, wave: 'square', vol: 0.17 }, // B5 (lite napp)
-  { midi: 84, t: 0.54, dur: 0.6, wave: 'square', vol: 0.18 }, // C6 (slutt-akkord)
+  { midi: 83, t: 0.48, dur: 0.06, wave: 'square', vol: 0.17 }, // B5 (small tug)
+  { midi: 84, t: 0.54, dur: 0.6, wave: 'square', vol: 0.18 }, // C6 (final chord)
   { midi: 79, t: 0.54, dur: 0.6, wave: 'square', vol: 0.13 }, // G5
   { midi: 76, t: 0.54, dur: 0.6, wave: 'square', vol: 0.12 }, // E5
 ];
 
-// Nederlag: dyster, langsomt fallende a-moll som ender på en lav mollakkord.
+// Defeat: somber, slowly falling A minor ending on a low minor chord.
 const DEFEAT: StingNote[] = [
   { midi: 76, t: 0.0, dur: 0.34, wave: 'triangle', vol: 0.18 }, // E5
   { midi: 74, t: 0.34, dur: 0.34, wave: 'triangle', vol: 0.18 }, // D5
   { midi: 72, t: 0.68, dur: 0.34, wave: 'triangle', vol: 0.18 }, // C5
-  { midi: 69, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.18 }, // A4 (holdt)
+  { midi: 69, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.18 }, // A4 (held)
   { midi: 57, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.14 }, // A3
   { midi: 60, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.11 }, // C4
   { midi: 64, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.11 }, // E4
@@ -118,26 +118,26 @@ class MusicEngine {
   private current: TrackName | null = null;
   private timer?: number;
 
-  // Planleggertilstand
+  // Scheduler state.
   private step = 0;
   private nextNoteTime = 0;
   private wasRunning = false;
 
-  private readonly lookahead = 0.12; // sek vi skedulerer fram i tid
+  private readonly lookahead = 0.12; // seconds to schedule ahead
   private readonly tickMs = 25;
 
   play(name: TrackName): void {
     if (!this.enabled) {
-      this.current = name; // husk ønsket spor til lyd skrus på igjen
+      this.current = name; // remember desired track when sound is re-enabled
       return;
     }
-    if (this.current === name && this.timer != null) return; // spiller allerede
+    if (this.current === name && this.timer != null) return; // already playing
     this.ensureContext();
     const switching = this.current !== null;
     this.current = name;
     this.step = 0;
     this.nextNoteTime = (this.ctx?.currentTime ?? 0) + 0.06;
-    if (switching && this.master) this.dip(); // lite gain-dropp for å unngå klikk
+    if (switching && this.master) this.dip(); // small gain dip to avoid clicks
     this.startScheduler();
   }
 
@@ -149,10 +149,10 @@ class MusicEngine {
     this.current = null;
   }
 
-  /** Spiller en engangs-fanfare (seier/nederlag) og stopper løpende spor. */
+  /** Plays a one-shot fanfare and stops the current looping track. */
   fanfare(name: StingName): void {
     if (!this.enabled) return;
-    this.stop(); // ingen loop under fanfaren
+    this.stop(); // no loop during the fanfare
     this.ensureContext();
     const ctx = this.ctx!;
     void ctx.resume();
@@ -162,7 +162,7 @@ class MusicEngine {
     }
   }
 
-  /** Av/på (f.eks. M-tast). Returnerer ny tilstand (true = på). */
+  /** Toggles sound, e.g. via M. Returns the new state (true = on). */
   toggle(): boolean {
     this.setEnabled(!this.enabled);
     return this.enabled;
@@ -182,7 +182,7 @@ class MusicEngine {
     return this.enabled;
   }
 
-  // --- Internt -------------------------------------------------------------
+  // --- Internals ------------------------------------------------------------
 
   private ensureContext(): void {
     if (this.ctx) return;
@@ -190,7 +190,7 @@ class MusicEngine {
     const ctx = new Ctor();
     const master = ctx.createGain();
     master.gain.value = this.enabled ? 0.5 : 0;
-    // Lavpassfilter mykner de skarpe firkantbølgene.
+    // Low-pass filtering softens the sharp square waves.
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 2200;
@@ -198,7 +198,7 @@ class MusicEngine {
     this.ctx = ctx;
     this.master = master;
 
-    // Nettlesere blokkerer lyd til en brukerhandling: gjenoppta ved første input.
+    // Browsers block audio until user action, so resume on first input.
     const resume = () => {
       void ctx.resume();
       window.removeEventListener('keydown', resume);
@@ -218,13 +218,13 @@ class MusicEngine {
     if (!ctx || !this.current) return;
     const running = ctx.state === 'running';
     if (!running) {
-      // Hold planleggeren i ro mens konteksten er suspendert.
+      // Keep the scheduler idle while the context is suspended.
       this.nextNoteTime = ctx.currentTime + 0.06;
       this.wasRunning = false;
       return;
     }
     if (!this.wasRunning) {
-      // Akkurat startet (etter brukerhandling) — start rent uten klynge.
+      // Just started after user action; begin cleanly without a note cluster.
       this.nextNoteTime = ctx.currentTime + 0.06;
       this.wasRunning = true;
     }
@@ -244,8 +244,8 @@ class MusicEngine {
 
   private scheduleVoice(pattern: number[], i: number, time: number, sec8: number, wave: OscillatorType, vol: number): void {
     const note = pattern[i];
-    if (note <= 0) return; // 0 = pause, -1 = hold (allerede dekket av notestart)
-    // Forleng varigheten over etterfølgende hold-steg (-1).
+    if (note <= 0) return; // 0 = rest, -1 = hold already covered by the note start
+    // Extend duration across following hold steps (-1).
     let dur = sec8;
     let j = (i + 1) % pattern.length;
     let guard = 0;

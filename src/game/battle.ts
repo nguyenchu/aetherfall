@@ -1,11 +1,11 @@
-// Turbasert kampmotor — spillets «sjel». Rundebasert i FF1-ånd:
-//   1. Inntastingsfase: hvert levende party-medlem velger en handling.
-//   2. Oppgjørsfase: alle aktører (party + fiender) sorteres etter AGI og
-//      utfører handlingene sine; døde hoppes over.
-//   3. Sjekk seier/tap, ellers ny runde.
+// Turn-based battle engine, the heart of the game. FF1-inspired rounds:
+//   1. Input phase: each living party member chooses an action.
+//   2. Resolution phase: all actors (party + enemies) are sorted by AGI
+//      and execute their actions; defeated actors are skipped.
+//   3. Check win/loss, otherwise start a new round.
 //
-// Motoren er ren (ingen Phaser): den muterer Combatant-stats og returnerer
-// en liste BattleEvent som scenen spiller av med tekst/animasjon.
+// The engine is pure game logic with no Phaser dependency. It mutates Combatant
+// stats and returns BattleEvents for the scene to play with text and animation.
 
 import { ITEMS, SPELLS } from './content';
 import type { BattleEvent, BattlePhase, Combatant, Command } from './types';
@@ -19,10 +19,11 @@ export class Battle {
   readonly enemies: Combatant[];
   phase: BattlePhase = 'input';
   goldWon = 0;
+  xpWon = 0;
 
   private commands = new Map<string, Command>();
 
-  /** Delt inventar (item-id -> antall) — muteres når gjenstander brukes. */
+  /** Shared inventory (item id -> count), mutated when items are used. */
   constructor(party: Combatant[], enemies: Combatant[], private inventory: Record<string, number>) {
     this.party = party;
     this.enemies = enemies;
@@ -41,7 +42,7 @@ export class Battle {
     return list.filter((c) => c.stats.hp > 0);
   }
 
-  // --- Inntastingsfase ------------------------------------------------------
+  // --- Input Phase ----------------------------------------------------------
 
   setCommand(id: string, cmd: Command): void {
     this.commands.set(id, cmd);
@@ -51,29 +52,29 @@ export class Battle {
     this.commands.clear();
   }
 
-  /** Antall levende fiender med gyldig item-bruk osv. håndteres i scenen. */
+  /** Item validity and living target counts are handled in the scene. */
   itemCount(itemId: string): number {
     return this.inventory[itemId] ?? 0;
   }
 
-  // --- Oppgjørsfase ---------------------------------------------------------
+  // --- Resolution Phase -----------------------------------------------------
 
   /**
-   * Genererer fiendekommandoer (enkel AI), sorterer alle aktører etter AGI
-   * og utfører runden. Returnerer hele hendelsesloggen for runden.
+   * Generates enemy commands, sorts all actors by AGI, and executes the round.
+   * Returns the full event log for the round.
    */
   resolveRound(): BattleEvent[] {
     this.phase = 'resolving';
     const events: BattleEvent[] = [];
 
-    // Nullstill forsvar fra forrige runde før nye handlinger låses inn.
+    // Reset defending from the previous round before locking new actions.
     for (const c of this.all()) c.defending = false;
 
     for (const e of this.living('enemy')) {
       this.commands.set(e.id, this.enemyAi(e));
     }
 
-    // Flukt avgjøres før alt annet (party prøver å rømme).
+    // Fleeing resolves before everything else.
     const fleeing = [...this.commands.entries()].find(
       ([id, cmd]) => cmd.type === 'flee' && this.byId(id)?.side === 'party',
     );
@@ -82,22 +83,22 @@ export class Battle {
       const enemyAgi = avg(this.living('enemy').map((c) => c.stats.agi));
       const chance = Math.min(0.9, Math.max(0.25, 0.5 + (partyAgi - enemyAgi) * 0.05));
       if (Math.random() < chance) {
-        events.push({ kind: 'flee-ok', text: 'Partyet flyktet!' });
+        events.push({ kind: 'flee-ok', text: 'The party fled!' });
         this.phase = 'fled';
         this.commands.clear();
         return events;
       }
-      events.push({ kind: 'flee-fail', text: 'Kunne ikke flykte!' });
+      events.push({ kind: 'flee-fail', text: 'Could not flee!' });
     }
 
-    // Turrekkefølge: høyest AGI først, med litt slump for å unngå stivhet.
+    // Turn order: highest AGI first, with a little randomness to avoid stiffness.
     const order = [...this.commands.keys()]
       .map((id) => this.byId(id)!)
       .filter((c) => c.stats.hp > 0)
       .sort((a, b) => b.stats.agi + rnd(0, 3) - (a.stats.agi + rnd(0, 3)));
 
     for (const actor of order) {
-      if (actor.stats.hp <= 0) continue; // kan ha falt tidligere i runden
+      if (actor.stats.hp <= 0) continue; // may have fallen earlier in the round
       const cmd = this.commands.get(actor.id);
       if (!cmd) continue;
       this.execute(actor, cmd, events);
@@ -113,17 +114,17 @@ export class Battle {
     switch (cmd.type) {
       case 'defend': {
         actor.defending = true;
-        events.push({ kind: 'defend', text: `${actor.name} forsvarer seg.`, actorId: actor.id });
+        events.push({ kind: 'defend', text: `${actor.name} defends.`, actorId: actor.id });
         return;
       }
       case 'flee':
-        return; // håndtert i resolveRound for party; fiender flykter ikke
+        return; // handled in resolveRound for party; enemies do not flee
       case 'attack': {
         const target = this.aliveTargetOr(cmd.targetId, actor.side === 'party' ? 'enemy' : 'party');
         if (!target) return;
         const dmg = this.physicalDamage(actor, target);
         this.applyDamage(target, dmg);
-        events.push({ kind: 'attack', text: `${actor.name} treffer ${target.name} for ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg });
+        events.push({ kind: 'attack', text: `${actor.name} hits ${target.name} for ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg });
         this.maybeKo(target, events);
         return;
       }
@@ -135,30 +136,35 @@ export class Battle {
           const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
           const heal = Math.round(spell.power + actor.stats.int * 0.5);
           target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
-          events.push({ kind: 'spell', text: `${actor.name} maner ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal });
+          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal });
         } else {
           const target = this.aliveTargetOr(cmd.targetId, actor.side === 'party' ? 'enemy' : 'party');
           if (!target) return;
           const dmg = this.spellDamage(actor, target, spell.power);
           this.applyDamage(target, dmg);
-          events.push({ kind: 'spell', text: `${actor.name} maner ${spell.name}; ${target.name} tar ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg });
+          events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} takes ${dmg}.`, actorId: actor.id, targetId: target.id, amount: dmg });
           this.maybeKo(target, events);
         }
         return;
       }
       case 'item': {
         const item = ITEMS[cmd.itemId];
-        if (!item || (this.inventory[item.id] ?? 0) <= 0) return;
+        if (!item || item.target !== 'ally' || (this.inventory[item.id] ?? 0) <= 0) return;
         this.inventory[item.id]--;
         const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
-        target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + item.power);
-        events.push({ kind: 'item', text: `${actor.name} bruker ${item.name}; ${target.name} +${item.power} HP.`, actorId: actor.id, targetId: target.id, amount: -item.power });
+        if (item.kind === 'heal') {
+          target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + item.power);
+          events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${item.power} HP.`, actorId: actor.id, targetId: target.id, amount: -item.power });
+        } else if (item.kind === 'mp') {
+          target.stats.mp = Math.min(target.stats.maxMp, target.stats.mp + item.power);
+          events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${item.power} MP.`, actorId: actor.id, targetId: target.id });
+        }
         return;
       }
     }
   }
 
-  // --- Skadeformler (FF1-inspirert) ----------------------------------------
+  // --- Damage Formulas (FF1-inspired) --------------------------------------
 
   private physicalDamage(a: Combatant, t: Combatant): number {
     let dmg = a.stats.str * 1.6 - t.stats.vit * 0.6;
@@ -180,7 +186,7 @@ export class Battle {
 
   private maybeKo(t: Combatant, events: BattleEvent[]): void {
     if (t.stats.hp <= 0) {
-      events.push({ kind: 'ko', text: `${t.name} faller.`, targetId: t.id });
+      events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id });
     }
   }
 
@@ -191,7 +197,7 @@ export class Battle {
     if (targets.length === 0) return { type: 'defend' };
     const target = targets[Math.floor(Math.random() * targets.length)];
 
-    // Kast besvergelse av og til hvis MP tillater det.
+    // Cast occasionally if MP allows it.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
     if (castable.length > 0 && Math.random() < 0.4) {
       return { type: 'spell', spellId: castable[0], targetId: target.id };
@@ -199,9 +205,9 @@ export class Battle {
     return { type: 'attack', targetId: target.id };
   }
 
-  // --- Hjelpere -------------------------------------------------------------
+  // --- Helpers --------------------------------------------------------------
 
-  /** Faller tilbake til et levende mål på riktig side om det opprinnelige er dødt. */
+  /** Falls back to a living target on the right side if the original is dead. */
   private aliveTargetOr(id: string, side: 'party' | 'enemy'): Combatant | undefined {
     const t = this.byId(id);
     if (t && t.stats.hp > 0) return t;
@@ -211,12 +217,13 @@ export class Battle {
   private checkEnd(events: BattleEvent[]): boolean {
     if (this.living('enemy').length === 0) {
       this.goldWon = this.enemies.reduce((sum, e) => sum + (e.goldReward ?? 0), 0);
-      events.push({ kind: 'info', text: `Seier! +${this.goldWon} gull.` });
+      this.xpWon = this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0);
+      events.push({ kind: 'info', text: `Victory! +${this.goldWon} gold, +${this.xpWon} XP.` });
       this.phase = 'won';
       return true;
     }
     if (this.living('party').length === 0) {
-      events.push({ kind: 'info', text: 'Partyet er beseiret …' });
+      events.push({ kind: 'info', text: 'The party is defeated...' });
       this.phase = 'lost';
       return true;
     }

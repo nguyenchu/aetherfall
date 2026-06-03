@@ -1,10 +1,14 @@
-// Lav intern oppløsning som skaleres opp -> skarp pixel-art-følelse.
-// 480x270 er 16:9 og passer både nettleser og mobil.
+// Logical resolution is the coordinate system scenes are authored in.
+// renderScale zooms cameras so the world fills the canvas at an integer multiple.
+// Computed dynamically from the window size; update via setRenderScale().
 export const GAME = {
-  width: 480,
-  height: 270,
+  width: 640,
+  height: 360,
   tile: 16,
 } as const;
+
+export let renderScale = 1;
+export function setRenderScale(s: number): void { renderScale = s; }
 
 export const COLORS = {
   bg: 0x07060e,

@@ -1,5 +1,5 @@
-// Kjernedatatyper for kampsystemet. Holdes rent (ingen Phaser) slik at
-// kamplogikken kan testes og gjenbrukes uavhengig av presentasjonen.
+// Core data types for the battle system. Kept pure with no Phaser so battle
+// logic can be tested and reused independently from presentation.
 
 export type Side = 'party' | 'enemy';
 export type Element = 'fire' | 'ice' | 'holy' | 'none';
@@ -9,10 +9,10 @@ export interface Stats {
   hp: number;
   maxMp: number;
   mp: number;
-  str: number; // fysisk angrepskraft
-  agi: number; // turrekkefølge + flukt
-  vit: number; // forsvar
-  int: number; // magisk kraft
+  str: number; // physical attack power
+  agi: number; // turn order + fleeing
+  vit: number; // defense
+  int: number; // magic power
 }
 
 export interface Spell {
@@ -28,23 +28,32 @@ export interface Spell {
 export interface Item {
   id: string;
   name: string;
-  kind: 'heal';
+  kind: 'heal' | 'mp' | 'sell';
   power: number;
-  target: 'ally';
+  target: 'ally' | 'none';
+  buyPrice?: number;
+  sellPrice: number;
+  description: string;
 }
 
-/** Én aktør i kamp — både helter og fiender deler denne formen. */
+/** One battle actor; heroes and enemies share this shape. */
 export interface Combatant {
   id: string;
   name: string;
   side: Side;
   stats: Stats;
-  spells: string[]; // spell-id-er denne kan bruke
+  spells: string[]; // spell ids this combatant can use
   spriteKey: string;
   color: number;
-  size: number; // pikselbredde/-høyde på plassholder-sprite
-  goldReward?: number; // kun fiender
-  // Kjøretids-kamptilstand:
+  size: number; // placeholder sprite pixel width / height
+  goldReward?: number; // enemies only
+  xpReward?: number; // enemies only
+  isBoss?: boolean;
+  // Progression (party only):
+  level?: number;
+  xp?: number;
+  growth?: Partial<Stats>; // stat increase per level
+  // Runtime battle state:
   defending?: boolean;
 }
 
@@ -65,13 +74,13 @@ export type EventKind =
   | 'ko'
   | 'info';
 
-/** Ett steg i kampens logg — scenen spiller disse av med animasjon/tekst. */
+/** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {
   kind: EventKind;
   text: string;
   actorId?: string;
   targetId?: string;
-  amount?: number; // skade (positiv) eller helbredelse (negativ)
+  amount?: number; // damage (positive) or healing (negative)
 }
 
 export type BattlePhase = 'input' | 'resolving' | 'won' | 'lost' | 'fled';

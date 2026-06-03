@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="no">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -15,6 +15,7 @@
         background: #07060e;
         overflow: hidden;
         touch-action: none;
+        -webkit-font-smoothing: antialiased;
       }
       #game {
         width: 100vw;
@@ -24,6 +25,9 @@
         justify-content: center;
       }
       canvas {
+        display: block;
+        width: min(100vw, calc(100vh * 16 / 9)) !important;
+        height: auto !important;
         image-rendering: pixelated;
       }
     </style>

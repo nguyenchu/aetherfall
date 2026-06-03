@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-// base: './' gjør at byggen kan ligge i en undermappe (f.eks. nguyenchu.com/aetherfall)
+// base: './' lets the build live in a subfolder, such as nguyenchu.com/aetherfall.
 // og senere pakkes inn med Capacitor uten endringer.
 export default defineConfig({
   base: './',
