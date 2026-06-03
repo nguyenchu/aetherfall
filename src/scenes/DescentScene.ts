@@ -43,6 +43,7 @@ export class DescentScene extends Phaser.Scene {
     this.unsubs = [];
     this.tileImages.clear();
     this.pendingEncounterKey = null;
+    this.hintText = undefined;
 
     const area = getArea(getRun().depth);
     this.map = area.map;
