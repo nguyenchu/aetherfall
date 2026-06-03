@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
-import { getArea, makeEncounterForArea } from '../game/chapters';
+import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
 import { getRun, returnToTown, saveProgress, hasFlag, setFlag } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
@@ -46,10 +46,12 @@ export class DescentScene extends Phaser.Scene {
     const area = getArea(getRun().depth);
     this.map = area.map;
 
+    this.buildThemeTiles(area.theme);
+    this.drawAtmosphere(area.theme);
     this.drawMap();
     this.placePortals();
     this.spawnPlayer();
-    this.buildHud(area.name);
+    this.buildHud(area.name, area.theme.accent);
     this.bindInput();
     attachTouchControls(this);
 
@@ -69,13 +71,68 @@ export class DescentScene extends Phaser.Scene {
     });
   }
 
+  private buildThemeTiles(theme: AreaTheme) {
+    const t = GAME.tile;
+    const mk = (key: string, base: number, accent: number, noiseChance: number) => {
+      if (this.textures.exists(key)) return;
+      const g = this.add.graphics();
+      const r = (base >> 16) & 0xff, gr = (base >> 8) & 0xff, b = base & 0xff;
+      g.fillStyle(base, 1);
+      g.fillRect(0, 0, t, t);
+      // Subtle pixel noise for texture
+      for (let px = 0; px < t; px++) {
+        for (let py = 0; py < t; py++) {
+          if (Math.random() < noiseChance) {
+            const dark = Math.random() < 0.6;
+            const nr = Math.min(255, Math.max(0, r + (dark ? -18 : 14)));
+            const ng = Math.min(255, Math.max(0, gr + (dark ? -18 : 14)));
+            const nb = Math.min(255, Math.max(0, b + (dark ? -18 : 14)));
+            g.fillStyle((nr << 16) | (ng << 8) | nb, 1);
+            g.fillRect(px, py, 1, 1);
+          }
+        }
+      }
+      // Subtle edge lines for depth
+      g.lineStyle(1, accent, 0.08);
+      if (Math.random() < 0.3) g.strokeRect(0.5, 0.5, t - 1, t - 1);
+      g.generateTexture(key, t, t);
+      this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      g.destroy();
+    };
+    mk('th_floor', theme.floor, theme.accent, 0.12);
+    mk('th_floorAlt', theme.floorAlt, theme.accent, 0.10);
+    mk('th_wall', theme.wall, theme.accent, 0.18);
+  }
+
+  private drawAtmosphere(theme: AreaTheme) {
+    // Background fill
+    this.add.rectangle(0, 0, GAME.width, GAME.height, theme.bg).setOrigin(0, 0).setDepth(-1);
+
+    // Ambient floating particles
+    const spawnParticle = () => {
+      if (!this.scene.isActive()) return;
+      const x = Phaser.Math.Between(0, GAME.width);
+      const p = this.add.circle(x, GAME.height + 3, Phaser.Math.FloatBetween(0.6, 1.8),
+        theme.fogColor, theme.fogAlpha).setDepth(1);
+      const dur = Phaser.Math.Between(4000, 9000);
+      this.tweens.add({
+        targets: p, y: -6, x: x + Phaser.Math.Between(-20, 20),
+        alpha: 0, duration: dur, ease: 'Linear',
+        onComplete: () => { p.destroy(); spawnParticle(); },
+      });
+    };
+    for (let i = 0; i < 8; i++) {
+      this.time.delayedCall(Phaser.Math.Between(0, 3000), spawnParticle);
+    }
+  }
+
   private drawMap() {
     const depth = getRun().depth;
     for (let r = 0; r < this.map.length; r++) {
       for (let c = 0; c < this.map[r].length; c++) {
         const ch = this.map[r][c];
         const isWall = ch === '#';
-        const texKey = isWall ? 'wall' : (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
+        const texKey = isWall ? 'th_wall' : (r + c) % 2 === 0 ? 'th_floor' : 'th_floorAlt';
         this.add.image(c * GAME.tile, r * GAME.tile, texKey).setOrigin(0, 0).setDepth(0);
 
         if (ch === 'P') { this.px = c; this.py = r; }
@@ -132,11 +189,18 @@ export class DescentScene extends Phaser.Scene {
     this.player = this.add.image(
       this.tileCenter(this.px), this.tileCenter(this.py), 'player',
     ).setScale(PLAYER_SCALE_X, PLAYER_SCALE_Y).setDepth(5);
+    // Subtle idle float
+    this.tweens.add({
+      targets: this.player,
+      y: { from: this.player.y - 1.5, to: this.player.y + 1.5 },
+      duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
   }
 
-  private buildHud(areaName: string) {
+  private buildHud(areaName: string, accentColor: number) {
+    const hex = '#' + accentColor.toString(16).padStart(6, '0');
     const run = getRun();
-    this.add.text(4, 4, 'AETHERFALL', sharpText({ fontFamily: FONT, fontSize: '12px', color: '#a58cff' })).setDepth(10);
+    this.add.text(4, 4, 'AETHERFALL', sharpText({ fontFamily: FONT, fontSize: '12px', color: hex })).setDepth(10);
     this.add.text(4, 18, areaName, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5' })).setDepth(10);
     this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })).setOrigin(1, 0).setDepth(10);

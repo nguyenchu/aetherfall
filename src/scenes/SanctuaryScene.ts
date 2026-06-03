@@ -31,7 +31,7 @@ type Facing = 'down' | 'up' | 'left' | 'right';
 // 'K' warden, 'L' scholar, 'C' child, 'V' merchant
 const MAP = [
   '##############################',
-  '#............................#',
+  '#..T........................#',
   '#..###..............###......#',
   '#..###...K.......L..###...DD.#',
   '#..###..............###...D..#',
@@ -56,13 +56,30 @@ interface Npc {
 }
 
 function npcs(): Record<string, Npc> {
+  const ch3Done = hasFlag('ch3_complete');
   const ch2Done = hasFlag('ch2_complete');
   const ch1Done = hasFlag('ch1_complete');
   return {
-    K: { spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue', scriptId: ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper' },
-    L: { spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue', scriptId: ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar' },
-    C: { spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue', scriptId: 'npc_child' },
+    K: {
+      spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
+      scriptId: ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
+    },
+    L: {
+      spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
+      scriptId: ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+    },
+    C: {
+      spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
+      scriptId: ch3Done ? 'npc_child_after3' : ch1Done ? 'npc_child_after1' : 'npc_child',
+    },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
+    // The Stranger appears after Ch1 in the northwest corner
+    ...(ch1Done ? {
+      T: {
+        spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
+        scriptId: ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
+      },
+    } : {}),
   };
 }
 

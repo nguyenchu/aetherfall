@@ -5,7 +5,7 @@ import type { BattleEvent, Combatant, Stats } from './types';
 
 /** XP required to go from `level` to `level + 1`. */
 export function xpForLevel(level: number): number {
-  return 18 + level * level * 7;
+  return 12 + level * level * 5;
 }
 
 const GROWABLE: (keyof Stats)[] = ['maxHp', 'maxMp', 'str', 'agi', 'vit', 'int'];

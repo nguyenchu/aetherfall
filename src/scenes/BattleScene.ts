@@ -158,10 +158,17 @@ export class BattleScene extends Phaser.Scene {
     const spacing = 62;
     const startY = 126 - ((list.length - 1) * spacing) / 2;
     list.forEach((c, i) => {
-      // Scale the small pixel sprites up so they have presence in battle.
       const img = this.add.image(x, startY + i * spacing, c.spriteKey).setScale(2.4).setDepth(5);
       this.sprites.set(c.id, img);
       this.spriteHome.set(c.id, { x: img.x, y: img.y });
+      // Idle float — enemies and party members bob at slightly different speeds
+      const dur = c.side === 'enemy' ? 1600 + i * 220 : 2000 + i * 180;
+      this.tweens.add({
+        targets: img,
+        y: { from: img.y - 2, to: img.y + 2 },
+        duration: dur, yoyo: true, repeat: -1,
+        delay: i * 300, ease: 'Sine.easeInOut',
+      });
     });
   }
 

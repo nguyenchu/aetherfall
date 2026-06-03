@@ -51,7 +51,7 @@ function forestShade(): Combatant {
     spriteKey: 'e_leviathan', color: 0x112233, size: 38,
     spells: ['frost', 'fire'], goldReward: 60, xpReward: 100,
     isBoss: true,
-    stats: s(200, 14, 9, 8, 16, 40),
+    stats: s(360, 16, 9, 10, 18, 50),
   };
 }
 
@@ -71,9 +71,20 @@ export function makeChapter1Encounter(group: EncounterGroup): Combatant[] {
 // Area definitions
 // ---------------------------------------------------------------------------
 
+export interface AreaTheme {
+  bg: number;        // background fill
+  floor: number;     // primary floor tile
+  floorAlt: number;  // alternate floor tile
+  wall: number;      // wall tile
+  accent: number;    // glow / portal color
+  fogColor: number;  // ambient particle color
+  fogAlpha: number;  // ambient particle alpha
+}
+
 export interface AreaDef {
   id: string;
   name: string;
+  theme: AreaTheme;
   /** Tile-keyed encounter groups: 'col,row' -> group name */
   encounters: Record<string, string>;
   /** Tile-keyed dialogue script ids */
@@ -81,11 +92,36 @@ export interface AreaDef {
   map: string[];
 }
 
+export const THEMES: Record<string, AreaTheme> = {
+  forest: {
+    bg: 0x050e07,
+    floor: 0x131f14, floorAlt: 0x172318,
+    wall: 0x081008,
+    accent: 0x4aaa5a,
+    fogColor: 0x3a8a4a, fogAlpha: 0.14,
+  },
+  sunken: {
+    bg: 0x060b12,
+    floor: 0x111a26, floorAlt: 0x162030,
+    wall: 0x080e18,
+    accent: 0x3a7a9a,
+    fogColor: 0x2a5a8a, fogAlpha: 0.16,
+  },
+  ashen: {
+    bg: 0x0e0705,
+    floor: 0x1e1008, floorAlt: 0x24140a,
+    wall: 0x100804,
+    accent: 0xcc4411,
+    fogColor: 0xaa3311, fogAlpha: 0.12,
+  },
+};
+
 // Area 1 – Forest Entrance. 30 cols × 15 rows.
 // Player arrives from Sanctuary at bottom (<), proceeds north to the grove (>).
 const AREA_1: AreaDef = {
   id: 'forest_1',
   name: 'Ashenveil Forest',
+  theme: THEMES.forest,
   encounters: {
     '7,3':  'wolves',
     '22,3': 'wolf_sprite',
@@ -119,6 +155,7 @@ const AREA_1: AreaDef = {
 const AREA_2: AreaDef = {
   id: 'forest_2',
   name: 'Ancient Grove',
+  theme: THEMES.forest,
   encounters: {
     '14,7': 'boss',
   },
@@ -153,7 +190,7 @@ function drownedSoldier(id: string): Combatant {
     id, name: 'Drowned Soldier', side: 'enemy',
     spriteKey: 'e_warden', color: 0x2a4a6a, size: 26,
     spells: [], goldReward: 14, xpReward: 18,
-    stats: s(42, 15, 7, 10, 2),
+    stats: s(80, 17, 7, 13, 2),
   };
 }
 
@@ -162,7 +199,7 @@ function mireSprite(id: string): Combatant {
     id, name: 'Mire Sprite', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x5a8a5a, size: 18,
     spells: ['fire', 'frost'], goldReward: 16, xpReward: 20,
-    stats: s(26, 7, 14, 4, 14, 20),
+    stats: s(52, 8, 15, 5, 16, 24),
   };
 }
 
@@ -171,7 +208,7 @@ function tombCrawler(id: string): Combatant {
     id, name: 'Tomb Crawler', side: 'enemy',
     spriteKey: 'e_crawler', color: 0x6a4a2a, size: 28,
     spells: [], goldReward: 12, xpReward: 16,
-    stats: s(48, 12, 6, 12, 1),
+    stats: s(90, 14, 6, 15, 1),
   };
 }
 
@@ -181,7 +218,7 @@ function tideWarden(): Combatant {
     spriteKey: 'e_leviathan', color: 0x1a3a5a, size: 40,
     spells: ['frost', 'cure'], goldReward: 80, xpReward: 140,
     isBoss: true,
-    stats: s(280, 18, 10, 14, 18, 50),
+    stats: s(520, 20, 10, 16, 20, 60),
   };
 }
 
@@ -201,6 +238,7 @@ export function makeChapter2Encounter(group: Ch2EncounterGroup): Combatant[] {
 const AREA_3: AreaDef = {
   id: 'sunken_1',
   name: 'Sunken City',
+  theme: THEMES.sunken,
   encounters: {
     '6,3':   'soldiers',
     '22,4':  'soldier_sprite',
@@ -233,6 +271,7 @@ const AREA_3: AreaDef = {
 const AREA_4: AreaDef = {
   id: 'sunken_2',
   name: 'Flooded Keep',
+  theme: THEMES.sunken,
   encounters: {
     '14,7': 'ch2_boss',
   },
@@ -267,7 +306,7 @@ function emberHound(id: string): Combatant {
     id, name: 'Ember Hound', side: 'enemy',
     spriteKey: 'e_ember', color: 0xcc4411, size: 22,
     spells: ['fire'], goldReward: 18, xpReward: 24,
-    stats: s(34, 14, 16, 6, 8, 12),
+    stats: s(70, 17, 16, 8, 10, 16),
   };
 }
 
@@ -276,7 +315,7 @@ function cinderWraith(id: string): Combatant {
     id, name: 'Cinder Wraith', side: 'enemy',
     spriteKey: 'e_cinder', color: 0x774422, size: 20,
     spells: ['fire', 'frost'], goldReward: 20, xpReward: 26,
-    stats: s(22, 6, 18, 3, 16, 24),
+    stats: s(48, 8, 18, 4, 19, 28),
   };
 }
 
@@ -285,7 +324,7 @@ function magmaGolem(id: string): Combatant {
     id, name: 'Magma Golem', side: 'enemy',
     spriteKey: 'e_warden', color: 0xaa3311, size: 30,
     spells: [], goldReward: 16, xpReward: 22,
-    stats: s(70, 16, 4, 18, 2),
+    stats: s(130, 19, 4, 20, 2),
   };
 }
 
@@ -295,7 +334,7 @@ function ashbrand(): Combatant {
     spriteKey: 'e_leviathan', color: 0x881100, size: 42,
     spells: ['fire', 'smite'], goldReward: 100, xpReward: 180,
     isBoss: true,
-    stats: s(360, 20, 12, 16, 22, 60),
+    stats: s(720, 24, 12, 18, 26, 80),
   };
 }
 
@@ -315,6 +354,7 @@ export function makeChapter3Encounter(group: Ch3EncounterGroup): Combatant[] {
 const AREA_5: AreaDef = {
   id: 'ashen_1',
   name: 'Ashen Foothills',
+  theme: THEMES.ashen,
   encounters: {
     '7,3':   'hounds',
     '21,3':  'hound_wraith',
@@ -347,6 +387,7 @@ const AREA_5: AreaDef = {
 const AREA_6: AreaDef = {
   id: 'ashen_2',
   name: 'Summit Shrine',
+  theme: THEMES.ashen,
   encounters: {
     '14,7': 'ch3_boss',
   },

@@ -121,6 +121,36 @@ export const SCRIPTS: Record<string, Script> = {
     { text: '— The story continues in a future update —', color: NARRATOR },
     { text: 'Thank you for playing Aetherfall.', color: NARRATOR },
   ],
+  // Post-Ch3 NPC follow-ups
+  npc_keeper_after3: [
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Three anchors. The scouts are reporting light returning to places that\'ve been dark for a decade.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'But something else is moving. Deeper than the anchors. Older. I don\'t know what it is yet.' },
+  ],
+  npc_scholar_after3: [
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The old texts mention twelve anchors — but they also mention something that predates them all.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The Hollow. The empty space beneath the world where the Aether originally fell from. I think it\'s waking up.' },
+  ],
+  // The Stranger — appears after Ch1, hints at a deeper threat
+  npc_stranger: [
+    { speaker: '???', color: 0x8a93b8, text: 'You\'ve only restored three. The drain isn\'t stopping — it\'s slowing.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Someone is collecting the fallen Aether. The anchors aren\'t failing on their own.' },
+  ],
+  npc_stranger_after2: [
+    { speaker: '???', color: 0x8a93b8, text: 'Five anchors remain. The one who\'s draining them will feel each restoration like a thorn.' },
+    { speaker: '???', color: 0x8a93b8, text: 'They\'ll send something worse soon. Be ready.' },
+  ],
+  npc_stranger_after3: [
+    { speaker: '???', color: 0x8a93b8, text: 'The Hollow stirs. When the time comes, you\'ll need to go deeper than any map shows.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Nine more anchors. And then... something else entirely.' },
+  ],
+  npc_child_after1: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'The wolves are gone from Ashenveil. Pip came back last night.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'He smells like pine and wet stone. I think he was waiting in the grove.' },
+  ],
+  npc_child_after3: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'I can see three stars now that were missing before. Mum says those are the anchors you fixed.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'The Stranger told me there are nine more. Are you going to fix all of them?' },
+  ],
 };
 
 // Tracks scripts seen in this session, such as avoiding a repeated intro after death.
