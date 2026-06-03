@@ -4,7 +4,7 @@ import { Battle } from '../game/battle';
 import { ITEMS, SPELLS } from '../game/content';
 import { getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { grantXp, xpForLevel } from '../game/progression';
-import { input, attachTouchControls } from '../game/input';
+import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import type { BattleEvent, Combatant, Command } from '../game/types';
@@ -63,6 +63,7 @@ export class BattleScene extends Phaser.Scene {
   private partyHpBars = new Map<string, BarSet>();
   private log: string[] = [];
   private unsubs: (() => void)[] = [];
+  private touchCleanups: (() => void)[] = [];
 
   constructor() {
     super('Battle');
@@ -89,6 +90,7 @@ export class BattleScene extends Phaser.Scene {
     this.menuText = [];
     this.log = [];
     this.unsubs = [];
+    this.touchCleanups = [];
   }
 
   create() {
@@ -247,6 +249,19 @@ export class BattleScene extends Phaser.Scene {
     });
     this.cursor.setVisible(false);
     this.markActiveMember();
+
+    if (isTouchDevice()) {
+      this.options.forEach((_o, i) => {
+        const zone = this.add.rectangle(4, GAME.height - 83 + i * 14, GAME.width - 200, 16, 0xffffff, 0)
+          .setOrigin(0, 0).setDepth(25).setInteractive();
+        zone.on('pointerdown', () => {
+          if (!this.options[i].enabled) return;
+          this.menuIndex = i;
+          this.confirmMenu();
+        });
+        this.touchCleanups.push(() => zone.destroy());
+      });
+    }
   }
 
   private renderSubmenu(prompt: string) {
@@ -259,11 +274,26 @@ export class BattleScene extends Phaser.Scene {
       const t = this.add.text(12, GAME.height - 79 + i * 14, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '10px', color })).setDepth(16);
       this.menuText.push(t);
     });
+
+    if (isTouchDevice()) {
+      this.subItems.forEach((_o, i) => {
+        const zone = this.add.rectangle(4, GAME.height - 83 + i * 14, GAME.width - 200, 16, 0xffffff, 0)
+          .setOrigin(0, 0).setDepth(25).setInteractive();
+        zone.on('pointerdown', () => {
+          if (!this.subItems[i].enabled) return;
+          this.subIndex = i;
+          this.confirmSubmenu();
+        });
+        this.touchCleanups.push(() => zone.destroy());
+      });
+    }
   }
 
   private clearMenuText() {
     this.menuText.forEach((t) => t.destroy());
     this.menuText = [];
+    for (const fn of this.touchCleanups) fn();
+    this.touchCleanups = [];
   }
 
   private markActiveMember() {
@@ -405,6 +435,17 @@ export class BattleScene extends Phaser.Scene {
     this.clearMenuText();
     this.promptText.setText('Choose target  < >');
     this.pointCursorAtTarget();
+
+    if (isTouchDevice()) {
+      this.targets.forEach((t, i) => {
+        const img = this.sprites.get(t.id);
+        if (!img) return;
+        img.setInteractive();
+        const handler = () => { this.targetIndex = i; this.confirmTarget(); };
+        img.on('pointerdown', handler);
+        this.touchCleanups.push(() => { img.off('pointerdown', handler); img.disableInteractive(); });
+      });
+    }
   }
 
   private pointCursorAtTarget() {
