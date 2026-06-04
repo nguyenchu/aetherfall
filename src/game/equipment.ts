@@ -8,6 +8,8 @@ export interface Equipment {
   slot: EquipSlot;
   users: string[];
   bonus: Partial<Stats>;
+  trait: string;
+  description: string;
 }
 
 export const EQUIPMENT: Record<string, Equipment> = {
@@ -17,6 +19,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'weapon',
     users: ['kael'],
     bonus: { str: 3, agi: 1 },
+    trait: 'Swift blade',
+    description: 'Balanced duelist weapon. Raises physical pressure and turn speed.',
   },
   ember_staff: {
     id: 'ember_staff',
@@ -24,6 +28,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'weapon',
     users: ['lyra'],
     bonus: { int: 3, maxMp: 4 },
+    trait: 'Aether focus',
+    description: 'Mage focus. Better spell damage and a deeper MP pool.',
   },
   dawn_mace: {
     id: 'dawn_mace',
@@ -31,6 +37,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'weapon',
     users: ['mira'],
     bonus: { str: 2, int: 2 },
+    trait: 'War-prayer',
+    description: 'Hybrid mace. Supports both strikes and healing magic.',
   },
   scout_vest: {
     id: 'scout_vest',
@@ -38,6 +46,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'armor',
     users: ['kael', 'lyra', 'mira'],
     bonus: { maxHp: 8, vit: 1 },
+    trait: 'Light armor',
+    description: 'Simple field armor. Good survival boost with no specialization.',
   },
   aether_robe: {
     id: 'aether_robe',
@@ -45,6 +55,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'armor',
     users: ['lyra', 'mira'],
     bonus: { maxMp: 6, int: 1 },
+    trait: 'Caster robe',
+    description: 'Arcane weave. Trades heavy protection for spell endurance.',
   },
   sun_charm: {
     id: 'sun_charm',
@@ -52,6 +64,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'charm',
     users: ['kael', 'lyra', 'mira'],
     bonus: { maxHp: 4, vit: 1, int: 1 },
+    trait: 'Steady charm',
+    description: 'Defensive talisman with a small magic lift.',
   },
   tide_ring: {
     id: 'tide_ring',
@@ -59,6 +73,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'charm',
     users: ['kael', 'lyra', 'mira'],
     bonus: { maxMp: 4, int: 2 },
+    trait: 'Tide magic',
+    description: 'Aether ring. Strong for magic users and hybrid builds.',
   },
   reef_mail: {
     id: 'reef_mail',
@@ -66,6 +82,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'armor',
     users: ['kael', 'mira'],
     bonus: { maxHp: 12, vit: 2 },
+    trait: 'Heavy armor',
+    description: 'Sturdy mail. Strong protection for front-line fighters.',
   },
   oracle_lantern: {
     id: 'oracle_lantern',
@@ -73,6 +91,8 @@ export const EQUIPMENT: Record<string, Equipment> = {
     slot: 'charm',
     users: ['lyra', 'mira'],
     bonus: { maxMp: 8, int: 2 },
+    trait: 'Oracle focus',
+    description: 'Deepens spiritual focus for long fights and stronger spells.',
   },
 };
 

@@ -2,7 +2,7 @@
 // Connects persistent meta-progression (save.ts) with runtime state.
 // Death is not total: the Crystal returns you to town, but level/gold remain.
 
-import { ITEMS, makeParty } from './content';
+import { ITEMS, SPELLS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
 import { restoreLevel } from './progression';
@@ -179,6 +179,28 @@ export function useItemOn(itemId: string, memberId: string): boolean {
   return true;
 }
 
+export function effectiveSpellCost(spellId: string): number {
+  const spell = SPELLS[spellId];
+  if (!spell) return 0;
+  return Math.max(0, spell.cost + (state.modifier.spellCostDelta ?? 0));
+}
+
+export function castSpellOutOfBattle(casterId: string, spellId: string, targetId: string): boolean {
+  const spell = SPELLS[spellId];
+  if (!spell || spell.kind !== 'heal' || spell.target !== 'ally') return false;
+  const caster = state.party.find((c) => c.id === casterId);
+  const target = state.party.find((c) => c.id === targetId);
+  if (!caster || !target || !caster.spells.includes(spellId)) return false;
+  if (target.stats.hp <= 0 || target.stats.hp >= target.stats.maxHp) return false;
+  const cost = effectiveSpellCost(spellId);
+  if (caster.stats.mp < cost) return false;
+  caster.stats.mp -= cost;
+  const heal = Math.round(spell.power + caster.stats.int * 0.5);
+  target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
+  saveProgress();
+  return true;
+}
+
 export function grantBattleLoot(depth: number, boss: boolean): string[] {
   const drops: string[] = [];
   const pearlChance = boss ? 1 : 0.45 + depth * 0.05;
@@ -242,6 +264,58 @@ export function equipNext(memberId: string, slot: EquipSlot): boolean {
   clampVitals(member);
   saveProgress();
   return true;
+}
+
+export function equipItem(memberId: string, slot: EquipSlot, itemId?: string): boolean {
+  const member = state.party.find((c) => c.id === memberId);
+  if (!member) return false;
+  if (itemId) {
+    const item = EQUIPMENT[itemId];
+    if (!item || item.slot !== slot || !item.users.includes(memberId) || !save.equipmentOwned.includes(itemId)) return false;
+  }
+  const current = equippedFor(memberId)[slot];
+  if (current === itemId) return false;
+  const before = currentEquipmentBonus(memberId);
+  save.equipped[memberId] = { ...equippedFor(memberId), [slot]: itemId };
+  if (!itemId) delete save.equipped[memberId][slot];
+  const after = currentEquipmentBonus(memberId);
+  applyStatDelta(member, before, -1);
+  applyStatDelta(member, after, 1);
+  clampVitals(member);
+  saveProgress();
+  return true;
+}
+
+export function equipmentBonusText(itemId?: string): string {
+  if (!itemId) return 'No bonus';
+  const item = EQUIPMENT[itemId];
+  if (!item) return 'Unknown';
+  const parts = Object.entries(item.bonus)
+    .filter(([, value]) => value !== 0)
+    .map(([key, value]) => `+${value} ${key.toUpperCase()}`);
+  return parts.length > 0 ? parts.join('  ') : 'No bonus';
+}
+
+export function equipmentPreviewStats(memberId: string, slot: EquipSlot, itemId?: string): Partial<Stats> | null {
+  const member = state.party.find((c) => c.id === memberId);
+  if (!member) return null;
+  if (itemId) {
+    const item = EQUIPMENT[itemId];
+    if (!item || item.slot !== slot || !item.users.includes(memberId) || !save.equipmentOwned.includes(itemId)) return null;
+  }
+  const current = equippedFor(memberId);
+  const next = { ...current, [slot]: itemId };
+  if (!itemId) delete next[slot];
+  const before = currentEquipmentBonus(memberId);
+  const after = equipmentBonus([next.weapon, next.armor, next.charm]);
+  const preview: Partial<Stats> = { ...member.stats };
+  for (const [key, value] of Object.entries(before) as Array<[keyof Stats, number]>) {
+    preview[key] = (preview[key] ?? 0) - value;
+  }
+  for (const [key, value] of Object.entries(after) as Array<[keyof Stats, number]>) {
+    preview[key] = (preview[key] ?? 0) + value;
+  }
+  return preview;
 }
 
 // --- Party State ------------------------------------------------------------

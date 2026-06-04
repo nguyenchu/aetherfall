@@ -84,6 +84,10 @@ function npcs(): Record<string, Npc> {
 }
 
 type State = 'roam' | 'shop' | 'busy';
+interface NearbyAction {
+  label: string;
+  run: () => void;
+}
 
 /**
  * Starting city. The player roams, talks to people by bumping into them,
@@ -203,6 +207,12 @@ export class SanctuaryScene extends Phaser.Scene {
         opt.action();
         this.openShop();
       }
+    } else if (this.state === 'roam' && this.time.now >= this.moveLockedUntil) {
+      const action = this.getNearbyAction();
+      if (!action) return;
+      this.moveLockedUntil = this.time.now + 220;
+      input.releaseAll();
+      action.run();
     }
   }
 
@@ -250,23 +260,7 @@ export class SanctuaryScene extends Phaser.Scene {
   }
 
   private updateHint() {
-    const dirs = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
-    let label = '';
-    for (const d of dirs) {
-      const nx = this.px + d.x;
-      const ny = this.py + d.y;
-      const ch = this.grid[ny]?.[nx] ?? '#';
-      if (ch === 'D' || (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y)
-        || (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y)) {
-        const mod = getRun().modifier;
-        const modTag = mod.id !== 'none' ? `  [${mod.name}]` : '';
-        label = `Z / tap  ·  enter${modTag}`; break;
-      }
-      if (this.npcAt.has(`${nx},${ny}`)) {
-        const npc = this.npcAt.get(`${nx},${ny}`)!;
-        label = `Z / tap  ·  ${npc.kind === 'vendor' ? 'shop' : 'talk'}`; break;
-      }
-    }
+    const label = this.getNearbyAction()?.label ?? '';
     if (label) {
       if (!this.hintText) {
         this.hintText = this.add.text(GAME.width / 2, GAME.height - 18, label,
@@ -279,6 +273,48 @@ export class SanctuaryScene extends Phaser.Scene {
     } else if (this.hintText?.visible) {
       this.hintText.setVisible(false);
     }
+  }
+
+  private getNearbyAction(): NearbyAction | null {
+    for (const d of this.nearbyDirs()) {
+      const nx = this.px + d.x;
+      const ny = this.py + d.y;
+      const ch = this.grid[ny]?.[nx] ?? '#';
+
+      if (ch === 'D') return this.portalAction(() => this.descend());
+      if (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y) {
+        return this.portalAction(() => this.descendToChapter2());
+      }
+      if (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y) {
+        return this.portalAction(() => this.descendToChapter3());
+      }
+
+      const npc = this.npcAt.get(`${nx},${ny}`);
+      if (npc) {
+        return {
+          label: `Z / tap  ·  ${npc.kind === 'vendor' ? 'shop' : 'talk'}`,
+          run: () => this.interact(npc),
+        };
+      }
+    }
+    return null;
+  }
+
+  private portalAction(run: () => void): NearbyAction {
+    const mod = getRun().modifier;
+    const modTag = mod.id !== 'none' ? `  [${mod.name}]` : '';
+    return { label: `Z / tap  ·  enter${modTag}`, run };
+  }
+
+  private nearbyDirs() {
+    const facingDir = {
+      down: { x: 0, y: 1 },
+      up: { x: 0, y: -1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+    }[this.facing];
+    const dirs = [facingDir, { x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+    return dirs.filter((d, i) => dirs.findIndex((o) => o.x === d.x && o.y === d.y) === i);
   }
 
   private walkPlayerTo(x: number, y: number) {
@@ -328,12 +364,15 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private openDialogue(scriptId: string) {
     this.state = 'busy';
+    input.releaseAll();
     this.scene.pause();
     this.scene.launch('Dialogue', {
       scriptId,
       onDone: () => {
+        input.releaseAll();
         this.scene.resume();
         this.state = 'roam';
+        this.moveLockedUntil = this.time.now + 300;
       },
     });
   }

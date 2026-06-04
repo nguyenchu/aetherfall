@@ -35,7 +35,7 @@ export class SideScrollScene extends Phaser.Scene {
     this.buildBackdrop();
     this.spawnPlayer();
     this.bindInput();
-    attachTouchControls(this);
+    attachTouchControls(this, 'bottom', 'side');
     music.play('explore');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));

@@ -28,6 +28,13 @@ interface BarSet {
   label?: Phaser.GameObjects.Text;
 }
 
+interface PartyStatusRow {
+  bg: Phaser.GameObjects.Rectangle;
+  name: Phaser.GameObjects.Text;
+  hp: Phaser.GameObjects.Text;
+  mp: Phaser.GameObjects.Text;
+}
+
 /**
  * Battle presentation layer. Drives the Battle engine by collecting commands
  * through menus, then playing the round events with animation.
@@ -54,13 +61,15 @@ export class BattleScene extends Phaser.Scene {
   private hpDisplay = new Map<string, number>();
   private mpDisplay = new Map<string, number>();
   private cursor!: Phaser.GameObjects.Text;
+  private targetFrame!: Phaser.GameObjects.Ellipse;
   private menuText: Phaser.GameObjects.Text[] = [];
+  private menuBacks: Phaser.GameObjects.Rectangle[] = [];
   private logText!: Phaser.GameObjects.Text;
-  private statusText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
   private enemyHpBars = new Map<string, BarSet>();
   private partyXpBars = new Map<string, BarSet>();
   private partyHpBars = new Map<string, BarSet>();
+  private partyStatusRows = new Map<string, PartyStatusRow>();
   private log: string[] = [];
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
@@ -87,7 +96,9 @@ export class BattleScene extends Phaser.Scene {
     this.enemyHpBars.clear();
     this.partyXpBars.clear();
     this.partyHpBars.clear();
+    this.partyStatusRows.clear();
     this.menuText = [];
+    this.menuBacks = [];
     this.log = [];
     this.unsubs = [];
     this.touchCleanups = [];
@@ -107,6 +118,10 @@ export class BattleScene extends Phaser.Scene {
     this.buildSprites();
     this.buildPanels();
     this.cursor = this.add.text(0, 0, '>', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c' })).setDepth(20).setVisible(false);
+    this.targetFrame = this.add.ellipse(0, 0, 56, 56)
+      .setStrokeStyle(2, 0xf0d36c, 0.95)
+      .setDepth(19)
+      .setVisible(false);
 
     this.bindKeys();
     this.syncDisplay();
@@ -180,7 +195,7 @@ export class BattleScene extends Phaser.Scene {
     this.panel(statusX - 6, panelY, 202, 114);
     this.promptText = this.add.text(10, panelY + 7, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#a58cff' })).setDepth(15);
     this.logText = this.add.text(10, panelY + 26, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#dfe4f5', lineSpacing: 5, wordWrap: { width: GAME.width - 226 } })).setDepth(15);
-    this.statusText = this.add.text(statusX, panelY + 8, '', sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', lineSpacing: 13 })).setDepth(15);
+    this.add.text(statusX, panelY + 7, 'PARTY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c' })).setDepth(15);
     this.buildPartyBars();
   }
 
@@ -194,24 +209,36 @@ export class BattleScene extends Phaser.Scene {
       const img = this.sprites.get(e.id);
       if (!img) continue;
       const width = e.isBoss ? 86 : 62;
-      const y = img.y + img.displayHeight / 2 + 7;
-      const bg = this.add.rectangle(img.x, y, width, 5, 0x07060e, 0.88).setDepth(7).setStrokeStyle(1, 0x0c0e16);
-      const fill = this.add.rectangle(img.x - width / 2 + 1, y, width - 2, 3, e.isBoss ? 0xff5a6a : 0x6cf0a0, 0.96).setOrigin(0, 0.5).setDepth(8);
-      const label = this.add.text(img.x, y + 7, e.name, sharpText({ fontFamily: FONT, fontSize: e.isBoss ? '8px' : '7px', color: '#dfe4f5', strokeThickness: 2 })).setOrigin(0.5, 0).setDepth(8);
+      const bg = this.add.rectangle(0, 0, width, 5, 0x07060e, 0.88).setDepth(7).setStrokeStyle(1, 0x0c0e16);
+      const fill = this.add.rectangle(0, 0, width - 2, 3, e.isBoss ? 0xff5a6a : 0x6cf0a0, 0.96).setOrigin(0, 0.5).setDepth(8);
+      const label = this.add.text(0, 0, e.name, sharpText({ fontFamily: FONT, fontSize: e.isBoss ? '8px' : '7px', color: '#dfe4f5', strokeThickness: 2 })).setOrigin(0.5, 1).setDepth(8);
       this.enemyHpBars.set(e.id, { bg, fill, label });
+      this.layoutEnemyBar(e.id);
     }
   }
 
   private buildPartyBars() {
     this.battle.party.forEach((c, i) => {
       const statusX = GAME.width - 196;
-      const y = GAME.height - 95 + i * 24;
-      const hpBg = this.add.rectangle(statusX, y, 88, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
-      const hpFill = this.add.rectangle(statusX + 1, y, 86, 3, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
+      const rowTop = GAME.height - 99 + i * 30;
+      const barY = rowTop + 22;
+
+      const rowBg = this.add.rectangle(statusX - 1, rowTop, 188, 27, i % 2 === 0 ? 0x11172b : 0x0f1427, 0.7)
+        .setOrigin(0, 0)
+        .setDepth(14);
+      rowBg.setStrokeStyle(1, 0x2f3658, 0.45);
+
+      const name = this.add.text(statusX + 5, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 3 })).setDepth(16);
+      const hpText = this.add.text(statusX + 58, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0a0', strokeThickness: 3 })).setDepth(16);
+      const mpText = this.add.text(statusX + 126, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 3 })).setDepth(16);
+      this.partyStatusRows.set(c.id, { bg: rowBg, name, hp: hpText, mp: mpText });
+
+      const hpBg = this.add.rectangle(statusX + 58, barY, 64, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
+      const hpFill = this.add.rectangle(statusX + 59, barY, 62, 3, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
       this.partyHpBars.set(c.id, { bg: hpBg, fill: hpFill });
 
-      const xpBg = this.add.rectangle(statusX + 94, y, 68, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
-      const xpFill = this.add.rectangle(statusX + 95, y, 66, 3, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
+      const xpBg = this.add.rectangle(statusX + 126, barY, 50, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
+      const xpFill = this.add.rectangle(statusX + 127, barY, 48, 3, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
       this.partyXpBars.set(c.id, { bg: xpBg, fill: xpFill });
     });
   }
@@ -232,7 +259,8 @@ export class BattleScene extends Phaser.Scene {
     this.menuIndex = 0;
     const m = this.order[this.pos];
     const hasSpells = m.spells.some((s) => SPELLS[s]);
-    const itemsAvail = Object.values(getRun().inventory).some((n) => n > 0);
+    const itemsAvail = Object.entries(getRun().inventory)
+      .some(([id, n]) => n > 0 && ITEMS[id]?.target === 'ally');
     this.options = [
       { label: 'Attack', action: 'attack', enabled: true },
       { label: 'Magic', action: 'magic', enabled: hasSpells },
@@ -249,17 +277,23 @@ export class BattleScene extends Phaser.Scene {
     this.logText.setVisible(false);
     this.clearMenuText();
     this.options.forEach((o, i) => {
+      const bg = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, i === this.menuIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
+        .setOrigin(0, 0)
+        .setDepth(15);
+      bg.setStrokeStyle(1, i === this.menuIndex ? 0xf0d36c : 0x2f3658, o.enabled ? 0.95 : 0.45);
+      this.menuBacks.push(bg);
       const color = !o.enabled ? '#5a6080' : i === this.menuIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.menuIndex ? '▶ ' : '  ';
-      const t = this.add.text(12, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      const t = this.add.text(16, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
     this.cursor.setVisible(false);
+    this.targetFrame.setVisible(false);
     this.markActiveMember();
 
     if (isTouchDevice()) {
       this.options.forEach((_o, i) => {
-        const zone = this.add.rectangle(4, GAME.height - 114 + i * 18, GAME.width - 212, 18, 0xffffff, 0)
+        const zone = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.options[i].enabled) return;
@@ -276,15 +310,21 @@ export class BattleScene extends Phaser.Scene {
     this.logText.setVisible(false);
     this.clearMenuText();
     this.subItems.forEach((o, i) => {
+      const bg = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, i === this.subIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
+        .setOrigin(0, 0)
+        .setDepth(15);
+      bg.setStrokeStyle(1, i === this.subIndex ? 0xf0d36c : 0x2f3658, o.enabled ? 0.95 : 0.45);
+      this.menuBacks.push(bg);
       const color = !o.enabled ? '#5a6080' : i === this.subIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.subIndex ? '▶ ' : '  ';
-      const t = this.add.text(12, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      const t = this.add.text(16, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
+    this.targetFrame.setVisible(false);
 
     if (isTouchDevice()) {
       this.subItems.forEach((_o, i) => {
-        const zone = this.add.rectangle(4, GAME.height - 114 + i * 18, GAME.width - 212, 18, 0xffffff, 0)
+        const zone = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.subItems[i].enabled) return;
@@ -299,8 +339,11 @@ export class BattleScene extends Phaser.Scene {
   private clearMenuText() {
     this.menuText.forEach((t) => t.destroy());
     this.menuText = [];
+    this.menuBacks.forEach((r) => r.destroy());
+    this.menuBacks = [];
     for (const fn of this.touchCleanups) fn();
     this.touchCleanups = [];
+    this.clearSpriteTouchTargets();
   }
 
   private markActiveMember() {
@@ -327,7 +370,7 @@ export class BattleScene extends Phaser.Scene {
       this.scene.launch('GameMenu', { caller: this.scene.key });
     }));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
-    attachTouchControls(this, 'top');
+    attachTouchControls(this, 'top', 'battle');
   }
 
   private nav(dir: number) {
@@ -411,6 +454,10 @@ export class BattleScene extends Phaser.Scene {
       const ok = m.stats.mp >= s.cost;
       return { id, label: `${s.name}  ${s.cost}MP`, enabled: ok };
     });
+    if (this.subItems.length === 0) {
+      this.openMenu();
+      return;
+    }
     this.pending = { kind: 'spell' };
     this.renderSubmenu(`${m.name} - magic`);
   }
@@ -423,6 +470,10 @@ export class BattleScene extends Phaser.Scene {
       .filter(([, n]) => n > 0)
       .filter(([id]) => ITEMS[id]?.target === 'ally')
       .map(([id, n]) => ({ id, label: `${ITEMS[id]?.name ?? id}  x${n}`, enabled: true }));
+    if (this.subItems.length === 0) {
+      this.openMenu();
+      return;
+    }
     this.pending = { kind: 'item' };
     this.renderSubmenu(`${this.order[this.pos].name} - item`);
   }
@@ -442,10 +493,14 @@ export class BattleScene extends Phaser.Scene {
 
   private beginTargeting(side: 'party' | 'enemy', state: 'target' | 'subtarget') {
     this.targets = this.battle.living(side);
+    if (this.targets.length === 0) {
+      this.openMenu();
+      return;
+    }
     this.targetIndex = 0;
     this.ui = state;
     this.clearMenuText();
-    this.promptText.setText('Choose target  < >');
+    this.promptText.setText(isTouchDevice() ? 'Choose target - tap or use < >' : 'Choose target  < >');
     this.pointCursorAtTarget();
 
     if (isTouchDevice()) {
@@ -463,7 +518,13 @@ export class BattleScene extends Phaser.Scene {
   private pointCursorAtTarget() {
     const t = this.targets[this.targetIndex];
     const img = this.sprites.get(t.id);
-    if (img) this.cursor.setPosition(img.x - img.displayWidth / 2 - 8, img.y - 4).setVisible(true);
+    if (img) {
+      this.cursor.setPosition(img.x - img.displayWidth / 2 - 8, img.y - 4).setVisible(true);
+      this.targetFrame
+        .setPosition(img.x, img.y)
+        .setSize(img.displayWidth + 16, img.displayHeight + 16)
+        .setVisible(true);
+    }
   }
 
   private confirmTarget() {
@@ -496,6 +557,7 @@ export class BattleScene extends Phaser.Scene {
     this.ui = 'busy';
     this.returnAllHeroesHome();
     this.cursor.setVisible(false);
+    this.targetFrame.setVisible(false);
     this.clearMenuText();
     this.promptText.setText('');
     this.logText.setVisible(true);
@@ -869,15 +931,38 @@ export class BattleScene extends Phaser.Scene {
     this.refreshStatus();
   }
 
+  private clearSpriteTouchTargets() {
+    for (const img of this.sprites.values()) {
+      img.removeInteractive();
+    }
+  }
+
+  private layoutEnemyBar(id: string) {
+    const img = this.sprites.get(id);
+    const bar = this.enemyHpBars.get(id);
+    if (!img || !bar) return;
+
+    const y = img.y - img.displayHeight / 2 - 10;
+    const left = img.x - bar.bg.width / 2 + 1;
+
+    bar.bg.setPosition(img.x, y);
+    bar.fill.setPosition(left, y);
+    bar.label?.setPosition(img.x, y - 4);
+  }
+
   private refreshStatus() {
-    const lines = this.battle.party.map((c) => {
+    for (const c of this.battle.party) {
       const hp = Math.round(this.hpDisplay.get(c.id) ?? c.stats.hp);
       const mp = Math.round(this.mpDisplay.get(c.id) ?? c.stats.mp);
-      const dead = hp <= 0 ? ' KO' : '';
-      const mpStr = c.stats.maxMp > 0 ? `  MP ${mp}/${c.stats.maxMp}` : '';
-      return `${c.name} Lv${c.level ?? 1}${dead}  HP ${hp}/${c.stats.maxHp}${mpStr}`;
-    });
-    this.statusText.setText(lines.join('\n'));
+      const row = this.partyStatusRows.get(c.id);
+      if (!row) continue;
+      const dead = hp <= 0;
+      row.name.setText(`${c.name} L${c.level ?? 1}`).setColor(dead ? '#ff5a6a' : '#dfe4f5');
+      row.hp.setText(dead ? `KO ${hp}/${c.stats.maxHp}` : `HP ${hp}/${c.stats.maxHp}`);
+      row.hp.setColor(dead ? '#ff5a6a' : '#6cf0a0');
+      row.mp.setText(c.stats.maxMp > 0 ? `MP ${mp}/${c.stats.maxMp}` : '');
+      row.bg.setAlpha(dead ? 0.38 : 0.7);
+    }
     this.refreshPartyBars();
     this.refreshEnemyBars();
   }
@@ -886,6 +971,7 @@ export class BattleScene extends Phaser.Scene {
     for (const e of this.battle.enemies) {
       const bar = this.enemyHpBars.get(e.id);
       if (!bar) continue;
+      this.layoutEnemyBar(e.id);
       const hp = Math.round(this.hpDisplay.get(e.id) ?? e.stats.hp);
       const pct = Phaser.Math.Clamp(hp / e.stats.maxHp, 0, 1);
       bar.fill.setScale(pct, 1);

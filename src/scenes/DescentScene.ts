@@ -10,6 +10,7 @@ import { markSeen } from '../game/dialogue';
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
+const RANDOM_BATTLE_MIN_STEPS = 6;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 /**
@@ -29,6 +30,7 @@ export class DescentScene extends Phaser.Scene {
   private busy = false;
   private moveLockedUntil = 0;
   private pendingEncounterKey: string | null = null;
+  private randomBattleSteps = 0;
   private unsubs: (() => void)[] = [];
   private hintText?: Phaser.GameObjects.Text;
 
@@ -43,6 +45,7 @@ export class DescentScene extends Phaser.Scene {
     this.unsubs = [];
     this.tileImages.clear();
     this.pendingEncounterKey = null;
+    this.randomBattleSteps = 0;
     this.hintText = undefined;
 
     const area = getArea(getRun().depth);
@@ -66,6 +69,7 @@ export class DescentScene extends Phaser.Scene {
       this.busy = false;
       music.play('explore');
       this.moveLockedUntil = this.time.now + 220;
+      this.randomBattleSteps = 0;
       if (data?.won && this.pendingEncounterKey) {
         const key = this.pendingEncounterKey;
         setFlag(`enc_${getRun().depth}_${key}`);
@@ -268,7 +272,10 @@ export class DescentScene extends Phaser.Scene {
     }
     if (ch === 'S' && !hasFlag(`story_${depth}_${tileKey}`)) {
       this.triggerStory(tileKey);
+      return;
     }
+
+    this.maybeTriggerRandomEncounter(ch);
   }
 
   private triggerEncounter(tileKey: string, isBoss: boolean) {
@@ -276,6 +283,25 @@ export class DescentScene extends Phaser.Scene {
     const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : 'wolves');
     this.busy = true;
     this.pendingEncounterKey = tileKey;
+    this.scene.pause();
+    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group) });
+  }
+
+  private maybeTriggerRandomEncounter(tile: string) {
+    if (tile !== '.' && tile !== 'P') return;
+    this.randomBattleSteps++;
+    if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
+
+    const depth = getRun().depth;
+    const chance = Math.min(0.16, 0.065 + depth * 0.008);
+    if (Math.random() >= chance) return;
+
+    const area = getArea(depth);
+    const groups = Array.from(new Set(Object.values(area.encounters).filter((group) => group !== 'boss')));
+    const group = groups.length > 0 ? Phaser.Utils.Array.GetRandom(groups) : 'wolves';
+    this.busy = true;
+    this.pendingEncounterKey = null;
+    this.randomBattleSteps = 0;
     this.scene.pause();
     this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group) });
   }

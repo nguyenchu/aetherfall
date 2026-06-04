@@ -48,6 +48,7 @@ export class DialogueScene extends Phaser.Scene {
     this.index = 0;
     this.typing = false;
     this.typeEvent = undefined;
+    this.unsubs = [];
 
     // Dimmed backdrop over the scene below.
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg, 0.82).setOrigin(0, 0).setDepth(0);
@@ -81,7 +82,10 @@ export class DialogueScene extends Phaser.Scene {
     this.unsubs.push(input.on('confirm', advance));
     this.unsubs.push(input.on('cancel', advance));
     this.input.on('pointerdown', advance);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.unsubs.forEach((u) => u());
+      this.input.off('pointerdown', advance);
+    });
 
     this.add.text(GAME.width - 6, 6, 'Z / tap >', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8' })).setOrigin(1, 0).setDepth(3);
 

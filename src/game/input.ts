@@ -33,6 +33,10 @@ class InputBus {
     this.held[b] = false;
   }
 
+  releaseAll(): void {
+    for (const b of ALL) this.held[b] = false;
+  }
+
   isDown(b: Btn): boolean {
     return this.held[b];
   }
@@ -120,27 +124,53 @@ export function isTouchDevice(): boolean {
  * Adds a translucent d-pad on the left and A/B buttons on the right.
  * The buttons feed the same input bus. Called by scenes that need controls.
  */
-export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top' = 'bottom'): void {
+type TouchLayout = 'move' | 'battle' | 'menu' | 'side';
+
+export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top' = 'bottom', layout: TouchLayout = 'move'): void {
   if (!isTouchDevice()) return;
 
-  const mk = (x: number, y: number, label: string, b: Btn, r = 13) => {
-    const c = scene.add.circle(x, y, r, 0x1b2138, 0.45).setStrokeStyle(1, 0x6cf0c2, 0.55).setDepth(900).setScrollFactor(0).setInteractive({ useHandCursor: false });
-    scene.add.text(x, y, label, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#c9cee8' })).setOrigin(0.5).setDepth(901).setScrollFactor(0).setAlpha(0.8);
-    c.on('pointerdown', () => input.press(b));
-    c.on('pointerup', () => input.release(b));
-    c.on('pointerout', () => input.release(b));
+  const bind = (target: Phaser.GameObjects.Shape, b: Btn) => {
+    target.on('pointerdown', () => input.press(b));
+    target.on('pointerup', () => input.release(b));
+    target.on('pointerout', () => input.release(b));
+  };
+
+  const mkCircle = (x: number, y: number, label: string, b: Btn, r = 16) => {
+    const c = scene.add.circle(x, y, r, 0x141a30, 0.72).setStrokeStyle(2, 0x6cf0c2, 0.72).setDepth(900).setScrollFactor(0).setInteractive({ useHandCursor: false });
+    scene.add.text(x, y, label, sharpText({ fontFamily: FONT, fontSize: r > 16 ? '9px' : '10px', color: '#eef2ff', strokeThickness: 3 })).setOrigin(0.5).setDepth(901).setScrollFactor(0).setAlpha(0.95);
+    bind(c, b);
     return c;
   };
 
-  // In battle, the bottom is full of panels, so controls sit near the top.
+  const mkPill = (x: number, y: number, w: number, label: string, b: Btn) => {
+    const r = scene.add.rectangle(x, y, w, 24, 0x141a30, 0.78).setStrokeStyle(2, 0x6cf0c2, 0.72).setDepth(900).setScrollFactor(0).setInteractive({ useHandCursor: false });
+    scene.add.text(x, y, label, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#eef2ff', strokeThickness: 3 })).setOrigin(0.5).setDepth(901).setScrollFactor(0).setAlpha(0.95);
+    bind(r, b);
+    return r;
+  };
+
   const cy = anchor === 'top' ? 46 : 224;
   const cx = 40;
-  mk(cx, cy - 20, '^', 'up');
-  mk(cx, cy + 20, 'v', 'down');
-  mk(cx - 20, cy, '<', 'left');
-  mk(cx + 20, cy, '>', 'right');
 
-  mk(440, cy - 6, 'A', 'confirm', 15);
-  mk(414, cy + 14, 'B', 'cancel', 13);
-  mk(460, cy + 18, '≡', 'menu', 11);
+  if (layout === 'move') {
+    mkCircle(cx, cy - 24, '^', 'up');
+    mkCircle(cx, cy + 24, 'v', 'down');
+    mkCircle(cx - 24, cy, '<', 'left');
+    mkCircle(cx + 24, cy, '>', 'right');
+  } else if (layout === 'menu') {
+    mkCircle(cx, cy - 24, '^', 'up');
+    mkCircle(cx, cy + 24, 'v', 'down');
+    mkCircle(cx - 24, cy, '<', 'left');
+    mkCircle(cx + 24, cy, '>', 'right');
+  } else if (layout === 'battle') {
+    mkPill(cx - 16, cy, 58, 'Prev', 'left');
+    mkPill(cx + 54, cy, 58, 'Next', 'right');
+  } else if (layout === 'side') {
+    mkCircle(cx - 24, cy, '<', 'left');
+    mkCircle(cx + 24, cy, '>', 'right');
+  }
+
+  mkPill(442, cy - 8, 48, 'OK', 'confirm');
+  mkPill(402, cy + 20, 58, 'Back', 'cancel');
+  mkPill(474, cy + 20, 58, 'Menu', 'menu');
 }
