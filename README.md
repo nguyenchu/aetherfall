@@ -27,6 +27,15 @@ to reach the bottom and restore Aether.
 - **Capacitor** for later iOS/Android builds with rewarded ads and IAP
 - Optional backend later: own server + Postgres for saves and leaderboards
 
+## Highlights
+
+- **Scene-based engine architecture** — Phaser 3 scenes for intro, hub and battle,
+  with separate modules for `game` logic, `ui`, `audio` and `art`.
+- **One codebase, three targets** — the same TypeScript/Vite build ships to the
+  web and wraps into native iOS/Android via Capacitor.
+- **Handmade + procedural** — authored strata and story framing a procedurally
+  generated descent (the "Hades model").
+
 ## Run Locally
 
 ```bash
