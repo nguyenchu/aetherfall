@@ -1,17 +1,21 @@
 // XP and leveling. Kept pure with no Phaser. Levels are stored in save data;
 // current-level XP lives on the combatant at runtime.
 
+import { SPELLS } from './content';
 import type { BattleEvent, Combatant, Stats } from './types';
 
 /** XP required to go from `level` to `level + 1`. */
 export function xpForLevel(level: number): number {
-  return 12 + level * level * 5;
+  return 10 + level * level * 4;
 }
 
 const GROWABLE: (keyof Stats)[] = ['maxHp', 'maxMp', 'str', 'agi', 'vit', 'int'];
 
-/** Raises one combatant by one level, applies growth, and refills HP/MP. */
-export function levelUp(c: Combatant): void {
+/**
+ * Raises one combatant by one level, applies growth, refills HP/MP, and
+ * teaches any spells in the learnset. Returns the newly learned spell ids.
+ */
+export function levelUp(c: Combatant): string[] {
   const g = c.growth ?? {};
   for (const key of GROWABLE) {
     const inc = g[key] ?? 0;
@@ -20,6 +24,11 @@ export function levelUp(c: Combatant): void {
   c.level = (c.level ?? 1) + 1;
   c.stats.hp = c.stats.maxHp;
   c.stats.mp = c.stats.maxMp;
+  const learned = c.learnset?.[c.level] ?? [];
+  for (const id of learned) {
+    if (!c.spells.includes(id)) c.spells.push(id);
+  }
+  return learned;
 }
 
 /** Brings a fresh combatant up to a saved level without combat. */
@@ -38,8 +47,12 @@ export function grantXp(party: Combatant[], amount: number): BattleEvent[] {
     c.xp = (c.xp ?? 0) + amount;
     while (c.xp >= xpForLevel(c.level ?? 1)) {
       c.xp -= xpForLevel(c.level ?? 1);
-      levelUp(c);
+      const learned = levelUp(c);
       events.push({ kind: 'info', text: `${c.name} reached level ${c.level}!` });
+      for (const id of learned) {
+        const spell = SPELLS[id];
+        if (spell) events.push({ kind: 'info', text: `${c.name} learned ${spell.name}!` });
+      }
     }
   }
   return events;

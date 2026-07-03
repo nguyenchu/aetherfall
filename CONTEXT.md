@@ -1,6 +1,39 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-06-02.
+> Paste this into a new session to continue the work. Last updated: 2026-07-03.
+
+## 2026-07-03: Gameplay Overhaul — "Make It Fun"
+
+The core loop was redesigned around meaningful decisions:
+
+- **Weakness & break** (`battle.ts`, `chapters.ts`): every enemy has elemental
+  weaknesses (phys/fire/ice/holy) and guard pips. Weakness hits chip a pip;
+  at zero the enemy is **BROKEN** — loses its actions and takes +50% damage
+  until the end of the next round. Weaknesses and pips are always visible in
+  battle. Breaking a boss during its phase telegraph cancels the phase.
+- **Enemy intents** (`battle.ts` `prepareRound()`): enemies telegraph their
+  next action (⚔ target / ✦ spell / ✚ heal / !! phase) during the input
+  phase, and the round's initiative order is shown as chips at the top.
+- **Boons** (`boons.ts`, `BoonScene.ts`): after every non-boss victory the
+  player picks 1 of 3 run-scoped blessings (16 total: element boosts,
+  lifesteal, crit, thorns, MP regen, revive...). Elites weight the roll
+  toward rare/epic. Boons reset when returning to Sanctuary — this is the
+  roguelite build variety.
+- **Stakes**: a party wipe now scatters half the carried gold.
+- **Skills**: Kael has an MP ("stamina") pool with Crush (guard chipper) and
+  Cleave (AoE) via level-up learnsets; Lyra learns Emberstorm/Blizzard (AoE),
+  Mira learns Radiance (party heal). See `learnset` in `content.ts`.
+- **Map spice** (`chapters.ts`, `DescentScene.ts`): new tiles — `T` treasure
+  chests (one-time, saved flag), `H` healing springs (once per run, +50%
+  HP/MP), `X` elite guardians blocking treasure corridors. All six maps were
+  redesigned; `scratchpad validate-maps` flood-fill script verified them.
+- **Pacing & juice**: crits (8% base), faster event playback, hold-confirm
+  fast-forward, BREAK stamp, weakness hints while targeting, party HUD +
+  boon list in the descent, defend gives +2 MP.
+- **Fixes**: Title camera was invisible (`setAlpha(0)` never reset); enemy
+  `cure` used to heal the party instead of the caster.
+- `window.__AETHERFALL__` exposes the Phaser game for automated smoke tests
+  (headless Chrome driver used during development).
 
 ## What This Is
 

@@ -5,7 +5,7 @@ import { input } from '../game/input';
 import { sharpText, FONT } from '../ui/text';
 import type { DialogueLine, Script } from '../game/dialogue';
 
-const TYPE_MS = 22; // milliseconds per character in the typewriter effect
+const TYPE_MS = 15; // milliseconds per character in the typewriter effect
 
 interface DialogueData {
   scriptId: string;

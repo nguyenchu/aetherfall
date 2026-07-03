@@ -2,6 +2,8 @@
 // Connects persistent meta-progression (save.ts) with runtime state.
 // Death is not total: the Crystal returns you to town, but level/gold remain.
 
+import { boonTotals, type BoonTotals } from './boons';
+import type { ChestContents } from './chapters';
 import { ITEMS, SPELLS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
@@ -16,6 +18,10 @@ export interface RunState {
   inventory: Record<string, number>;
   depth: number;
   modifier: RunModifier;
+  /** Boon ids picked this run; cleared when returning to Sanctuary. */
+  boons: string[];
+  /** Healing springs used this run ('depth_col,row'); reset in town. */
+  springsUsed: string[];
 }
 
 const HP_PER_BLESSING = 8;
@@ -35,7 +41,10 @@ function buildRun(): RunState {
     }
     applyEquipment(c);
   }
-  return { party, gold: save.gold, inventory: { ...save.items }, depth: 1, modifier: rollModifier() };
+  return {
+    party, gold: save.gold, inventory: { ...save.items }, depth: 1,
+    modifier: rollModifier(), boons: [], springsUsed: [],
+  };
 }
 
 export function getRun(): RunState {
@@ -54,6 +63,65 @@ export function saveProgress(): void {
   for (const c of state.party) save.levels[c.id] = c.level ?? 1;
   if (state.depth > save.deepest) save.deepest = state.depth;
   writeSave(save);
+}
+
+// --- Boons (run-scoped blessings) --------------------------------------------
+
+export function addBoon(id: string): void {
+  if (!state.boons.includes(id)) state.boons.push(id);
+}
+
+/** Aggregated boon effects for the current run. */
+export function runBoons(): BoonTotals {
+  return boonTotals(state.boons);
+}
+
+// --- Descent Interactables ----------------------------------------------------
+
+/** Opens a chest: applies contents and returns display lines. */
+export function openChest(contents: ChestContents): string[] {
+  const lines: string[] = [];
+  if (contents.gold) {
+    state.gold += contents.gold;
+    lines.push(`+${contents.gold} gold`);
+  }
+  for (const [id, count] of Object.entries(contents.items ?? {})) {
+    addItem(id, count);
+    lines.push(`${ITEMS[id]?.name ?? id} x${count}`);
+  }
+  if (contents.equipment) {
+    if (grantEquipment(contents.equipment)) {
+      lines.push(`${EQUIPMENT[contents.equipment].name}!`);
+    } else {
+      state.gold += 30; // already owned: convert to gold
+      lines.push('+30 gold');
+    }
+  }
+  saveProgress();
+  return lines;
+}
+
+/** Uses a healing spring once per run: restores 50% max HP/MP to everyone. */
+export function useSpring(key: string): boolean {
+  if (state.springsUsed.includes(key)) return false;
+  state.springsUsed.push(key);
+  for (const c of state.party) {
+    c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.round(c.stats.maxHp * 0.5));
+    c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + Math.round(c.stats.maxMp * 0.5));
+  }
+  return true;
+}
+
+export function springUsed(key: string): boolean {
+  return state.springsUsed.includes(key);
+}
+
+/** Party wipe stake: half the carried gold scatters. Returns the loss. */
+export function applyWipePenalty(): number {
+  const lost = Math.floor(state.gold / 2);
+  state.gold -= lost;
+  saveProgress();
+  return lost;
 }
 
 // --- Story Flags ------------------------------------------------------------
@@ -201,18 +269,18 @@ export function castSpellOutOfBattle(casterId: string, spellId: string, targetId
   return true;
 }
 
-export function grantBattleLoot(depth: number, boss: boolean): string[] {
+export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
   const drops: string[] = [];
-  const pearlChance = boss ? 1 : 0.45 + depth * 0.05;
+  const pearlChance = boss || elite ? 1 : 0.45 + depth * 0.05;
   if (Math.random() < pearlChance) {
-    addItem(boss ? 'warden_sigils' : 'tide_pearl', boss ? 2 : 1);
-    drops.push(boss ? 'Warden Sigils x2' : 'Tide Pearl x1');
+    addItem(boss ? 'warden_sigils' : 'tide_pearl', boss || elite ? 2 : 1);
+    drops.push(boss ? 'Warden Sigils x2' : elite ? 'Tide Pearl x2' : 'Tide Pearl x1');
   }
-  if (!boss && Math.random() < 0.16) {
+  if (!boss && Math.random() < (elite ? 0.6 : 0.16)) {
     addItem('tonic', 1);
     drops.push('Aether Tonic x1');
   }
-  const gear = !boss && Math.random() < 0.12 ? 'tide_ring' : undefined;
+  const gear = !boss && Math.random() < (elite ? 0.35 : 0.12) ? 'tide_ring' : undefined;
   if (gear && grantEquipment(gear)) drops.push(`${EQUIPMENT[gear].name} x1`);
   saveProgress();
   return drops;
@@ -328,11 +396,13 @@ export function restoreParty(): void {
   }
 }
 
-/** Back to Sanctuary: full healing, reset depth, roll new modifier. */
+/** Back to Sanctuary: full healing, reset depth/boons, roll new modifier. */
 export function returnToTown(): void {
   restoreParty();
   state.depth = 1;
   state.modifier = rollModifier();
+  state.boons = [];
+  state.springsUsed = [];
   modifierApplied = false;
   saveProgress();
 }

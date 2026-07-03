@@ -6,6 +6,7 @@ import { SanctuaryScene } from './scenes/SanctuaryScene';
 import { DescentScene } from './scenes/DescentScene';
 import { SideScrollScene } from './scenes/SideScrollScene';
 import { BattleScene } from './scenes/BattleScene';
+import { BoonScene } from './scenes/BoonScene';
 import { DialogueScene } from './scenes/DialogueScene';
 import { GameMenuScene } from './scenes/GameMenuScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -16,7 +17,7 @@ setRenderScale(2);
 
 bindKeyboard();
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   pixelArt: true,
@@ -34,5 +35,8 @@ new Phaser.Game({
     width: GAME.width * 2,
     height: GAME.height * 2,
   },
-  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, DialogueScene, GameMenuScene],
+  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, BoonScene, DialogueScene, GameMenuScene],
 });
+
+// Exposed for dev tooling and automated smoke tests.
+(window as unknown as { __AETHERFALL__?: Phaser.Game }).__AETHERFALL__ = game;

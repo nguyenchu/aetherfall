@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
+import { BOONS } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { EQUIPMENT, type EquipSlot } from '../game/equipment';
 import { castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentBonusText, equipmentPreviewStats, getRun, ownedEquipment, questList, rewardTextForQuest, useItemOn } from '../game/run';
@@ -141,6 +142,12 @@ export class GameMenuScene extends Phaser.Scene {
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 380 } })));
     box.add(this.add.text(58, 288, this.spellLine(member),
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2, wordWrap: { width: 380 } })));
+
+    const boons = getRun().boons.map((id) => BOONS[id]?.name).filter((n) => n != null);
+    box.add(this.add.text(42, 314, boons.length > 0
+      ? `Run boons: ${boons.join(', ')}`
+      : 'Run boons: none yet — win battles to earn blessings.',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#b8a8f8', strokeThickness: 2, wordWrap: { width: 414 } })));
   }
 
   private renderItems(box: Phaser.GameObjects.Container) {

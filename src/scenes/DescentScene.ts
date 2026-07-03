@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
-import { getRun, applyDescentModifier, returnToTown, saveProgress, hasFlag, setFlag } from '../game/run';
+import { BOONS } from '../game/boons';
+import { getRun, applyDescentModifier, openChest, returnToTown, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
-import { music } from '../audio/music';
+import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { markSeen } from '../game/dialogue';
 
@@ -13,9 +14,17 @@ const STEP_MS = 105;
 const RANDOM_BATTLE_MIN_STEPS = 6;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
+interface PartyHudRow {
+  name: Phaser.GameObjects.Text;
+  hpFill: Phaser.GameObjects.Rectangle;
+  mpFill: Phaser.GameObjects.Rectangle;
+}
+
 /**
  * Fixed dungeon exploration. Each depth maps to a hand-crafted area defined
  * in chapters.ts. Encounters trigger at marked tiles and are cleared once won.
+ * Treasure chests (T), healing springs (H), and elite guardians (X) reward
+ * exploring off the main path.
  */
 export class DescentScene extends Phaser.Scene {
   private map: string[] = [];
@@ -23,6 +32,7 @@ export class DescentScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Image;
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private tileImages = new Map<string, Phaser.GameObjects.Image>();
+  private springImages = new Map<string, Phaser.GameObjects.Image>();
   private walkFrame = 0;
   private facing: Facing = 'down';
   private px = 0;
@@ -33,6 +43,10 @@ export class DescentScene extends Phaser.Scene {
   private randomBattleSteps = 0;
   private unsubs: (() => void)[] = [];
   private hintText?: Phaser.GameObjects.Text;
+  private goldText?: Phaser.GameObjects.Text;
+  private boonTexts: Phaser.GameObjects.Text[] = [];
+  private partyHud: PartyHudRow[] = [];
+  private hudSignature = '';
 
   constructor() {
     super('Descent');
@@ -44,9 +58,14 @@ export class DescentScene extends Phaser.Scene {
     this.busy = false;
     this.unsubs = [];
     this.tileImages.clear();
+    this.springImages.clear();
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
     this.hintText = undefined;
+    this.goldText = undefined;
+    this.boonTexts = [];
+    this.partyHud = [];
+    this.hudSignature = '';
 
     const area = getArea(getRun().depth);
     this.map = area.map;
@@ -54,11 +73,14 @@ export class DescentScene extends Phaser.Scene {
     applyDescentModifier();
     this.currentThemeId = area.theme.id;
     this.buildThemeTiles(area.theme);
+    this.ensureMarkerTextures();
     this.drawAtmosphere(area.theme);
     this.drawMap();
     this.placePortals();
     this.spawnPlayer();
     this.buildHud(area.name, area.theme.accent);
+    this.buildPartyHud();
+    this.refreshBoonHud();
     this.bindInput();
     attachTouchControls(this);
 
@@ -76,6 +98,8 @@ export class DescentScene extends Phaser.Scene {
         this.clearEncounterMarker(key);
         this.pendingEncounterKey = null;
       }
+      this.goldText?.setText(`Gold ${getRun().gold}`);
+      this.refreshBoonHud();
     });
   }
 
@@ -110,6 +134,32 @@ export class DescentScene extends Phaser.Scene {
     mk(`th_floor_${theme.id}`, theme.floor, theme.accent, 0.12);
     mk(`th_floorAlt_${theme.id}`, theme.floorAlt, theme.accent, 0.10);
     mk(`th_wall_${theme.id}`, theme.wall, theme.accent, 0.18);
+  }
+
+  /** One-time textures for chests and springs. */
+  private ensureMarkerTextures() {
+    if (!this.textures.exists('chest')) {
+      const g = this.add.graphics();
+      g.fillStyle(0x6a4520, 1).fillRoundedRect(1, 4, 14, 10, 2);
+      g.fillStyle(0x8a5c2c, 1).fillRoundedRect(1, 4, 14, 5, 2);
+      g.lineStyle(1, 0xf0d36c, 0.95);
+      g.strokeRoundedRect(1, 4, 14, 10, 2);
+      g.lineBetween(1, 9, 15, 9);
+      g.fillStyle(0xf0d36c, 1).fillRect(7, 7, 3, 4);
+      g.generateTexture('chest', 16, 16);
+      this.textures.get('chest').setFilter(Phaser.Textures.FilterMode.NEAREST);
+      g.destroy();
+    }
+    if (!this.textures.exists('spring')) {
+      const g = this.add.graphics();
+      g.fillStyle(0x0e3040, 1).fillCircle(8, 8, 7);
+      g.fillStyle(0x2a8ab8, 0.9).fillCircle(8, 8, 5);
+      g.fillStyle(0x9ae8ff, 0.9).fillCircle(6, 6, 2);
+      g.lineStyle(1, 0x6cd8f0, 0.9).strokeCircle(8, 8, 7);
+      g.generateTexture('spring', 16, 16);
+      this.textures.get('spring').setFilter(Phaser.Textures.FilterMode.NEAREST);
+      g.destroy();
+    }
   }
 
   private drawAtmosphere(theme: AreaTheme) {
@@ -148,7 +198,23 @@ export class DescentScene extends Phaser.Scene {
 
         const tileKey = `${c},${r}`;
         if (ch === 'E' && !hasFlag(`enc_${depth}_${tileKey}`)) {
-          this.addEncounterMarker(c, r, tileKey);
+          this.addEncounterMarker(c, r, tileKey, false);
+        }
+        if (ch === 'X' && !hasFlag(`enc_${depth}_${tileKey}`)) {
+          this.addEncounterMarker(c, r, tileKey, true);
+        }
+        if (ch === 'T' && !hasFlag(`chest_${depth}_${tileKey}`)) {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'chest').setOrigin(0, 0).setDepth(2);
+          this.tileImages.set(tileKey, img);
+        }
+        if (ch === 'H') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'spring').setOrigin(0, 0).setDepth(2);
+          this.springImages.set(tileKey, img);
+          if (springUsed(`${depth}_${tileKey}`)) {
+            img.setAlpha(0.35);
+          } else {
+            this.tweens.add({ targets: img, alpha: { from: 1, to: 0.55 }, duration: 900, yoyo: true, repeat: -1 });
+          }
         }
         if (ch === 'S' && !hasFlag(`story_${depth}_${tileKey}`)) {
           this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
@@ -178,9 +244,15 @@ export class DescentScene extends Phaser.Scene {
     }
   }
 
-  private addEncounterMarker(c: number, r: number, key: string) {
+  private addEncounterMarker(c: number, r: number, key: string, elite: boolean) {
     const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
-      .setOrigin(0, 0).setTint(0xff4444).setAlpha(0.7).setDepth(2);
+      .setOrigin(0, 0).setTint(elite ? 0xff8800 : 0xff4444).setAlpha(elite ? 0.95 : 0.7).setDepth(2);
+    if (elite) {
+      this.tweens.add({ targets: img, alpha: { from: 0.95, to: 0.5 }, duration: 650, yoyo: true, repeat: -1 });
+      this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile - 2, '!!', sharpText({
+        fontFamily: FONT, fontSize: '9px', color: '#ffa03c', strokeThickness: 3,
+      })).setOrigin(0.5, 1).setDepth(3).setName(`elite_label_${key}`);
+    }
     this.tileImages.set(key, img);
   }
 
@@ -189,6 +261,8 @@ export class DescentScene extends Phaser.Scene {
     if (!img) return;
     this.tweens.add({ targets: img, alpha: 0, duration: 300, onComplete: () => img.destroy() });
     this.tileImages.delete(key);
+    const label = this.children.getByName(`elite_label_${key}`);
+    label?.destroy();
   }
 
   private spawnPlayer() {
@@ -211,7 +285,7 @@ export class DescentScene extends Phaser.Scene {
     const run = getRun();
     this.add.text(4, 4, 'AETHERFALL', sharpText({ fontFamily: FONT, fontSize: '12px', color: hex })).setDepth(10);
     this.add.text(4, 18, areaName, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5' })).setDepth(10);
-    this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
+    this.goldText = this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })).setOrigin(1, 0).setDepth(10);
     // Active modifier
     const mod = run.modifier;
@@ -219,6 +293,58 @@ export class DescentScene extends Phaser.Scene {
       this.add.text(GAME.width - 4, 18, `✦ ${mod.name}`,
         sharpText({ fontFamily: FONT, fontSize: '8px', color: mod.color })).setOrigin(1, 0).setDepth(10);
     }
+  }
+
+  /** Boons picked this run, listed under the modifier in the top-right corner. */
+  private refreshBoonHud() {
+    for (const t of this.boonTexts) t.destroy();
+    this.boonTexts = [];
+    const boons = getRun().boons;
+    const maxShown = 5;
+    boons.slice(0, maxShown).forEach((id, i) => {
+      const boon = BOONS[id];
+      if (!boon) return;
+      this.boonTexts.push(this.add.text(GAME.width - 4, 32 + i * 10, `◆ ${boon.name}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#b8a8f8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
+    });
+    if (boons.length > maxShown) {
+      this.boonTexts.push(this.add.text(GAME.width - 4, 32 + maxShown * 10, `+${boons.length - maxShown} more`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
+    }
+  }
+
+  /** Compact party vitals in the bottom-left corner. */
+  private buildPartyHud() {
+    const run = getRun();
+    const top = GAME.height - 14 - run.party.length * 13;
+    this.add.rectangle(2, top - 4, 118, run.party.length * 13 + 8, 0x07060e, 0.62)
+      .setOrigin(0, 0).setDepth(9).setStrokeStyle(1, 0x2f3658, 0.5);
+    run.party.forEach((c, i) => {
+      const y = top + i * 13;
+      const name = this.add.text(6, y, c.name, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(10);
+      this.add.rectangle(44, y + 4, 44, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
+      const hpFill = this.add.rectangle(45, y + 4, 42, 2, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(11);
+      this.add.rectangle(92, y + 4, 24, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
+      const mpFill = this.add.rectangle(93, y + 4, 22, 2, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(11);
+      this.partyHud.push({ name, hpFill, mpFill });
+    });
+    this.updatePartyHud();
+  }
+
+  private updatePartyHud() {
+    const run = getRun();
+    const signature = run.party.map((c) => `${c.stats.hp}/${c.stats.mp}`).join('|');
+    if (signature === this.hudSignature) return;
+    this.hudSignature = signature;
+    run.party.forEach((c, i) => {
+      const row = this.partyHud[i];
+      if (!row) return;
+      const hpPct = Phaser.Math.Clamp(c.stats.hp / c.stats.maxHp, 0, 1);
+      const mpPct = c.stats.maxMp > 0 ? Phaser.Math.Clamp(c.stats.mp / c.stats.maxMp, 0, 1) : 0;
+      row.hpFill.setScale(hpPct, 1);
+      row.hpFill.setFillStyle(hpPct < 0.3 ? 0xff5a6a : 0x6cf0a0, 0.95);
+      row.mpFill.setScale(mpPct, 1);
+    });
   }
 
   private bindInput() {
@@ -231,7 +357,10 @@ export class DescentScene extends Phaser.Scene {
   }
 
   update(time: number) {
-    if (!this.busy) this.updateHint();
+    if (!this.busy) {
+      this.updateHint();
+      this.updatePartyHud();
+    }
     if (this.busy || time < this.moveLockedUntil) return;
     const d = input.dir();
     if (d.x === 0 && d.y === 0) return;
@@ -266,8 +395,16 @@ export class DescentScene extends Phaser.Scene {
     const tileKey = `${this.px},${this.py}`;
     const depth = getRun().depth;
 
-    if ((ch === 'E' || ch === 'B') && !hasFlag(`enc_${depth}_${tileKey}`)) {
-      this.triggerEncounter(tileKey, ch === 'B');
+    if ((ch === 'E' || ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${tileKey}`)) {
+      this.triggerEncounter(tileKey, ch === 'B', ch === 'X');
+      return;
+    }
+    if (ch === 'T' && !hasFlag(`chest_${depth}_${tileKey}`)) {
+      this.openChestAt(tileKey);
+      return;
+    }
+    if (ch === 'H' && !springUsed(`${depth}_${tileKey}`)) {
+      this.useSpringAt(tileKey);
       return;
     }
     if (ch === 'S' && !hasFlag(`story_${depth}_${tileKey}`)) {
@@ -278,13 +415,66 @@ export class DescentScene extends Phaser.Scene {
     this.maybeTriggerRandomEncounter(ch);
   }
 
-  private triggerEncounter(tileKey: string, isBoss: boolean) {
+  private triggerEncounter(tileKey: string, isBoss: boolean, isElite = false) {
     const area = getArea(getRun().depth);
-    const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : 'wolves');
+    const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : isElite ? 'elite' : 'wolves');
     this.busy = true;
     this.pendingEncounterKey = tileKey;
     this.scene.pause();
-    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group) });
+    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group), elite: isElite });
+  }
+
+  private openChestAt(tileKey: string) {
+    const depth = getRun().depth;
+    const area = getArea(depth);
+    const contents = area.chests[tileKey];
+    if (!contents) return;
+    setFlag(`chest_${depth}_${tileKey}`);
+    const lines = openChest(contents);
+    sfx.play('chest');
+    this.goldText?.setText(`Gold ${getRun().gold}`);
+    const img = this.tileImages.get(tileKey);
+    if (img) {
+      this.tweens.add({ targets: img, alpha: 0, y: img.y - 4, duration: 500, delay: 200, onComplete: () => img.destroy() });
+      this.tileImages.delete(tileKey);
+    }
+    lines.forEach((line, i) => this.floatText(line, '#f0d36c', i * 14));
+  }
+
+  private useSpringAt(tileKey: string) {
+    const depth = getRun().depth;
+    if (!useSpring(`${depth}_${tileKey}`)) return;
+    sfx.play('magic');
+    const img = this.springImages.get(tileKey);
+    if (img) {
+      this.tweens.killTweensOf(img);
+      img.setAlpha(0.35);
+    }
+    // Rising sparkles around the player
+    for (let i = 0; i < 6; i++) {
+      const p = this.add.circle(
+        this.player.x + Phaser.Math.Between(-10, 10), this.player.y + 6,
+        Phaser.Math.FloatBetween(0.8, 1.6), 0x9ae8ff, 0.9,
+      ).setDepth(12);
+      this.tweens.add({
+        targets: p, y: p.y - Phaser.Math.Between(14, 26), alpha: 0,
+        duration: Phaser.Math.Between(500, 900), delay: i * 70, onComplete: () => p.destroy(),
+      });
+    }
+    this.floatText('The spring restores you (+50% HP/MP)', '#9ae8ff', 0);
+    this.updatePartyHud();
+  }
+
+  private floatText(text: string, color: string, delayOffset: number) {
+    const t = this.add.text(this.player.x, this.player.y - 14 - delayOffset, text,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color, strokeThickness: 3 }))
+      .setOrigin(0.5, 1).setDepth(30).setAlpha(0);
+    this.tweens.add({
+      targets: t, alpha: 1, y: t.y - 8, duration: 260, delay: delayOffset * 16,
+      onComplete: () => this.tweens.add({
+        targets: t, alpha: 0, y: t.y - 12, delay: 1100, duration: 420, onComplete: () => t.destroy(),
+      }),
+    });
   }
 
   private maybeTriggerRandomEncounter(tile: string) {
@@ -297,7 +487,7 @@ export class DescentScene extends Phaser.Scene {
     if (Math.random() >= chance) return;
 
     const area = getArea(depth);
-    const groups = Array.from(new Set(Object.values(area.encounters).filter((group) => group !== 'boss')));
+    const groups = Array.from(new Set(Object.values(area.encounters).filter((group) => group !== 'boss' && group !== 'elite' && !group.endsWith('_boss'))));
     const group = groups.length > 0 ? Phaser.Utils.Array.GetRandom(groups) : 'wolves';
     this.busy = true;
     this.pendingEncounterKey = null;
@@ -351,8 +541,15 @@ export class DescentScene extends Phaser.Scene {
       if (!ch) continue;
       if (ch === '>') { label = 'Z / tap  ·  descend'; break; }
       if (ch === '<') { label = 'Z / tap  ·  return home'; break; }
-      if ((ch === 'E' || ch === 'B') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
-        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  encounter'; break;
+      if ((ch === 'E' || ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
+        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : ch === 'X' ? 'Z / tap  ·  elite guardian!' : 'Z / tap  ·  encounter';
+        break;
+      }
+      if (ch === 'T' && !hasFlag(`chest_${depth}_${nx},${ny}`)) {
+        label = 'Z / tap  ·  open chest'; break;
+      }
+      if (ch === 'H' && !springUsed(`${depth}_${nx},${ny}`)) {
+        label = 'Z / tap  ·  rest at the spring'; break;
       }
       if (ch === 'S' && !hasFlag(`story_${depth}_${nx},${ny}`)) {
         label = 'Z / tap  ·  examine'; break;

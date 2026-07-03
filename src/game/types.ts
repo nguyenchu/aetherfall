@@ -2,7 +2,7 @@
 // logic can be tested and reused independently from presentation.
 
 export type Side = 'party' | 'enemy';
-export type Element = 'fire' | 'ice' | 'holy' | 'none';
+export type Element = 'phys' | 'fire' | 'ice' | 'holy' | 'none';
 
 export interface Stats {
   maxHp: number;
@@ -22,7 +22,9 @@ export interface Spell {
   kind: 'damage' | 'heal';
   power: number;
   element: Element;
-  target: 'enemy' | 'ally';
+  target: 'enemy' | 'ally' | 'all-enemies' | 'party';
+  guardHit?: number; // extra guard chip even without hitting a weakness
+  desc?: string;
 }
 
 export interface Item {
@@ -49,11 +51,21 @@ export interface Combatant {
   goldReward?: number; // enemies only
   xpReward?: number; // enemies only
   isBoss?: boolean;
+  isElite?: boolean; // tougher guardian fight: better loot + epic boon odds
   phaseTriggered?: boolean; // boss phase 2 already activated
+  // Weakness & break (enemies):
+  weakness?: Element[]; // elements that deal +50% and chip guard
+  maxGuard?: number; // guard pips before breaking
+  guard?: number; // current guard pips
+  broken?: boolean; // staggered: loses its actions, takes +50% damage
+  brokenRound?: number; // battle round the break happened; recovers end of next round
+  // Telegraphed intent for the coming round (enemies):
+  intent?: Command;
   // Progression (party only):
   level?: number;
   xp?: number;
   growth?: Partial<Stats>; // stat increase per level
+  learnset?: Record<number, string[]>; // level -> spell ids learned
   // Runtime battle state:
   defending?: boolean;
 }
@@ -75,7 +87,9 @@ export type EventKind =
   | 'flee-fail'
   | 'ko'
   | 'info'
-  | 'phase';
+  | 'phase'
+  | 'break'
+  | 'recover';
 
 /** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {
@@ -85,6 +99,8 @@ export interface BattleEvent {
   targetId?: string;
   amount?: number; // damage (positive) or healing (negative)
   element?: string; // for spell visual effects
+  crit?: boolean; // critical hit
+  weak?: boolean; // hit a weakness
 }
 
 export type BattlePhase = 'input' | 'resolving' | 'won' | 'lost' | 'fled';

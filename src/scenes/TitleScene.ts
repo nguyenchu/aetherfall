@@ -16,7 +16,6 @@ export class TitleScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
-    this.cameras.main.setAlpha(0);
     this.cameras.main.fadeIn(600, 7, 6, 14);
 
     // Background

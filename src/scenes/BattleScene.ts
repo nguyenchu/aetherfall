@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
+import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
-import { completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
+import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
-import type { BattleEvent, Combatant, Command } from '../game/types';
+import type { BattleEvent, Combatant, Command, Element } from '../game/types';
 
 type UIState = 'menu' | 'target' | 'submenu' | 'subtarget' | 'busy' | 'over';
 
@@ -28,6 +29,14 @@ interface BarSet {
   label?: Phaser.GameObjects.Text;
 }
 
+interface EnemyExtras {
+  weakBadges: Phaser.GameObjects.Text[];
+  pips: Phaser.GameObjects.Rectangle[];
+  intentBg: Phaser.GameObjects.Rectangle;
+  intentText: Phaser.GameObjects.Text;
+  breakLabel: Phaser.GameObjects.Text;
+}
+
 interface PartyStatusRow {
   bg: Phaser.GameObjects.Rectangle;
   name: Phaser.GameObjects.Text;
@@ -35,14 +44,21 @@ interface PartyStatusRow {
   mp: Phaser.GameObjects.Text;
 }
 
+const ELEMENT_LETTER: Record<string, string> = { phys: 'P', fire: 'F', ice: 'I', holy: 'H' };
+const ELEMENT_COLOR: Record<string, string> = {
+  phys: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
+};
+
 /**
  * Battle presentation layer. Drives the Battle engine by collecting commands
  * through menus, then playing the round events with animation.
  * Arrows = navigate, Z/Enter/Space = confirm, X/Backspace = cancel.
+ * Hold Z during playback to fast-forward.
  */
 export class BattleScene extends Phaser.Scene {
   private battle!: Battle;
   private ui: UIState = 'menu';
+  private isElite = false;
 
   // Input
   private order: Combatant[] = []; // living party in command order
@@ -50,7 +66,7 @@ export class BattleScene extends Phaser.Scene {
   private menuIndex = 0;
   private options: MenuOption[] = [];
   private subIndex = 0;
-  private subItems: { id: string; label: string; enabled: boolean }[] = [];
+  private subItems: { id: string; label: string; desc?: string; enabled: boolean }[] = [];
   private pending: PendingAction | null = null;
   private targets: Combatant[] = [];
   private targetIndex = 0;
@@ -67,9 +83,11 @@ export class BattleScene extends Phaser.Scene {
   private logText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
   private enemyHpBars = new Map<string, BarSet>();
+  private enemyExtras = new Map<string, EnemyExtras>();
   private partyXpBars = new Map<string, BarSet>();
   private partyHpBars = new Map<string, BarSet>();
   private partyStatusRows = new Map<string, PartyStatusRow>();
+  private turnChips: Phaser.GameObjects.GameObject[] = [];
   private log: string[] = [];
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
@@ -80,6 +98,7 @@ export class BattleScene extends Phaser.Scene {
 
   private resetState() {
     this.ui = 'menu';
+    this.isElite = false;
     this.order = [];
     this.pos = 0;
     this.menuIndex = 0;
@@ -94,9 +113,11 @@ export class BattleScene extends Phaser.Scene {
     this.hpDisplay.clear();
     this.mpDisplay.clear();
     this.enemyHpBars.clear();
+    this.enemyExtras.clear();
     this.partyXpBars.clear();
     this.partyHpBars.clear();
     this.partyStatusRows.clear();
+    this.turnChips = [];
     this.menuText = [];
     this.menuBacks = [];
     this.log = [];
@@ -110,8 +131,9 @@ export class BattleScene extends Phaser.Scene {
     this.resetState();
 
     const run = getRun();
-    const enemies = (this.scene.settings.data as { enemies: Combatant[] }).enemies;
-    this.battle = new Battle(run.party, enemies, run.inventory);
+    const data = this.scene.settings.data as { enemies: Combatant[]; elite?: boolean };
+    this.isElite = data.elite === true || data.enemies.some((e) => e.isElite);
+    this.battle = new Battle(run.party, data.enemies, run.inventory);
 
     this.buildBackground();
 
@@ -126,7 +148,7 @@ export class BattleScene extends Phaser.Scene {
     this.bindKeys();
     this.syncDisplay();
     music.play('battle');
-    this.pushLog('Enemies appear!');
+    this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
     this.startCommandPhase();
   }
 
@@ -176,6 +198,11 @@ export class BattleScene extends Phaser.Scene {
       const img = this.add.image(x, startY + i * spacing, c.spriteKey).setScale(2.4).setDepth(5);
       this.sprites.set(c.id, img);
       this.spriteHome.set(c.id, { x: img.x, y: img.y });
+      if (c.isElite) {
+        const ring = this.add.ellipse(img.x, img.y + img.displayHeight / 2 + 3, img.displayWidth + 18, 12)
+          .setStrokeStyle(2, 0xffa03c, 0.8).setDepth(4);
+        this.tweens.add({ targets: ring, alpha: { from: 0.85, to: 0.3 }, duration: 700, yoyo: true, repeat: -1 });
+      }
       // Idle float — enemies and party members bob at slightly different speeds
       const dur = c.side === 'enemy' ? 1600 + i * 220 : 2000 + i * 180;
       this.tweens.add({
@@ -211,8 +238,26 @@ export class BattleScene extends Phaser.Scene {
       const width = e.isBoss ? 86 : 62;
       const bg = this.add.rectangle(0, 0, width, 5, 0x07060e, 0.88).setDepth(7).setStrokeStyle(1, 0x0c0e16);
       const fill = this.add.rectangle(0, 0, width - 2, 3, e.isBoss ? 0xff5a6a : 0x6cf0a0, 0.96).setOrigin(0, 0.5).setDepth(8);
-      const label = this.add.text(0, 0, e.name, sharpText({ fontFamily: FONT, fontSize: e.isBoss ? '8px' : '7px', color: '#dfe4f5', strokeThickness: 2 })).setOrigin(0.5, 1).setDepth(8);
+      const label = this.add.text(0, 0, e.name, sharpText({ fontFamily: FONT, fontSize: e.isBoss ? '8px' : '7px', color: e.isElite ? '#ffcf6a' : '#dfe4f5', strokeThickness: 2 })).setOrigin(0.5, 1).setDepth(8);
       this.enemyHpBars.set(e.id, { bg, fill, label });
+
+      // Weakness badges to the right of the HP bar.
+      const weakBadges = (e.weakness ?? []).map((el, i) =>
+        this.add.text(0, 0, ELEMENT_LETTER[el] ?? '?', sharpText({
+          fontFamily: FONT, fontSize: '8px', color: ELEMENT_COLOR[el] ?? '#dfe4f5', strokeThickness: 3,
+        })).setOrigin(0.5).setDepth(8).setData('slot', i),
+      );
+      // Guard pips under the HP bar.
+      const pips: Phaser.GameObjects.Rectangle[] = [];
+      for (let i = 0; i < (e.maxGuard ?? 0); i++) {
+        pips.push(this.add.rectangle(0, 0, 5, 5, 0x6cd8f0, 0.95).setDepth(8).setStrokeStyle(1, 0x07141c, 1));
+      }
+      // Intent chip to the right of the sprite.
+      const intentBg = this.add.rectangle(0, 0, 26, 14, 0x0d1024, 0.92).setDepth(9).setStrokeStyle(1, 0x2f3658, 0.9).setVisible(false);
+      const intentText = this.add.text(0, 0, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#ff8a5a', strokeThickness: 2 })).setOrigin(0.5).setDepth(10).setVisible(false);
+      // BREAK label over the sprite.
+      const breakLabel = this.add.text(0, 0, 'BREAK', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#ff5a6a', strokeThickness: 4 })).setOrigin(0.5).setDepth(11).setVisible(false);
+      this.enemyExtras.set(e.id, { weakBadges, pips, intentBg, intentText, breakLabel });
       this.layoutEnemyBar(e.id);
     }
   }
@@ -243,10 +288,84 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  // --- Turn Order & Intents ---------------------------------------------------
+
+  /** Chips across the top showing this round's initiative order. */
+  private renderTurnStrip() {
+    for (const chip of this.turnChips) chip.destroy();
+    this.turnChips = [];
+    const order = this.battle.roundOrder();
+    const chipW = 15;
+    const total = order.length * (chipW + 3) - 3;
+    let x = (GAME.width - total) / 2;
+    const y = 6;
+    const label = this.add.text(x - 6, y + 7, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0.5).setDepth(30);
+    this.turnChips.push(label);
+    for (const c of order) {
+      const isParty = c.side === 'party';
+      const bg = this.add.rectangle(x, y, chipW, 14, isParty ? 0x11241c : 0x241114, 0.92)
+        .setOrigin(0, 0).setDepth(30)
+        .setStrokeStyle(1, c.broken ? 0x5a6080 : isParty ? c.color : 0xaa3344, 0.95);
+      const letter = this.add.text(x + chipW / 2, y + 7, c.broken ? '✖' : c.name[0], sharpText({
+        fontFamily: FONT, fontSize: '8px', strokeThickness: 2,
+        color: c.broken ? '#5a6080' : isParty ? '#' + c.color.toString(16).padStart(6, '0') : '#ff8a8a',
+      })).setOrigin(0.5).setDepth(31);
+      this.turnChips.push(bg, letter);
+      x += chipW + 3;
+    }
+  }
+
+  /** Shows each living enemy's telegraphed action next to its sprite. */
+  private renderIntents() {
+    for (const e of this.battle.enemies) {
+      const ex = this.enemyExtras.get(e.id);
+      if (!ex) continue;
+      if (e.stats.hp <= 0 || e.broken || !e.intent) {
+        ex.intentBg.setVisible(false);
+        ex.intentText.setVisible(false);
+        continue;
+      }
+      const { glyph, color } = this.intentGlyph(e.intent);
+      ex.intentText.setText(glyph).setColor(color).setVisible(true);
+      ex.intentBg.setVisible(true);
+      ex.intentBg.width = ex.intentText.width + 10;
+    }
+    this.layoutAllEnemyUi();
+  }
+
+  private intentGlyph(cmd: Command): { glyph: string; color: string } {
+    switch (cmd.type) {
+      case 'attack': {
+        const target = this.battle.byId(cmd.targetId);
+        return { glyph: `⚔${target ? ' ' + target.name[0] : ''}`, color: '#ff8a5a' };
+      }
+      case 'spell': {
+        const spell = SPELLS[cmd.spellId];
+        if (spell?.kind === 'heal') return { glyph: '✚', color: '#7df0a0' };
+        const target = this.battle.byId(cmd.targetId);
+        return { glyph: `✦${target ? ' ' + target.name[0] : ''}`, color: '#b28cff' };
+      }
+      case 'phase':
+        return { glyph: '!!', color: '#ff4455' };
+      default:
+        return { glyph: '…', color: '#8a93b8' };
+    }
+  }
+
+  private hideIntents() {
+    for (const ex of this.enemyExtras.values()) {
+      ex.intentBg.setVisible(false);
+      ex.intentText.setVisible(false);
+    }
+  }
+
   // --- Command Phase --------------------------------------------------------
 
   private startCommandPhase() {
+    this.battle.prepareRound();
     this.syncDisplay();
+    this.renderTurnStrip();
+    this.renderIntents();
     this.order = this.battle.living('party');
     this.pos = 0;
     this.battle.clearCommands();
@@ -263,7 +382,7 @@ export class BattleScene extends Phaser.Scene {
       .some(([id, n]) => n > 0 && ITEMS[id]?.target === 'ally');
     this.options = [
       { label: 'Attack', action: 'attack', enabled: true },
-      { label: 'Magic', action: 'magic', enabled: hasSpells },
+      { label: m.id === 'kael' ? 'Skills' : 'Magic', action: 'magic', enabled: hasSpells },
       { label: 'Item', action: 'item', enabled: itemsAvail },
       { label: 'Defend', action: 'defend', enabled: true },
       { label: 'Flee', action: 'flee', enabled: true },
@@ -277,14 +396,14 @@ export class BattleScene extends Phaser.Scene {
     this.logText.setVisible(false);
     this.clearMenuText();
     this.options.forEach((o, i) => {
-      const bg = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, i === this.menuIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
+      const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, i === this.menuIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
         .setOrigin(0, 0)
         .setDepth(15);
       bg.setStrokeStyle(1, i === this.menuIndex ? 0xf0d36c : 0x2f3658, o.enabled ? 0.95 : 0.45);
       this.menuBacks.push(bg);
       const color = !o.enabled ? '#5a6080' : i === this.menuIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.menuIndex ? '▶ ' : '  ';
-      const t = this.add.text(16, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      const t = this.add.text(16, GAME.height - 92 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
     this.cursor.setVisible(false);
@@ -293,7 +412,7 @@ export class BattleScene extends Phaser.Scene {
 
     if (isTouchDevice()) {
       this.options.forEach((_o, i) => {
-        const zone = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
+        const zone = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.options[i].enabled) return;
@@ -310,21 +429,25 @@ export class BattleScene extends Phaser.Scene {
     this.logText.setVisible(false);
     this.clearMenuText();
     this.subItems.forEach((o, i) => {
-      const bg = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, i === this.subIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
+      const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, i === this.subIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
         .setOrigin(0, 0)
         .setDepth(15);
       bg.setStrokeStyle(1, i === this.subIndex ? 0xf0d36c : 0x2f3658, o.enabled ? 0.95 : 0.45);
       this.menuBacks.push(bg);
       const color = !o.enabled ? '#5a6080' : i === this.subIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.subIndex ? '▶ ' : '  ';
-      const t = this.add.text(16, GAME.height - 108 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      const t = this.add.text(16, GAME.height - 92 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
+      if (o.desc) {
+        const d = this.add.text(200, GAME.height - 90 + i * 18, o.desc, sharpText({ fontFamily: FONT, fontSize: '8px', color: o.enabled ? '#8fa8c8' : '#4a5070', strokeThickness: 2 })).setDepth(16);
+        this.menuText.push(d);
+      }
     });
     this.targetFrame.setVisible(false);
 
     if (isTouchDevice()) {
       this.subItems.forEach((_o, i) => {
-        const zone = this.add.rectangle(8, GAME.height - 111 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
+        const zone = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.subItems[i].enabled) return;
@@ -399,6 +522,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private confirm() {
+    if (this.ui === 'busy') return; // held confirm fast-forwards playback instead
     sfx.play('confirm');
     if (this.ui === 'menu') this.confirmMenu();
     else if (this.ui === 'submenu') this.confirmSubmenu();
@@ -452,14 +576,14 @@ export class BattleScene extends Phaser.Scene {
     this.subItems = m.spells.map((id) => {
       const s = SPELLS[id];
       const ok = m.stats.mp >= s.cost;
-      return { id, label: `${s.name}  ${s.cost}MP`, enabled: ok };
+      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok };
     });
     if (this.subItems.length === 0) {
       this.openMenu();
       return;
     }
     this.pending = { kind: 'spell' };
-    this.renderSubmenu(`${m.name} - magic`);
+    this.renderSubmenu(`${m.name} - ${m.id === 'kael' ? 'skills' : 'magic'}`);
   }
 
   private openItems() {
@@ -469,7 +593,7 @@ export class BattleScene extends Phaser.Scene {
     this.subItems = Object.entries(inv)
       .filter(([, n]) => n > 0)
       .filter(([id]) => ITEMS[id]?.target === 'ally')
-      .map(([id, n]) => ({ id, label: `${ITEMS[id]?.name ?? id}  x${n}`, enabled: true }));
+      .map(([id, n]) => ({ id, label: `${ITEMS[id]?.name ?? id}  x${n}`, desc: ITEMS[id]?.description, enabled: true }));
     if (this.subItems.length === 0) {
       this.openMenu();
       return;
@@ -484,6 +608,16 @@ export class BattleScene extends Phaser.Scene {
     if (this.pending?.kind === 'spell') {
       this.pending.id = sel.id;
       const spell = SPELLS[sel.id];
+      // Multi-target spells need no target selection.
+      if (spell.target === 'all-enemies') {
+        const first = this.battle.living('enemy')[0];
+        this.commit({ type: 'spell', spellId: sel.id, targetId: first?.id ?? '' });
+        return;
+      }
+      if (spell.target === 'party') {
+        this.commit({ type: 'spell', spellId: sel.id, targetId: this.order[this.pos].id });
+        return;
+      }
       this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget');
     } else if (this.pending?.kind === 'item') {
       this.pending.id = sel.id;
@@ -525,6 +659,17 @@ export class BattleScene extends Phaser.Scene {
         .setSize(img.displayWidth + 16, img.displayHeight + 16)
         .setVisible(true);
     }
+    // Hint the matchup: does the pending action hit a weakness?
+    if (t.side === 'enemy' && this.pending) {
+      const element: Element | undefined = this.pending.kind === 'attack'
+        ? 'phys'
+        : this.pending.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id]?.element : undefined;
+      if (element && element !== 'none' && t.weakness?.includes(element)) {
+        this.promptText.setText(`Choose target  < >   ▶ ${t.name}: WEAK to this!`);
+        return;
+      }
+    }
+    this.promptText.setText(isTouchDevice() ? 'Choose target - tap or use < >' : 'Choose target  < >');
   }
 
   private confirmTarget() {
@@ -559,6 +704,7 @@ export class BattleScene extends Phaser.Scene {
     this.cursor.setVisible(false);
     this.targetFrame.setVisible(false);
     this.clearMenuText();
+    this.hideIntents();
     this.promptText.setText('');
     this.logText.setVisible(true);
     // Snapshot for progressive HP reveal during playback.
@@ -572,7 +718,7 @@ export class BattleScene extends Phaser.Scene {
 
   private playEvents(events: BattleEvent[], i: number) {
     if (i >= events.length) {
-      this.time.delayedCall(350, () => this.afterRound());
+      this.time.delayedCall(250, () => this.afterRound());
       return;
     }
     const ev = events[i];
@@ -581,6 +727,7 @@ export class BattleScene extends Phaser.Scene {
     if (ev.kind === 'attack') sfx.play('hit');
     else if (ev.kind === 'spell') sfx.play('magic');
     else if (ev.kind === 'item') sfx.play('chest');
+    else if (ev.kind === 'break') this.playBreak(ev.targetId);
     else if (ev.kind === 'phase') this.playPhaseTransition(ev.actorId);
 
     if (ev.amount != null && ev.targetId) {
@@ -599,7 +746,10 @@ export class BattleScene extends Phaser.Scene {
     if (ev.kind === 'ko' && ev.targetId) this.fadeKo(ev.targetId);
 
     this.refreshStatus();
-    this.time.delayedCall(720, () => this.playEvents(events, i + 1));
+    // Hold confirm to fast-forward the round.
+    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : 460;
+    const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
+    this.time.delayedCall(delay, () => this.playEvents(events, i + 1));
   }
 
   private afterRound() {
@@ -640,7 +790,7 @@ export class BattleScene extends Phaser.Scene {
 
     const boss = this.battle.enemies.some((e) => e.isBoss);
     const depth = run.depth;
-    const loot = grantBattleLoot(depth, boss);
+    const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
     if (boss) {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
@@ -653,17 +803,29 @@ export class BattleScene extends Phaser.Scene {
     music.fanfare('victory');
     this.ui = 'over';
 
-    this.time.delayedCall(boss ? 1000 : 1500, () => {
-      if (boss) {
+    if (boss) {
+      this.time.delayedCall(1000, () => {
         const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : 'ch3_win';
         const afterWin = depth > 4
           ? () => this.scene.launch('Dialogue', { scriptId: 'ending', onDone: () => this.toTown() })
           : () => this.toTown();
         this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
-      } else {
+      });
+      return;
+    }
+
+    // Choose a boon before returning to the descent — the roguelite core loop.
+    this.time.delayedCall(900, () => {
+      const choices = rollBoonChoices(run.boons, this.isElite);
+      const finish = () => {
         this.scene.resume('Descent', { won: true });
         this.scene.stop();
+      };
+      if (choices.length === 0) {
+        finish();
+        return;
       }
+      this.scene.launch('BoonPick', { choices, elite: this.isElite, onDone: finish });
     });
   }
 
@@ -677,10 +839,12 @@ export class BattleScene extends Phaser.Scene {
 
   private gameOver() {
     this.ui = 'over';
+    const lost = applyWipePenalty();
     this.pushLog('The Crystal draws you back...');
+    if (lost > 0) this.pushLog(`${lost} gold scatters into the dark.`);
     this.refreshStatus();
     music.fanfare('defeat');
-    this.time.delayedCall(2200, () => this.toTown());
+    this.time.delayedCall(2400, () => this.toTown());
   }
 
   /** Leaves the descent and returns to Sanctuary. */
@@ -739,6 +903,7 @@ export class BattleScene extends Phaser.Scene {
       case 'fire':  return 0xff4422;
       case 'ice':   return 0x44aaff;
       case 'holy':  return 0xffe866;
+      case 'phys':  return 0xdfe4f5;
       default:      return 0x8a6cf0;
     }
   }
@@ -746,38 +911,55 @@ export class BattleScene extends Phaser.Scene {
   private animateEvent(ev: BattleEvent) {
     if (ev.kind === 'attack' && ev.actorId && ev.targetId) {
       this.attackAnim(ev.actorId, ev.targetId);
-      if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
+      if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
       const isHeal = (ev.amount ?? 0) < 0;
       if (isHeal) {
         this.healAnim(ev.targetId, 0x6cf0a0);
-        this.floatNumber(ev.targetId, ev.amount ?? 0);
+        this.floatNumber(ev.targetId, ev.amount ?? 0, ev);
       } else {
         const color = BattleScene.spellColor(ev.element);
-        this.projectileAnim(ev.actorId, ev.targetId, color);
-        if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
+        if (ev.element === 'phys') {
+          this.attackAnim(ev.actorId, ev.targetId);
+        } else {
+          this.projectileAnim(ev.actorId, ev.targetId, color);
+        }
+        if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
       }
     } else if (ev.kind === 'item' && ev.targetId) {
       this.healAnim(ev.targetId, 0xf0d36c);
-      if (ev.amount) this.floatNumber(ev.targetId, ev.amount);
+      if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'defend' && ev.actorId) {
       this.guardAnim(ev.actorId);
+    } else if (ev.kind === 'info' && ev.targetId && ev.amount) {
+      // Lifesteal, thorns, revive — small floating numbers without an attack animation.
+      this.floatNumber(ev.targetId, ev.amount, ev);
     }
   }
 
-  private floatNumber(targetId: string, amount: number) {
+  private floatNumber(targetId: string, amount: number, ev?: BattleEvent) {
     const img = this.sprites.get(targetId);
     if (!img || amount === 0) return;
     const isHeal = amount < 0;
+    const crit = ev?.crit === true;
+    const weak = ev?.weak === true;
     const label = isHeal ? `+${Math.abs(amount)}` : `-${amount}`;
-    const color = isHeal ? '#66ffaa' : '#ff6655';
+    const color = isHeal ? '#66ffaa' : crit ? '#ffd34d' : weak ? '#ffa03c' : '#ff6655';
+    const size = crit ? '16px' : weak ? '13px' : '11px';
     const txt = this.add.text(img.x + Phaser.Math.Between(-6, 6), img.y - 18, label,
-      { fontFamily: 'monospace', fontSize: '11px', color, stroke: '#07060e', strokeThickness: 3 })
-      .setOrigin(0.5, 1).setDepth(40);
+      { fontFamily: 'monospace', fontSize: size, color, stroke: '#07060e', strokeThickness: 3 })
+      .setOrigin(0.5, 1).setDepth(40).setScale(crit ? 1.5 : 1.2);
+    this.tweens.add({ targets: txt, scale: 1, duration: 130, ease: 'Back.easeOut' });
     this.tweens.add({
-      targets: txt, y: txt.y - 22, alpha: 0, duration: 900,
+      targets: txt, y: txt.y - 22, alpha: 0, duration: crit ? 1100 : 900,
       ease: 'Sine.easeOut', onComplete: () => txt.destroy(),
     });
+    if (crit || weak) {
+      const tag = this.add.text(img.x, img.y - 34, crit ? 'CRIT!' : 'WEAK', sharpText({
+        fontFamily: FONT, fontSize: '9px', color: crit ? '#ffd34d' : '#ffa03c', strokeThickness: 3,
+      })).setOrigin(0.5, 1).setDepth(40);
+      this.tweens.add({ targets: tag, y: tag.y - 14, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => tag.destroy() });
+    }
   }
 
   private attackAnim(actorId: string, targetId: string) {
@@ -811,7 +993,7 @@ export class BattleScene extends Phaser.Scene {
       targets: [orb, trail],
       x: target.x,
       y: target.y,
-      duration: 260,
+      duration: 240,
       ease: 'Sine.easeIn',
       onComplete: () => {
         this.burstAt(target.x, target.y, color);
@@ -885,6 +1067,35 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** BREAK: big stamp on the enemy, white flash, heavy shake. */
+  private playBreak(targetId?: string) {
+    if (!targetId) return;
+    const img = this.sprites.get(targetId);
+    if (!img) return;
+    sfx.play('hit');
+    sfx.play('levelup');
+    this.cameras.main.shake(220, 0.012);
+    img.setTintFill(0xffffff);
+    this.time.delayedCall(200, () => img.active && img.clearTint());
+    const stamp = this.add.text(img.x, img.y - 6, 'BREAK!', sharpText({
+      fontFamily: FONT, fontSize: '18px', color: '#ffd34d', strokeThickness: 5,
+    })).setOrigin(0.5).setDepth(45).setScale(2).setAngle(-8);
+    this.tweens.add({ targets: stamp, scale: 1, duration: 160, ease: 'Back.easeOut' });
+    this.tweens.add({
+      targets: stamp, y: stamp.y - 10, alpha: 0, delay: 700, duration: 500,
+      ease: 'Sine.easeIn', onComplete: () => stamp.destroy(),
+    });
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const shard = this.add.rectangle(img.x, img.y, 5, 3, 0x6cd8f0, 0.9).setDepth(33).setAngle(45);
+      this.tweens.add({
+        targets: shard, x: img.x + Math.cos(angle) * 34, y: img.y + Math.sin(angle) * 22,
+        alpha: 0, angle: 180, duration: 450, ease: 'Quad.easeOut', onComplete: () => shard.destroy(),
+      });
+    }
+    this.refreshEnemyBars();
+  }
+
   private playPhaseTransition(bossId?: string) {
     // Full-screen flash + heavy shake
     const bossColors: Record<string, number> = {
@@ -948,6 +1159,25 @@ export class BattleScene extends Phaser.Scene {
     bar.bg.setPosition(img.x, y);
     bar.fill.setPosition(left, y);
     bar.label?.setPosition(img.x, y - 4);
+
+    const ex = this.enemyExtras.get(id);
+    if (!ex) return;
+    // Guard pips: centered row right under the HP bar.
+    const pipCount = ex.pips.length;
+    const pipsW = pipCount * 7 - 2;
+    ex.pips.forEach((p, i) => p.setPosition(img.x - pipsW / 2 + i * 7 + 2, y + 7));
+    // Weakness badges: small letters to the right of the HP bar.
+    ex.weakBadges.forEach((b, i) => b.setPosition(img.x + bar.bg.width / 2 + 8 + i * 9, y));
+    // Intent chip: floating to the right of the sprite.
+    const ix = img.x + img.displayWidth / 2 + 18;
+    ex.intentBg.setPosition(ix, img.y - 8);
+    ex.intentText.setPosition(ix, img.y - 8);
+    // BREAK label above the sprite center.
+    ex.breakLabel.setPosition(img.x, img.y - 2);
+  }
+
+  private layoutAllEnemyUi() {
+    for (const e of this.battle.enemies) this.layoutEnemyBar(e.id);
   }
 
   private refreshStatus() {
@@ -978,6 +1208,29 @@ export class BattleScene extends Phaser.Scene {
       bar.bg.setAlpha(hp > 0 ? 0.88 : 0.28);
       bar.fill.setAlpha(hp > 0 ? 0.96 : 0);
       bar.label?.setText(hp > 0 ? `${e.name} ${hp}/${e.stats.maxHp}` : `${e.name} KO`);
+
+      const ex = this.enemyExtras.get(e.id);
+      if (!ex) continue;
+      const dead = hp <= 0;
+      ex.weakBadges.forEach((b) => b.setVisible(!dead));
+      ex.pips.forEach((p, i) => {
+        p.setVisible(!dead && (e.maxGuard ?? 0) > 0);
+        const remaining = e.guard ?? 0;
+        p.setFillStyle(i < remaining ? 0x6cd8f0 : 0x1a2433, i < remaining ? 0.95 : 0.8);
+      });
+      if (dead) {
+        ex.breakLabel.setVisible(false);
+        ex.intentBg.setVisible(false);
+        ex.intentText.setVisible(false);
+      } else if (e.broken) {
+        if (!ex.breakLabel.visible) {
+          ex.breakLabel.setVisible(true).setAlpha(1);
+          this.tweens.add({ targets: ex.breakLabel, alpha: { from: 1, to: 0.45 }, duration: 420, yoyo: true, repeat: -1 });
+        }
+      } else if (ex.breakLabel.visible) {
+        this.tweens.killTweensOf(ex.breakLabel);
+        ex.breakLabel.setVisible(false);
+      }
     }
   }
 
