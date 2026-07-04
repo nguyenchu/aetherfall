@@ -16,7 +16,7 @@
 import { boonTotals, type BoonTotals } from './boons';
 import { ITEMS, SPELLS } from './content';
 import { getRun } from './run';
-import type { BattleEvent, BattlePhase, Combatant, Command, Element, Spell } from './types';
+import type { Ailment, BattleEvent, BattlePhase, Combatant, Command, Element, Inflict, Spell } from './types';
 
 function rnd(min: number, max: number): number {
   return Math.random() * (max - min) + min;
@@ -27,6 +27,22 @@ const CRIT_MULT = 1.6;
 const WEAK_MULT = 1.5;
 const BREAK_MULT = 1.5;
 const DEFEND_MP_GAIN = 2;
+// Ailments (see types.ts): burn/venom tick at end of round, chill slows.
+const CHILL_AGI_MULT = 0.55;
+const CHILL_DMG_MULT = 0.75;
+const BURN_FRAC = 0.06; // of max HP per tick, min 3
+const VENOM_FRAC = 0.05; // of max HP per tick, min 2
+
+const AILMENT_APPLY_TEXT: Record<Ailment, (name: string) => string> = {
+  burn: (n) => `${n} is set ablaze!`,
+  chill: (n) => `${n} is chilled to the bone!`,
+  venom: (n) => `${n} is poisoned!`,
+};
+const AILMENT_EXPIRE_TEXT: Record<Ailment, (name: string) => string> = {
+  burn: (n) => `The flames on ${n} gutter out.`,
+  chill: (n) => `${n} shakes off the chill.`,
+  venom: (n) => `The venom in ${n} fades.`,
+};
 
 export class Battle {
   readonly party: Combatant[];
@@ -70,7 +86,9 @@ export class Battle {
   prepareRound(): void {
     this.speedRoll.clear();
     for (const c of this.all()) {
-      if (c.stats.hp > 0) this.speedRoll.set(c.id, c.stats.agi + rnd(0, 3));
+      if (c.stats.hp <= 0) continue;
+      const agi = c.stats.agi * (c.ailments?.chill ? CHILL_AGI_MULT : 1);
+      this.speedRoll.set(c.id, agi + rnd(0, 3));
     }
     for (const e of this.living('enemy')) {
       e.intent = e.broken ? undefined : this.enemyAi(e);
@@ -126,6 +144,7 @@ export class Battle {
       if (Math.random() < chance) {
         events.push({ kind: 'flee-ok', text: 'The party fled!' });
         this.phase = 'fled';
+        this.clearPartyAilments();
         this.commands.clear();
         return events;
       }
@@ -150,21 +169,25 @@ export class Battle {
     this.commands.clear();
 
     if (this.phase === 'resolving') {
-      // Break lasts through the round after it happened, then guard restores.
-      for (const e of this.living('enemy')) {
-        if (e.broken && (e.brokenRound ?? 0) < this.round) {
-          e.broken = false;
-          e.guard = e.maxGuard ?? 0;
-          events.push({ kind: 'recover', text: `${e.name} steadies itself — guard restored.`, actorId: e.id });
+      // Burn/venom tick and durations count down — this can decide the fight.
+      this.tickAilments(events);
+      if (!this.checkEnd(events)) {
+        // Break lasts through the round after it happened, then guard restores.
+        for (const e of this.living('enemy')) {
+          if (e.broken && (e.brokenRound ?? 0) < this.round) {
+            e.broken = false;
+            e.guard = e.maxGuard ?? 0;
+            events.push({ kind: 'recover', text: `${e.name} steadies itself — guard restored.`, actorId: e.id });
+          }
         }
-      }
-      // Aether Flow boon: party regains MP each round.
-      if (this.bn.mpRegen > 0) {
-        for (const c of this.living('party')) {
-          c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + this.bn.mpRegen);
+        // Aether Flow boon: party regains MP each round.
+        if (this.bn.mpRegen > 0) {
+          for (const c of this.living('party')) {
+            c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + this.bn.mpRegen);
+          }
         }
+        this.phase = 'input';
       }
-      this.phase = 'input';
     }
     return events;
   }
@@ -242,6 +265,8 @@ export class Battle {
       text: `${actor.name} hits ${target.name} for ${hit.dmg}.${tags}`,
       actorId: actor.id, targetId: target.id, amount: hit.dmg, crit: hit.crit, weak: hit.weak,
     });
+    // Venomous bites, chilling tides: some enemy attacks carry an ailment.
+    if (actor.attackInflict) this.applyAilment(target, actor.attackInflict, events);
     // Vampiric Edge: attacks heal the attacker.
     if (actor.side === 'party' && this.bn.lifesteal > 0) {
       const heal = Math.round(hit.dmg * this.bn.lifesteal);
@@ -277,6 +302,7 @@ export class Battle {
         text: `${actor.name} uses ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
       });
+      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.maybeKo(target, events);
       return;
     }
@@ -299,6 +325,7 @@ export class Battle {
         text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
       });
+      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.maybeKo(target, events);
     }
   }
@@ -312,6 +339,11 @@ export class Battle {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
       events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element });
+      // Cleansing Light boon: healing also washes ailments away.
+      if (actor.side === 'party' && this.bn.healsCure && target.ailments && Object.keys(target.ailments).length > 0) {
+        target.ailments = undefined;
+        events.push({ kind: 'info', text: `${target.name} is cleansed of ailments.`, targetId: target.id });
+      }
     }
   }
 
@@ -381,6 +413,7 @@ export class Battle {
   /** Central damage roll: variance, modifiers, boons, weakness, break, crit. */
   private computeHit(actor: Combatant, target: Combatant, base: number, element: Element): { dmg: number; crit: boolean; weak: boolean } {
     let dmg = base * rnd(0.88, 1.12) * this.modMult(actor, target);
+    if (actor.ailments?.chill) dmg *= CHILL_DMG_MULT; // chilled hands strike weakly
     const weak = element !== 'none' && (target.weakness?.includes(element) ?? false);
     let crit = false;
     if (actor.side === 'party') {
@@ -414,6 +447,62 @@ export class Battle {
     t.stats.hp = Math.max(0, t.stats.hp - dmg);
   }
 
+  // --- Ailments ---------------------------------------------------------------
+
+  /** Spell inflicts; party boons can turn the chance roll into a certainty. */
+  private applySpellInflict(actor: Combatant, target: Combatant, inf: Inflict, events: BattleEvent[]): void {
+    const sure = actor.side === 'party' && this.bn.sureInflict.includes(inf.ailment);
+    this.applyAilment(target, inf, events, sure);
+  }
+
+  /** Rolls the chance and applies/refreshes an ailment on a living target. */
+  private applyAilment(target: Combatant, inf: Inflict, events: BattleEvent[], sure = false): void {
+    if (target.stats.hp <= 0) return;
+    if (!sure && Math.random() >= inf.chance) return;
+    const had = (target.ailments?.[inf.ailment] ?? 0) > 0;
+    target.ailments = target.ailments ?? {};
+    target.ailments[inf.ailment] = Math.max(target.ailments[inf.ailment] ?? 0, inf.rounds);
+    // Refreshing an active ailment is silent to keep the log readable.
+    if (!had) {
+      events.push({ kind: 'ailment', text: AILMENT_APPLY_TEXT[inf.ailment](target.name), targetId: target.id, ailment: inf.ailment });
+    }
+  }
+
+  /** End of round: burn/venom damage ticks, all ailment durations count down. */
+  private tickAilments(events: BattleEvent[]): void {
+    for (const c of this.all()) {
+      if (c.stats.hp <= 0 || !c.ailments) continue;
+      for (const [ailment, rounds] of Object.entries(c.ailments) as [Ailment, number][]) {
+        if (c.stats.hp <= 0) break; // an earlier tick already felled them
+        const dotMult = c.side === 'enemy' ? this.bn.dotMult : 1;
+        if (ailment === 'burn' || ailment === 'venom') {
+          const frac = ailment === 'burn' ? BURN_FRAC : VENOM_FRAC;
+          const min = ailment === 'burn' ? 3 : 2;
+          const dmg = Math.round(Math.max(min, c.stats.maxHp * frac) * dotMult);
+          this.applyDamage(c, dmg);
+          const text = ailment === 'burn'
+            ? `${c.name} burns for ${dmg}.`
+            : `Venom courses through ${c.name} — ${dmg} damage.`;
+          events.push({ kind: 'dot', text, targetId: c.id, amount: dmg, ailment });
+          this.maybeKo(c, events);
+        }
+        if (rounds - 1 <= 0) {
+          delete c.ailments[ailment];
+          if (c.stats.hp > 0) {
+            events.push({ kind: 'info', text: AILMENT_EXPIRE_TEXT[ailment](c.name), targetId: c.id });
+          }
+        } else {
+          c.ailments[ailment] = rounds - 1;
+        }
+      }
+    }
+  }
+
+  /** Battle-scoped statuses do not follow the party out of the fight. */
+  private clearPartyAilments(): void {
+    for (const c of this.party) c.ailments = undefined;
+  }
+
   private maybeKo(t: Combatant, events: BattleEvent[]): void {
     if (t.stats.hp > 0) return;
     // Crystal Promise: once per battle, a fallen hero returns.
@@ -438,8 +527,10 @@ export class Battle {
       return { type: 'phase' };
     }
 
-    // Target the weakest living party member.
-    const target = targets.reduce((w, c) => c.stats.hp < w.stats.hp ? c : w);
+    // Prefer the weakest living hero, but not relentlessly — pure focus fire
+    // feels unfair and makes protecting a wounded member impossible.
+    const weakest = targets.reduce((w, c) => c.stats.hp < w.stats.hp ? c : w);
+    const target = Math.random() < 0.6 ? weakest : targets[Math.floor(Math.random() * targets.length)];
 
     // Cast occasionally if MP allows; bosses cast more often.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
@@ -477,6 +568,7 @@ export class Battle {
       this.xpWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0) * (mod.xpMult ?? 1) * this.bn.xpMult);
       events.push({ kind: 'info', text: `Victory! +${this.goldWon} gold, +${this.xpWon} XP.` });
       this.phase = 'won';
+      this.clearPartyAilments();
       return true;
     }
     if (this.living('party').length === 0) {

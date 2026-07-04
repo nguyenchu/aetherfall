@@ -8,7 +8,7 @@ import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
-import type { BattleEvent, Combatant, Command, Element } from '../game/types';
+import type { Ailment, BattleEvent, Combatant, Command, Element } from '../game/types';
 
 type UIState = 'menu' | 'target' | 'submenu' | 'subtarget' | 'busy' | 'over';
 
@@ -35,6 +35,7 @@ interface EnemyExtras {
   intentBg: Phaser.GameObjects.Rectangle;
   intentText: Phaser.GameObjects.Text;
   breakLabel: Phaser.GameObjects.Text;
+  ailmentBadges: Record<Ailment, Phaser.GameObjects.Text>;
 }
 
 interface PartyStatusRow {
@@ -42,12 +43,19 @@ interface PartyStatusRow {
   name: Phaser.GameObjects.Text;
   hp: Phaser.GameObjects.Text;
   mp: Phaser.GameObjects.Text;
+  ailments: Record<Ailment, Phaser.GameObjects.Text>;
 }
 
 const ELEMENT_LETTER: Record<string, string> = { phys: 'P', fire: 'F', ice: 'I', holy: 'H' };
 const ELEMENT_COLOR: Record<string, string> = {
   phys: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
+
+const AILMENT_ORDER: Ailment[] = ['burn', 'chill', 'venom'];
+const AILMENT_LETTER: Record<Ailment, string> = { burn: 'B', chill: 'C', venom: 'V' };
+const AILMENT_COLOR: Record<Ailment, string> = { burn: '#ff8a5a', chill: '#6cb8ff', venom: '#8aff6c' };
+const AILMENT_TINT: Record<Ailment, number> = { burn: 0xff8a5a, chill: 0x6cb8ff, venom: 0x8aff6c };
+const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILLED!', venom: 'POISONED!' };
 
 /**
  * Battle presentation layer. Drives the Battle engine by collecting commands
@@ -257,7 +265,14 @@ export class BattleScene extends Phaser.Scene {
       const intentText = this.add.text(0, 0, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#ff8a5a', strokeThickness: 2 })).setOrigin(0.5).setDepth(10).setVisible(false);
       // BREAK label over the sprite.
       const breakLabel = this.add.text(0, 0, 'BREAK', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#ff5a6a', strokeThickness: 4 })).setOrigin(0.5).setDepth(11).setVisible(false);
-      this.enemyExtras.set(e.id, { weakBadges, pips, intentBg, intentText, breakLabel });
+      // Ailment badges: small letters left of the HP bar (weaknesses sit right).
+      const ailmentBadges = {} as Record<Ailment, Phaser.GameObjects.Text>;
+      for (const a of AILMENT_ORDER) {
+        ailmentBadges[a] = this.add.text(0, 0, AILMENT_LETTER[a], sharpText({
+          fontFamily: FONT, fontSize: '8px', color: AILMENT_COLOR[a], strokeThickness: 3,
+        })).setOrigin(0.5).setDepth(9).setVisible(false);
+      }
+      this.enemyExtras.set(e.id, { weakBadges, pips, intentBg, intentText, breakLabel, ailmentBadges });
       this.layoutEnemyBar(e.id);
     }
   }
@@ -276,7 +291,14 @@ export class BattleScene extends Phaser.Scene {
       const name = this.add.text(statusX + 5, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 3 })).setDepth(16);
       const hpText = this.add.text(statusX + 58, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0a0', strokeThickness: 3 })).setDepth(16);
       const mpText = this.add.text(statusX + 126, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 3 })).setDepth(16);
-      this.partyStatusRows.set(c.id, { bg: rowBg, name, hp: hpText, mp: mpText });
+      // Ailment badges in the free space left of the HP bar row.
+      const ailments = {} as Record<Ailment, Phaser.GameObjects.Text>;
+      AILMENT_ORDER.forEach((a, k) => {
+        ailments[a] = this.add.text(statusX + 6 + k * 11, barY, AILMENT_LETTER[a], sharpText({
+          fontFamily: FONT, fontSize: '8px', color: AILMENT_COLOR[a], strokeThickness: 3,
+        })).setOrigin(0, 0.5).setDepth(17).setVisible(false);
+      });
+      this.partyStatusRows.set(c.id, { bg: rowBg, name, hp: hpText, mp: mpText, ailments });
 
       const hpBg = this.add.rectangle(statusX + 58, barY, 64, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
       const hpFill = this.add.rectangle(statusX + 59, barY, 62, 3, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
@@ -729,6 +751,7 @@ export class BattleScene extends Phaser.Scene {
     else if (ev.kind === 'item') sfx.play('chest');
     else if (ev.kind === 'break') this.playBreak(ev.targetId);
     else if (ev.kind === 'phase') this.playPhaseTransition(ev.actorId);
+    else if (ev.kind === 'ailment') this.playAilment(ev.targetId, ev.ailment);
 
     if (ev.amount != null && ev.targetId) {
       const cur = this.hpDisplay.get(ev.targetId) ?? 0;
@@ -747,7 +770,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.refreshStatus();
     // Hold confirm to fast-forward the round.
-    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : 460;
+    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : ev.kind === 'ailment' ? 560 : 460;
     const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
     this.time.delayedCall(delay, () => this.playEvents(events, i + 1));
   }
@@ -931,6 +954,9 @@ export class BattleScene extends Phaser.Scene {
       if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'defend' && ev.actorId) {
       this.guardAnim(ev.actorId);
+    } else if (ev.kind === 'dot' && ev.targetId && ev.amount) {
+      // Burn/venom end-of-round ticks.
+      this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'info' && ev.targetId && ev.amount) {
       // Lifesteal, thorns, revive — small floating numbers without an attack animation.
       this.floatNumber(ev.targetId, ev.amount, ev);
@@ -1067,6 +1093,24 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Ailment applied: colored tint flash + a floating status tag. */
+  private playAilment(targetId?: string, ailment?: Ailment) {
+    if (!targetId || !ailment) return;
+    const img = this.sprites.get(targetId);
+    if (!img) return;
+    sfx.play('magic');
+    img.setTintFill(AILMENT_TINT[ailment]);
+    this.time.delayedCall(180, () => img.active && img.clearTint());
+    const tag = this.add.text(img.x, img.y - 26, AILMENT_STAMP[ailment], sharpText({
+      fontFamily: FONT, fontSize: '10px', color: AILMENT_COLOR[ailment], strokeThickness: 4,
+    })).setOrigin(0.5, 1).setDepth(42).setScale(1.4);
+    this.tweens.add({ targets: tag, scale: 1, duration: 140, ease: 'Back.easeOut' });
+    this.tweens.add({
+      targets: tag, y: tag.y - 12, alpha: 0, delay: 420, duration: 420,
+      ease: 'Sine.easeOut', onComplete: () => tag.destroy(),
+    });
+  }
+
   /** BREAK: big stamp on the enemy, white flash, heavy shake. */
   private playBreak(targetId?: string) {
     if (!targetId) return;
@@ -1168,6 +1212,8 @@ export class BattleScene extends Phaser.Scene {
     ex.pips.forEach((p, i) => p.setPosition(img.x - pipsW / 2 + i * 7 + 2, y + 7));
     // Weakness badges: small letters to the right of the HP bar.
     ex.weakBadges.forEach((b, i) => b.setPosition(img.x + bar.bg.width / 2 + 8 + i * 9, y));
+    // Ailment badges: mirrored on the left side of the HP bar.
+    AILMENT_ORDER.forEach((a, i) => ex.ailmentBadges[a].setPosition(img.x - bar.bg.width / 2 - 8 - i * 9, y));
     // Intent chip: floating to the right of the sprite.
     const ix = img.x + img.displayWidth / 2 + 18;
     ex.intentBg.setPosition(ix, img.y - 8);
@@ -1192,6 +1238,9 @@ export class BattleScene extends Phaser.Scene {
       row.hp.setColor(dead ? '#ff5a6a' : '#6cf0a0');
       row.mp.setText(c.stats.maxMp > 0 ? `MP ${mp}/${c.stats.maxMp}` : '');
       row.bg.setAlpha(dead ? 0.38 : 0.7);
+      for (const a of AILMENT_ORDER) {
+        row.ailments[a].setVisible(!dead && (c.ailments?.[a] ?? 0) > 0);
+      }
     }
     this.refreshPartyBars();
     this.refreshEnemyBars();
@@ -1213,6 +1262,9 @@ export class BattleScene extends Phaser.Scene {
       if (!ex) continue;
       const dead = hp <= 0;
       ex.weakBadges.forEach((b) => b.setVisible(!dead));
+      for (const a of AILMENT_ORDER) {
+        ex.ailmentBadges[a].setVisible(!dead && (e.ailments?.[a] ?? 0) > 0);
+      }
       ex.pips.forEach((p, i) => {
         p.setVisible(!dead && (e.maxGuard ?? 0) > 0);
         const remaining = e.guard ?? 0;

@@ -393,6 +393,7 @@ export function restoreParty(): void {
     c.stats.hp = c.stats.maxHp;
     c.stats.mp = c.stats.maxMp;
     c.defending = false;
+    c.ailments = undefined;
   }
 }
 

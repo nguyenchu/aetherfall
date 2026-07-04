@@ -2,7 +2,7 @@
 // They live on RunState and reset when the Crystal draws you home, so every
 // descent builds differently. The battle engine reads them via boonTotals().
 
-import type { Element } from './types';
+import type { Ailment, Element } from './types';
 
 export type BoonRarity = 'common' | 'rare' | 'epic';
 
@@ -25,6 +25,9 @@ export interface Boon {
   guardChipBonus?: number; // extra guard pips removed on weakness hits
   potionBoost?: number; // items heal this fraction more
   reviveOnce?: boolean; // once per battle, a fallen hero returns at 40% HP
+  sureInflict?: Ailment; // party hits that can apply this ailment always do
+  dotMult?: number; // burn/venom ticks on enemies are multiplied by this
+  healsCure?: boolean; // party healing spells also cure ailments
 }
 
 export const BOONS: Record<string, Boon> = {
@@ -108,6 +111,26 @@ export const BOONS: Record<string, Boon> = {
     name: 'Perfect Break', desc: 'Weakness hits remove 2 guard pips instead of 1.',
     guardChipBonus: 1,
   },
+  cleansing_light: {
+    id: 'cleansing_light', rarity: 'common',
+    name: 'Cleansing Light', desc: 'Healing spells also cure Burn, Chill and Venom.',
+    healsCure: true,
+  },
+  kindling_soul: {
+    id: 'kindling_soul', rarity: 'rare',
+    name: 'Kindling Soul', desc: 'Fire hits always Burn the target.',
+    sureInflict: 'burn',
+  },
+  winters_grasp: {
+    id: 'winters_grasp', rarity: 'rare',
+    name: "Winter's Grasp", desc: 'Ice hits always Chill the target.',
+    sureInflict: 'chill',
+  },
+  smoldering_ruin: {
+    id: 'smoldering_ruin', rarity: 'epic',
+    name: 'Smoldering Ruin', desc: 'Burn and Venom on enemies tick for double damage.',
+    dotMult: 2,
+  },
 };
 
 /** Aggregated boon effects for quick reads in damage formulas. */
@@ -125,6 +148,9 @@ export interface BoonTotals {
   guardChipBonus: number;
   potionBoost: number;
   reviveOnce: boolean;
+  sureInflict: Ailment[];
+  dotMult: number;
+  healsCure: boolean;
 }
 
 export function boonTotals(ids: string[]): BoonTotals {
@@ -132,6 +158,7 @@ export function boonTotals(ids: string[]): BoonTotals {
     dmgMult: 1, elementMult: {}, critBonus: 0, lifesteal: 0, mpRegen: 0,
     thorns: 0, goldMult: 1, xpMult: 1, defendHeal: 0, breakDmgBonus: 0,
     guardChipBonus: 0, potionBoost: 0, reviveOnce: false,
+    sureInflict: [], dotMult: 1, healsCure: false,
   };
   for (const id of ids) {
     const b = BOONS[id];
@@ -152,6 +179,9 @@ export function boonTotals(ids: string[]): BoonTotals {
     if (b.guardChipBonus) t.guardChipBonus += b.guardChipBonus;
     if (b.potionBoost) t.potionBoost += b.potionBoost;
     if (b.reviveOnce) t.reviveOnce = true;
+    if (b.sureInflict) t.sureInflict.push(b.sureInflict);
+    if (b.dotMult) t.dotMult *= b.dotMult;
+    if (b.healsCure) t.healsCure = true;
   }
   return t;
 }

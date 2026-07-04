@@ -22,19 +22,23 @@ export const SPELLS: Record<string, Spell> = {
   // Lyra — black mage
   fire: {
     id: 'fire', name: 'Ember', cost: 4, kind: 'damage', power: 14,
-    element: 'fire', target: 'enemy', desc: 'Fire damage to one enemy.',
+    element: 'fire', target: 'enemy', desc: 'Fire damage. May Burn.',
+    inflict: { ailment: 'burn', chance: 0.35, rounds: 2 },
   },
   frost: {
     id: 'frost', name: 'Rime', cost: 5, kind: 'damage', power: 16,
-    element: 'ice', target: 'enemy', desc: 'Ice damage to one enemy.',
+    element: 'ice', target: 'enemy', desc: 'Ice damage. May Chill.',
+    inflict: { ailment: 'chill', chance: 0.35, rounds: 2 },
   },
   firewave: {
     id: 'firewave', name: 'Emberstorm', cost: 9, kind: 'damage', power: 11,
-    element: 'fire', target: 'all-enemies', desc: 'Fire damage to all enemies.',
+    element: 'fire', target: 'all-enemies', desc: 'Fire damage to all. May Burn.',
+    inflict: { ailment: 'burn', chance: 0.25, rounds: 2 },
   },
   blizzard: {
     id: 'blizzard', name: 'Blizzard', cost: 12, kind: 'damage', power: 14,
-    element: 'ice', target: 'all-enemies', desc: 'Ice damage to all enemies.',
+    element: 'ice', target: 'all-enemies', desc: 'Ice damage to all. May Chill.',
+    inflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
   },
   // Mira — cleric
   smite: {

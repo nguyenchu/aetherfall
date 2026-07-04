@@ -2,6 +2,31 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-04.
 
+## 2026-07-04: Status Ailments — Burn / Chill / Venom
+
+Combat depth pass: elemental hits now leave marks (`types.ts` `Ailment`).
+
+- **Burn** (fire): 6% max-HP damage at end of each round, min 3. **Chill**
+  (ice): initiative ×0.55 and −25% damage dealt. **Venom** (enemy bites):
+  5% max-HP per round, min 2. All tick down at end of round; DoT deaths
+  end battles properly (victory *and* wipe). Ailments never leave battle:
+  cleared on win/flee (engine) and in `restoreParty()`.
+- **Sources**: Ember/Emberstorm burn (35%/25%), Rime/Blizzard chill
+  (35%/25%) — symmetric, enemy casters inflict them on heroes too. Enemy
+  `attackInflict`: wolves/alpha/crawler venom, Ember Hound + Ashbrand burn,
+  Tide Warden + Keep Sentinel chill.
+- **New boons**: Cleansing Light (heals also cure), Kindling Soul (fire
+  always burns), Winter's Grasp (ice always chills), Smoldering Ruin
+  (enemy DoT ×2). Hooks: `sureInflict`, `dotMult`, `healsCure`.
+- **Fairer AI**: enemies now target the weakest hero only 60% of the time
+  (was 100% — pure focus fire made protecting a wounded member impossible).
+- **UI** (`BattleScene`): colored B/C/V badges left of enemy HP bars and in
+  party rows, "BURNING!/CHILLED!/POISONED!" stamps + tint flash on apply,
+  floating numbers on DoT ticks.
+- **Engine smoke tests**: scratchpad script bundles `src/game` with esbuild
+  (`--alias:@src=...` + localStorage stub) and drives real `Battle` rounds in
+  Node — 11 assertions covering apply/tick/expiry/initiative/cleanse/DoT-win.
+
 ## 2026-07-04: Art Overhaul — Sprites & Tiles Redrawn
 
 - **Sprites** (`src/art/spriteData.ts`, new): all figures redrawn with a richer

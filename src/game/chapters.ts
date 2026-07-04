@@ -29,6 +29,7 @@ function shadowWolf(id: string): Combatant {
     id, name: 'Shadow Wolf', side: 'enemy',
     spriteKey: 'e_ghoul', color: 0x334466, size: 24,
     spells: [], goldReward: 8, xpReward: 10,
+    attackInflict: { ailment: 'venom', chance: 0.2, rounds: 2 },
     stats: s(30, 11, 10, 5, 1),
   }, ['phys', 'fire'], 1);
 }
@@ -56,6 +57,7 @@ function alphaWolf(): Combatant {
     id: 'elite0', name: 'Alpha Shade Wolf', side: 'enemy',
     spriteKey: 'e_ghoul', color: 0x1a2244, size: 30,
     spells: [], goldReward: 35, xpReward: 45, isElite: true,
+    attackInflict: { ailment: 'venom', chance: 0.35, rounds: 3 },
     stats: s(72, 14, 11, 7, 2),
   }, ['phys', 'fire'], 2);
 }
@@ -243,6 +245,7 @@ function tombCrawler(id: string): Combatant {
     id, name: 'Tomb Crawler', side: 'enemy',
     spriteKey: 'e_crawler', color: 0x6a4a2a, size: 28,
     spells: [], goldReward: 12, xpReward: 16,
+    attackInflict: { ailment: 'venom', chance: 0.3, rounds: 3 },
     stats: s(90, 14, 6, 15, 1),
   }, ['ice'], 2);
 }
@@ -262,6 +265,7 @@ function tideWarden(): Combatant {
     spriteKey: 'e_leviathan', color: 0x1a3a5a, size: 40,
     spells: ['frost', 'cure'], goldReward: 80, xpReward: 140,
     isBoss: true,
+    attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
     stats: s(460, 20, 10, 16, 20, 60),
   }, ['fire', 'holy'], 3);
 }
@@ -357,6 +361,7 @@ function emberHound(id: string): Combatant {
     id, name: 'Ember Hound', side: 'enemy',
     spriteKey: 'e_ember', color: 0xcc4411, size: 22,
     spells: ['fire'], goldReward: 18, xpReward: 24,
+    attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
     stats: s(70, 17, 16, 8, 10, 16),
   }, ['ice'], 1);
 }
@@ -394,6 +399,7 @@ function ashbrand(): Combatant {
     spriteKey: 'e_leviathan', color: 0x881100, size: 42,
     spells: ['fire', 'smite'], goldReward: 100, xpReward: 180,
     isBoss: true,
+    attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
     stats: s(620, 24, 12, 18, 26, 80),
   }, ['ice'], 4);
 }

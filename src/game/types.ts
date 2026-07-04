@@ -4,6 +4,19 @@
 export type Side = 'party' | 'enemy';
 export type Element = 'phys' | 'fire' | 'ice' | 'holy' | 'none';
 
+// Status ailments. All tick down at the end of each round:
+//   burn  - fire DoT (6% of max HP per round)
+//   chill - initiative halved and -25% damage dealt
+//   venom - poison DoT (5% of max HP per round)
+export type Ailment = 'burn' | 'chill' | 'venom';
+
+/** Chance-based ailment application, used by spells and enemy attacks. */
+export interface Inflict {
+  ailment: Ailment;
+  chance: number; // 0..1
+  rounds: number;
+}
+
 export interface Stats {
   maxHp: number;
   hp: number;
@@ -24,6 +37,7 @@ export interface Spell {
   element: Element;
   target: 'enemy' | 'ally' | 'all-enemies' | 'party';
   guardHit?: number; // extra guard chip even without hitting a weakness
+  inflict?: Inflict; // chance to apply an ailment to damaged targets
   desc?: string;
 }
 
@@ -61,6 +75,10 @@ export interface Combatant {
   brokenRound?: number; // battle round the break happened; recovers end of next round
   // Telegraphed intent for the coming round (enemies):
   intent?: Command;
+  // Status ailments: rounds remaining per ailment. Cleared out of battle.
+  ailments?: Partial<Record<Ailment, number>>;
+  // Enemies only: basic attacks may inflict an ailment (e.g. crawler venom).
+  attackInflict?: Inflict;
   // Progression (party only):
   level?: number;
   xp?: number;
@@ -89,7 +107,9 @@ export type EventKind =
   | 'info'
   | 'phase'
   | 'break'
-  | 'recover';
+  | 'recover'
+  | 'ailment' // an ailment was applied
+  | 'dot'; // end-of-round burn/venom damage tick
 
 /** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {
@@ -101,6 +121,7 @@ export interface BattleEvent {
   element?: string; // for spell visual effects
   crit?: boolean; // critical hit
   weak?: boolean; // hit a weakness
+  ailment?: Ailment; // for 'ailment'/'dot' events: which status is involved
 }
 
 export type BattlePhase = 'input' | 'resolving' | 'won' | 'lost' | 'fled';
