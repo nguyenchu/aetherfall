@@ -1,6 +1,34 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-03.
+> Paste this into a new session to continue the work. Last updated: 2026-07-04.
+
+## 2026-07-04: Art Overhaul — Sprites & Tiles Redrawn
+
+- **Sprites** (`src/art/spriteData.ts`, new): all figures redrawn with a richer
+  palette (highlights + shadows, top-left light). Hero got hair/belt/boots and
+  visible hands; Kael a crested helm + sword; Lyra a star-tipped hat + staff
+  orb; Mira a gold hood + mace; enemies got glowing eyes, fangs, flame manes,
+  fins, sigils. Pixel data now lives in `spriteData.ts` (pure data, no Phaser)
+  so Node tooling can render it; `sprites.ts` keeps `buildCharacterSprites()`
+  and exports `paintPixelGrid()` (shared pixel-grid → texture painter).
+- **Tiles** (`src/art/tiles.ts`, new): pure, deterministic (seeded mulberry32)
+  16×16 painters — `cobbleFloor` (flagstones), `stoneWall` (brick masonry,
+  optional algae), `foliageWall`, `basaltWall` (optional ember crack),
+  `themeFloor` (per-theme flecks), `aetherGlow` (radial portal glow,
+  transparent corners, tint-friendly bright core). `themeWall()` dispatches on
+  theme id: forest→foliage, ashen→basalt, default→masonry (future strata safe).
+- **Variants**: floors/walls generate 2–3 seeded variants per type, picked per
+  map cell via `tileVariant(col,row,n)` hash — kills visible repetition.
+  BootScene now paints `floor_0/1`, `floorAlt_0/1`, `wall`, `aether`;
+  DescentScene paints `th_{floor,floorAlt,wall}_{themeId}_{0..2}`.
+- **Preview tooling** (session scratchpad, not committed): Node scripts render
+  spriteData/tiles to PNG sheets via a minimal PNG encoder — re-create by
+  importing `spriteData.ts`/`tiles.ts` directly (Node 26 runs TS natively).
+  Verified in-game via CDP-driven headless Chrome (dev server + synthetic
+  arrow keys until a random battle triggered); no console errors.
+- Known content quirk (pre-existing): several enemies share sprites — e.g.
+  "Shadow Wolf" renders the `e_ghoul` texture; the per-enemy `color` field in
+  chapters.ts is only a fallback when the texture is missing.
 
 ## 2026-07-03: Gameplay Overhaul — "Make It Fun"
 

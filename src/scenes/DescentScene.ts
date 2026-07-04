@@ -7,6 +7,8 @@ import { input, attachTouchControls } from '../game/input';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { markSeen } from '../game/dialogue';
+import { paintPixelGrid } from '../art/sprites';
+import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
@@ -104,36 +106,12 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private buildThemeTiles(theme: AreaTheme) {
-    const t = GAME.tile;
-    const mk = (key: string, base: number, accent: number, noiseChance: number) => {
-      if (this.textures.exists(key)) return;
-      const g = this.add.graphics();
-      const r = (base >> 16) & 0xff, gr = (base >> 8) & 0xff, b = base & 0xff;
-      g.fillStyle(base, 1);
-      g.fillRect(0, 0, t, t);
-      // Subtle pixel noise for texture
-      for (let px = 0; px < t; px++) {
-        for (let py = 0; py < t; py++) {
-          if (Math.random() < noiseChance) {
-            const dark = Math.random() < 0.6;
-            const nr = Math.min(255, Math.max(0, r + (dark ? -18 : 14)));
-            const ng = Math.min(255, Math.max(0, gr + (dark ? -18 : 14)));
-            const nb = Math.min(255, Math.max(0, b + (dark ? -18 : 14)));
-            g.fillStyle((nr << 16) | (ng << 8) | nb, 1);
-            g.fillRect(px, py, 1, 1);
-          }
-        }
-      }
-      // Subtle edge lines for depth
-      g.lineStyle(1, accent, 0.08);
-      if (Math.random() < 0.3) g.strokeRect(0.5, 0.5, t - 1, t - 1);
-      g.generateTexture(key, t, t);
-      this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
-      g.destroy();
-    };
-    mk(`th_floor_${theme.id}`, theme.floor, theme.accent, 0.12);
-    mk(`th_floorAlt_${theme.id}`, theme.floorAlt, theme.accent, 0.10);
-    mk(`th_wall_${theme.id}`, theme.wall, theme.accent, 0.18);
+    // Three variants per tile type, picked per map cell via tileVariant().
+    for (let v = 0; v < 3; v++) {
+      paintPixelGrid(this, `th_floor_${theme.id}_${v}`, themeFloor(theme.floor, theme.accent, theme.id, 20 + v));
+      paintPixelGrid(this, `th_floorAlt_${theme.id}_${v}`, themeFloor(theme.floorAlt, theme.accent, theme.id, 30 + v));
+      paintPixelGrid(this, `th_wall_${theme.id}_${v}`, themeWall(theme, v));
+    }
   }
 
   /** One-time textures for chests and springs. */
@@ -191,7 +169,8 @@ export class DescentScene extends Phaser.Scene {
         const ch = this.map[r][c];
         const isWall = ch === '#';
         const tid = this.currentThemeId;
-        const texKey = isWall ? `th_wall_${tid}` : (r + c) % 2 === 0 ? `th_floor_${tid}` : `th_floorAlt_${tid}`;
+        const base = isWall ? 'th_wall' : (r + c) % 2 === 0 ? 'th_floor' : 'th_floorAlt';
+        const texKey = `${base}_${tid}_${tileVariant(c, r, 3)}`;
         this.add.image(c * GAME.tile, r * GAME.tile, texKey).setOrigin(0, 0).setDepth(0);
 
         if (ch === 'P') { this.px = c; this.py = r; }

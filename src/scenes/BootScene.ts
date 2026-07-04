@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { GAME, COLORS } from '../config';
-import { buildCharacterSprites } from '../art/sprites';
+import { COLORS } from '../config';
+import { buildCharacterSprites, paintPixelGrid } from '../art/sprites';
+import { cobbleFloor, stoneWall, aetherGlow } from '../art/tiles';
 import { ITEMS } from '../game/content';
 import { EQUIPMENT } from '../game/equipment';
 import kaelPortraitUrl from '../assets/portraits/kael.png';
@@ -23,10 +24,13 @@ export class BootScene extends Phaser.Scene {
   }
 
   create() {
-    this.makeTile('floor', COLORS.floor);
-    this.makeTile('floorAlt', COLORS.floorAlt);
-    this.makeTile('wall', COLORS.wall);
-    this.makeTile('aether', COLORS.aether);
+    // Sanctuary tiles: flagstone floors (two variants each), brick wall, portal glow.
+    paintPixelGrid(this, 'floor_0', cobbleFloor(COLORS.floor, 11));
+    paintPixelGrid(this, 'floor_1', cobbleFloor(COLORS.floor, 12));
+    paintPixelGrid(this, 'floorAlt_0', cobbleFloor(COLORS.floorAlt, 13));
+    paintPixelGrid(this, 'floorAlt_1', cobbleFloor(COLORS.floorAlt, 14));
+    paintPixelGrid(this, 'wall', stoneWall(COLORS.wall, 15));
+    paintPixelGrid(this, 'aether', aetherGlow());
 
     // Pixel sprites for the hero, party, and enemies.
     buildCharacterSprites(this);
@@ -34,16 +38,6 @@ export class BootScene extends Phaser.Scene {
     this.buildEquipmentIcons();
 
     this.scene.start('Intro');
-  }
-
-  private makeTile(key: string, color: number) {
-    const t = GAME.tile;
-    const g = this.add.graphics();
-    g.fillStyle(color, 1);
-    g.fillRect(0, 0, t, t);
-    g.generateTexture(key, t, t);
-    this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
-    g.destroy();
   }
 
   private buildItemIcons() {

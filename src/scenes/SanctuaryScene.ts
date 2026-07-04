@@ -20,6 +20,7 @@ import {
   setFlag,
 } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
+import { tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
@@ -151,7 +152,8 @@ export class SanctuaryScene extends Phaser.Scene {
         if (ch === '#') {
           this.add.image(x, y, 'wall').setOrigin(0, 0);
         } else {
-          this.add.image(x, y, (r + c) % 2 === 0 ? 'floor' : 'floorAlt').setOrigin(0, 0);
+          const base = (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
+          this.add.image(x, y, `${base}_${tileVariant(c, r, 2)}`).setOrigin(0, 0);
         }
         if (ch === 'D') {
           this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85);
