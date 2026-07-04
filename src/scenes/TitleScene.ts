@@ -1,14 +1,29 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { music } from '../audio/music';
+import { input } from '../game/input';
+import { hasSave } from '../game/save';
+import { hardReset } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
+
+interface TitleOption {
+  text: Phaser.GameObjects.Text;
+  action: () => void;
+}
 
 /**
  * Title screen. Handles the first user interaction so audio can start,
- * then fades into Sanctuary.
+ * then shows Continue / New Game. New Game over an existing save asks
+ * for confirmation before erasing progress.
  */
 export class TitleScene extends Phaser.Scene {
   private ready = false;
+  private mode: 'prompt' | 'menu' | 'confirm' = 'prompt';
+  private options: TitleOption[] = [];
+  private index = 0;
+  private prompt?: Phaser.GameObjects.Text;
+  private menuBox?: Phaser.GameObjects.Container;
+  private unsubs: (() => void)[] = [];
 
   constructor() {
     super('Title');
@@ -17,6 +32,9 @@ export class TitleScene extends Phaser.Scene {
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.cameras.main.fadeIn(600, 7, 6, 14);
+    this.mode = 'prompt';
+    this.options = [];
+    this.unsubs = [];
 
     // Background
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0);
@@ -48,11 +66,11 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '11px', color: '#dfe4f5', align: 'center',
     })).setOrigin(0.5);
 
-    // Prompt — blinks
-    const prompt = this.add.text(GAME.width / 2, 290, 'Press any key or tap to begin', sharpText({
+    // Prompt — blinks until the first interaction, then becomes the menu
+    this.prompt = this.add.text(GAME.width / 2, 290, 'Press any key or tap to begin', sharpText({
       fontFamily: FONT, fontSize: '10px', color: '#6cf0c2',
     })).setOrigin(0.5);
-    this.tweens.add({ targets: prompt, alpha: { from: 1, to: 0.25 }, duration: 700, yoyo: true, repeat: -1 });
+    this.tweens.add({ targets: this.prompt, alpha: { from: 1, to: 0.25 }, duration: 700, yoyo: true, repeat: -1 });
 
     // Controls hint
     this.add.text(GAME.width / 2, 330, 'WASD / arrows  ·  Z confirm  ·  X cancel  ·  M mute', sharpText({
@@ -63,13 +81,92 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '7px', color: '#3a4060',
     })).setOrigin(0.5);
 
-    this.input.once('pointerdown', () => this.start());
-    this.input.keyboard?.once('keydown', () => this.start());
+    this.input.once('pointerdown', () => this.showMenu());
+    this.input.keyboard?.once('keydown', () => this.showMenu());
     this.time.delayedCall(400, () => { this.ready = true; });
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
   }
 
-  private start() {
-    if (!this.ready) return;
+  private showMenu() {
+    if (!this.ready || this.mode !== 'prompt') return;
+    this.mode = 'menu';
+    this.tweens.killTweensOf(this.prompt!);
+    this.prompt?.destroy();
+    this.buildMenu();
+    // Bind the menu input after this keydown has fully resolved so the
+    // opening keypress does not also activate the focused option.
+    this.time.delayedCall(80, () => {
+      if (!this.scene.isActive()) return;
+      this.unsubs.push(input.on('up', () => this.move(-1)));
+      this.unsubs.push(input.on('down', () => this.move(1)));
+      this.unsubs.push(input.on('confirm', () => this.options[this.index]?.action()));
+      this.unsubs.push(input.on('cancel', () => {
+        if (this.mode === 'confirm') this.buildMenu();
+      }));
+    });
+  }
+
+  private buildMenu() {
+    this.mode = 'menu';
+    const entries: Array<{ label: string; action: () => void }> = [];
+    if (hasSave()) {
+      entries.push({ label: 'Continue', action: () => this.begin(false) });
+      entries.push({ label: 'New Game', action: () => this.buildConfirm() });
+    } else {
+      entries.push({ label: 'New Game', action: () => this.begin(true) });
+    }
+    this.renderOptions(entries);
+  }
+
+  private buildConfirm() {
+    this.mode = 'confirm';
+    this.renderOptions([
+      { label: 'Keep my save', action: () => this.buildMenu() },
+      { label: 'Erase everything and start anew', action: () => this.begin(true) },
+    ], 'This deletes ALL progress: levels, gold and gear.');
+  }
+
+  private renderOptions(entries: Array<{ label: string; action: () => void }>, warning?: string) {
+    this.menuBox?.destroy();
+    this.options = [];
+    this.index = 0;
+    const box = this.add.container(0, 0);
+    this.menuBox = box;
+    if (warning) {
+      box.add(this.add.text(GAME.width / 2, 254, warning, sharpText({
+        fontFamily: FONT, fontSize: '9px', color: '#ff8a8a', align: 'center',
+      })).setOrigin(0.5));
+    }
+    entries.forEach((entry, i) => {
+      const text = this.add.text(GAME.width / 2, 278 + i * 20, entry.label, sharpText({
+        fontFamily: FONT, fontSize: '11px', color: '#dfe4f5',
+      })).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      text.on('pointerover', () => { this.index = i; this.updateFocus(); });
+      text.on('pointerdown', () => { this.index = i; this.updateFocus(); entry.action(); });
+      box.add(text);
+      this.options.push({ text, action: entry.action });
+    });
+    this.updateFocus();
+  }
+
+  private move(dir: number) {
+    if (this.options.length === 0) return;
+    this.index = (this.index + dir + this.options.length) % this.options.length;
+    this.updateFocus();
+  }
+
+  private updateFocus() {
+    this.options.forEach((option, i) => {
+      const focused = i === this.index;
+      option.text.setColor(focused ? '#6cf0c2' : '#dfe4f5');
+      option.text.setText(`${focused ? '> ' : ''}${option.text.text.replace(/^> /, '')}`);
+    });
+  }
+
+  private begin(reset: boolean) {
+    if (reset) hardReset();
+    this.unsubs.forEach((u) => u());
+    this.unsubs = [];
     music.play('sanctuary');
     this.cameras.main.fadeOut(400, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => {

@@ -63,6 +63,14 @@ export function writeSave(data: SaveData): void {
   }
 }
 
+export function hasSave(): boolean {
+  try {
+    return localStorage.getItem(KEY) != null;
+  } catch {
+    return false;
+  }
+}
+
 export function wipeSave(): void {
   try {
     localStorage.removeItem(KEY);

@@ -3,7 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { BOONS } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { EQUIPMENT, type EquipSlot } from '../game/equipment';
-import { castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentBonusText, equipmentPreviewStats, getRun, ownedEquipment, questList, rewardTextForQuest, useItemOn } from '../game/run';
+import { castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { xpForLevel } from '../game/progression';
 import { sharpText, FONT } from '../ui/text';
@@ -13,8 +13,8 @@ interface MenuData {
   caller: string;
 }
 
-type MenuTab = 'stats' | 'items' | 'magic' | 'equip' | 'quests';
-const TABS: MenuTab[] = ['stats', 'items', 'magic', 'equip', 'quests'];
+type MenuTab = 'stats' | 'items' | 'magic' | 'equip' | 'quests' | 'system';
+const TABS: MenuTab[] = ['stats', 'items', 'magic', 'equip', 'quests', 'system'];
 type MenuFocus = 'command' | 'content';
 
 interface Selectable {
@@ -38,7 +38,9 @@ export class GameMenuScene extends Phaser.Scene {
   private tabButtons = new Map<MenuTab, Selectable>();
   private memberIndex = 0;
   private equipSlot: EquipSlot = 'weapon';
-  private equipPreviewItemId?: string;
+  /** undefined = no preview (show equipped); null = previewing "None". */
+  private equipPreviewItemId?: string | null;
+  private resetArmed = false;
   private magicSpellId?: string;
   private menuNotice = '';
   private selectionAnchor?: { x: number; y: number };
@@ -111,6 +113,7 @@ export class GameMenuScene extends Phaser.Scene {
     else if (this.tab === 'items') this.renderItems(box);
     else if (this.tab === 'magic') this.renderMagic(box);
     else if (this.tab === 'equip') this.renderEquip(box);
+    else if (this.tab === 'system') this.renderSystem(box);
     else this.renderQuests(box);
     this.syncSelectionToFocus();
     this.selectionAnchor = undefined;
@@ -252,71 +255,151 @@ export class GameMenuScene extends Phaser.Scene {
       this.renderContent();
     });
 
+    // Left: the member's loadout — one row per slot.
+    box.add(this.add.text(46, 168, 'LOADOUT', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
     (['weapon', 'armor', 'charm'] as EquipSlot[]).forEach((slot, i) => {
-      const b = this.button(46 + i * 86, 174, 78, slot.toUpperCase(), () => {
-        this.equipSlot = slot;
-        this.equipPreviewItemId = undefined;
-        this.renderContent();
-      }, box, '8px');
-      b.chosen = slot === this.equipSlot;
-      b.onFocus = () => {
-        if (this.equipSlot === slot) return;
-        this.equipSlot = slot;
-        this.equipPreviewItemId = undefined;
-        this.renderContent();
+      const y = 180 + i * 30;
+      const id = eq[slot];
+      const name = id ? EQUIPMENT[id]?.name ?? id : '—';
+      const rect = this.add.rectangle(46, y, 178, 28, 0x141a30, 0.96)
+        .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
+        .setInteractive({ useHandCursor: true });
+      this.addIcon(box, id, 50, y + 3, 22);
+      box.add(this.add.text(78, y + 4, slot.toUpperCase(),
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setDepth(3));
+      const label = this.add.text(78, y + 13, name,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(3);
+      const selectable: Selectable = {
+        rect, label,
+        action: () => this.setEquipSlot(slot),
+        chosen: slot === this.equipSlot,
+        onFocus: () => { if (this.equipSlot !== slot) this.setEquipSlot(slot); },
       };
+      this.selectables.push(selectable);
+      rect.on('pointerdown', () => {
+        this.selected = this.selectables.indexOf(selectable);
+        this.focus = 'content';
+        this.updateSelection();
+        selectable.action();
+      });
+      box.add([rect, label]);
     });
 
-    box.add(this.add.text(46, 200, `${member.name}  ${this.roleFor(member.id)}`,
-      sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })));
-    box.add(this.add.text(54, 214, `HP ${member.stats.hp}/${member.stats.maxHp}  MP ${member.stats.mp}/${member.stats.maxMp}  STR ${member.stats.str}  VIT ${member.stats.vit}  AGI ${member.stats.agi}  INT ${member.stats.int}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
-
+    // Right: everything the member can put in the active slot.
+    box.add(this.add.text(236, 168, 'AVAILABLE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(310, 168, 'move: preview  ·  Z: equip', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })));
     const current = eq[this.equipSlot];
     const choices = ownedEquipment().filter((item) => item.slot === this.equipSlot && item.users.includes(member.id));
-    const currentName = current ? EQUIPMENT[current]?.name ?? current : 'None';
-    const previewId = this.equipPreviewItemId ?? current;
-    const previewItem = previewId ? EQUIPMENT[previewId] : undefined;
-    const previewStats = equipmentPreviewStats(member.id, this.equipSlot, previewId);
-
-    this.addIcon(box, current, 286, 174, 28);
-    box.add(this.add.text(322, 176, `${this.equipSlot.toUpperCase()}: ${currentName}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a58cff', strokeThickness: 2, wordWrap: { width: 136 } })));
-    box.add(this.add.text(322, 192, equipmentBonusText(current),
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 136 } })));
-    this.addIcon(box, previewId, 286, 218, 32);
-    box.add(this.add.text(326, 218, `Preview: ${previewItem?.name ?? 'None'}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#f0d36c', strokeThickness: 2, wordWrap: { width: 132 } })));
-    box.add(this.add.text(326, 235, previewItem?.trait ?? 'Unequipped',
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a8d8ff', strokeThickness: 2, wordWrap: { width: 132 } })));
-    box.add(this.add.text(326, 251, previewItem?.description ?? 'Leaves this slot empty.',
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 132 } })));
-    box.add(this.add.text(286, 286, previewStats ? this.statDeltaBlock(member, previewStats) : 'Cannot equip',
-      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#dfe4f5', strokeThickness: 2, lineSpacing: 2 })));
-
-    const allChoices: Array<{ id?: string; name: string; bonus: string }> = [
-      { id: undefined, name: 'None', bonus: equipmentBonusText(undefined) },
-      ...choices.map((item) => ({ id: item.id, name: item.name, bonus: equipmentBonusText(item.id) })),
+    const allChoices: Array<{ id?: string; name: string }> = [
+      { id: undefined, name: 'None' },
+      ...choices.map((item) => ({ id: item.id, name: item.name })),
     ];
     allChoices.forEach((item, i) => {
-      const y = 234 + i * 25;
+      const y = 180 + i * 24;
       const equipped = item.id === current || (!item.id && !current);
-      const previewed = item.id === previewId || (!item.id && !previewId);
-      const label = equipped ? `E ${item.name}` : previewed ? `> ${item.name}` : item.name;
-      this.addIcon(box, item.id, 54, y - 1, 22);
-      const b = this.button(84, y, 104, label, () => {
-        equipItem(member.id, this.equipSlot, item.id);
-        this.equipPreviewItemId = item.id;
+      this.addIcon(box, item.id, 240, y + 1, 18);
+      const b = this.button(262, y, 194, item.name, () => {
+        if (equipItem(member.id, this.equipSlot, item.id)) {
+          this.menuNotice = `${member.name} equips ${item.id ? EQUIPMENT[item.id]?.name : 'nothing'}.`;
+        }
+        this.equipPreviewItemId = item.id ?? null;
         this.renderContent();
       }, box, '8px');
-      b.chosen = equipped || previewed;
+      b.chosen = equipped;
       b.onFocus = () => {
-        if (this.equipPreviewItemId === item.id) return;
-        this.equipPreviewItemId = item.id;
+        const previewValue = item.id ?? null;
+        if (this.equipPreviewItemId === previewValue) return;
+        this.equipPreviewItemId = previewValue;
         this.renderContent();
       };
-      box.add(this.add.text(198, y + 4, item.bonus, sharpText({ fontFamily: FONT, fontSize: '8px', color: equipped ? '#f0d36c' : previewed ? '#a8d8ff' : '#c9cee8', strokeThickness: 2, wordWrap: { width: 78 } })));
+      box.add(this.add.text(352, y + 6, this.shortBonus(item.id),
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: equipped ? '#f0d36c' : '#9aa4c8', strokeThickness: 2 })).setDepth(3));
+      if (equipped) {
+        box.add(this.add.text(432, y + 6, 'ON',
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
+      }
     });
+
+    // Bottom: one comparison panel — item info left, stat changes right.
+    const previewId = this.equipPreviewItemId === undefined ? current : this.equipPreviewItemId ?? undefined;
+    const previewItem = previewId ? EQUIPMENT[previewId] : undefined;
+    const previewStats = equipmentPreviewStats(member.id, this.equipSlot, previewId);
+    box.add(this.add.rectangle(42, 272, 414, 48, 0x101d3f, 0.92)
+      .setOrigin(0, 0).setStrokeStyle(1, 0x5067b0, 0.5).setDepth(2));
+    this.addIcon(box, previewId, 46, 276, 20);
+    box.add(this.add.text(72, 276, previewItem ? `${previewItem.name} — ${previewItem.trait}` : 'Empty slot',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
+    box.add(this.add.text(72, 288, previewItem?.description ?? 'No equipment in this slot.',
+      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, lineSpacing: 2, wordWrap: { width: 200 } })).setDepth(3));
+    if (!previewStats) {
+      box.add(this.add.text(288, 288, `${member.name} cannot equip this`,
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#ff8a8a', strokeThickness: 2 })).setDepth(3));
+    } else {
+      (['maxHp', 'maxMp', 'str', 'vit', 'agi', 'int'] as Array<keyof Stats>).forEach((stat, i) => {
+        const cur = member.stats[stat];
+        const next = previewStats[stat] ?? cur;
+        const delta = next - cur;
+        const color = delta > 0 ? '#7df0a0' : delta < 0 ? '#ff8a8a' : '#7a84a8';
+        const text = delta === 0 ? `${SHORT_STAT[stat]} ${cur}` : `${SHORT_STAT[stat]} ${cur}>${next}`;
+        box.add(this.add.text(288 + (i % 3) * 58, 278 + Math.floor(i / 3) * 16, text,
+          sharpText({ fontFamily: FONT, fontSize: '8px', color, strokeThickness: 2 })).setDepth(3));
+      });
+    }
+  }
+
+  private setEquipSlot(slot: EquipSlot) {
+    this.equipSlot = slot;
+    this.equipPreviewItemId = undefined;
+    this.renderContent();
+  }
+
+  private shortBonus(id?: string): string {
+    if (!id) return 'no bonus';
+    const item = EQUIPMENT[id];
+    if (!item) return '';
+    return Object.entries(item.bonus)
+      .filter(([, value]) => value)
+      .map(([key, value]) => `+${value} ${SHORT_STAT[key] ?? key.toUpperCase()}`)
+      .join(' ');
+  }
+
+  private renderSystem(box: Phaser.GameObjects.Container) {
+    const run = getRun();
+    box.add(this.add.text(46, 96, 'Progress is saved automatically after battles,\npurchases and equipment changes.',
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8', strokeThickness: 2, lineSpacing: 4 })));
+    box.add(this.add.text(46, 132, `Party   ${run.party.map((m) => `${m.name} L${m.level ?? 1}`).join('   ')}`,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
+
+    this.button(46, 176, 200, 'Return to Title', () => this.quitToTitle(), box, '9px');
+    box.add(this.add.text(256, 180, 'Back to the title screen. Keeps your save.',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
+
+    const resetLabel = this.resetArmed ? 'CONFIRM: erase everything' : 'New Game (erase save)';
+    this.button(46, 208, 200, resetLabel, () => this.newGame(), box, '9px');
+    box.add(this.add.text(256, 212, this.resetArmed
+      ? 'Choosing again erases ALL progress!'
+      : 'Deletes levels, gold, gear and story.',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: this.resetArmed ? '#ff8a8a' : '#8a93b8', strokeThickness: 2 })));
+  }
+
+  private quitToTitle() {
+    if (this.caller === 'Descent') returnToTown(); // the Crystal draws the party home
+    input.releaseAll();
+    this.scene.stop(this.caller);
+    this.scene.start('Title');
+  }
+
+  private newGame() {
+    if (!this.resetArmed) {
+      this.resetArmed = true;
+      this.menuNotice = 'This erases ALL progress. Choose again to confirm.';
+      this.renderContent();
+      return;
+    }
+    hardReset();
+    input.releaseAll();
+    this.scene.stop(this.caller);
+    this.scene.start('Title');
   }
 
   private renderQuests(box: Phaser.GameObjects.Container) {
@@ -471,6 +554,7 @@ export class GameMenuScene extends Phaser.Scene {
     this.selectionAnchor = undefined;
     if (tab !== 'magic') this.magicSpellId = undefined;
     if (tab !== 'equip') this.equipPreviewItemId = undefined;
+    if (tab !== 'system') this.resetArmed = false;
     if (tab === 'magic') this.ensureMagicMember();
     this.renderContent();
   }
@@ -662,18 +746,6 @@ export class GameMenuScene extends Phaser.Scene {
     return `PWR ${power}  GUARD ${guard}  MAG ${magic}  RES ${resist}  HEAL ${heal}  TURN ${member.stats.agi}+d3`;
   }
 
-  private statDeltaBlock(member: Combatant, preview: Partial<Stats>): string {
-    const stats: Array<keyof Stats> = ['maxHp', 'maxMp', 'str', 'vit', 'agi', 'int'];
-    const lines = stats.map((stat) => {
-      const cur = member.stats[stat];
-      const next = preview[stat] ?? cur;
-      const delta = next - cur;
-      const sign = delta > 0 ? '+' : '';
-      return `${stat.toUpperCase()} ${cur}->${next} (${sign}${delta})`;
-    });
-    return [`${lines[0]}  ${lines[1]}`, `${lines[2]}  ${lines[3]}`, `${lines[4]}  ${lines[5]}`].join('\n');
-  }
-
   private equipmentLine(memberId: string): string {
     const eq = equippedFor(memberId);
     const name = (id?: string) => id ? EQUIPMENT[id]?.name ?? '-' : '-';
@@ -697,3 +769,7 @@ export class GameMenuScene extends Phaser.Scene {
 function title(tab: MenuTab): string {
   return tab[0].toUpperCase() + tab.slice(1);
 }
+
+const SHORT_STAT: Record<string, string> = {
+  maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT',
+};
