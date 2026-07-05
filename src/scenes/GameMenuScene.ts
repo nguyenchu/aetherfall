@@ -16,6 +16,8 @@ interface MenuData {
 type MenuTab = 'stats' | 'items' | 'magic' | 'equip' | 'quests' | 'system';
 const TABS: MenuTab[] = ['stats', 'items', 'magic', 'equip', 'quests', 'system'];
 type MenuFocus = 'command' | 'content';
+type EquipColumn = 'slot' | 'items';
+type EquipSelectableKind = 'member' | 'slot' | 'item';
 
 interface Selectable {
   rect: Phaser.GameObjects.Rectangle;
@@ -25,6 +27,9 @@ interface Selectable {
   chosen?: boolean;
   disabled?: boolean;
   onFocus?: () => void;
+  equipKind?: EquipSelectableKind;
+  equipSlot?: EquipSlot;
+  equipItemId?: string | null;
 }
 
 export class GameMenuScene extends Phaser.Scene {
@@ -38,6 +43,8 @@ export class GameMenuScene extends Phaser.Scene {
   private tabButtons = new Map<MenuTab, Selectable>();
   private memberIndex = 0;
   private equipSlot: EquipSlot = 'weapon';
+  private equipColumn: EquipColumn = 'items';
+  private equipLastItemBySlot: Partial<Record<EquipSlot, string | null>> = {};
   /** undefined = no preview (show equipped); null = previewing "None". */
   private equipPreviewItemId?: string | null;
   private resetArmed = false;
@@ -326,12 +333,15 @@ export class GameMenuScene extends Phaser.Scene {
     const member = this.selectedMember();
     const eq = equippedFor(member.id);
 
-    this.renderPartyPortraits(box, 78, (i) => {
+    const portraits = this.renderPartyPortraits(box, 78, (i) => {
       this.memberIndex = i;
       this.equipPreviewItemId = undefined;
+      this.equipLastItemBySlot = {};
+      this.equipColumn = 'items';
       this.menuNotice = '';
       this.renderContent();
     });
+    portraits.forEach((portrait) => { portrait.equipKind = 'member'; });
 
     // Left: the member's loadout — one row per slot.
     box.add(this.add.text(46, 168, 'LOADOUT', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
@@ -350,9 +360,13 @@ export class GameMenuScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(3);
       const selectable: Selectable = {
         rect, label,
-        action: () => this.setEquipSlot(slot),
+        action: () => this.setEquipSlot(slot, 'items'),
         chosen: slot === this.equipSlot,
-        onFocus: () => { if (this.equipSlot !== slot) this.setEquipSlot(slot); },
+        equipKind: 'slot',
+        equipSlot: slot,
+        onFocus: () => {
+          if (this.equipSlot !== slot || this.equipColumn !== 'slot') this.setEquipSlot(slot, 'slot');
+        },
       };
       this.selectables.push(selectable);
       rect.on('pointerdown', () => {
@@ -378,17 +392,22 @@ export class GameMenuScene extends Phaser.Scene {
       const equipped = item.id === current || (!item.id && !current);
       this.addIcon(box, item.id, 240, y + 1, 18);
       const b = this.button(262, y, 194, item.name, () => {
+        this.equipColumn = 'items';
+        this.rememberEquipPreview(item.id ?? null);
         if (equipItem(member.id, this.equipSlot, item.id)) {
           this.menuNotice = `${member.name} equips ${item.id ? EQUIPMENT[item.id]?.name : 'nothing'}.`;
         }
-        this.equipPreviewItemId = item.id ?? null;
         this.renderContent();
       }, box, '8px');
       b.chosen = equipped;
+      b.equipKind = 'item';
+      b.equipSlot = this.equipSlot;
+      b.equipItemId = item.id ?? null;
       b.onFocus = () => {
         const previewValue = item.id ?? null;
         if (this.equipPreviewItemId === previewValue) return;
-        this.equipPreviewItemId = previewValue;
+        this.equipColumn = 'items';
+        this.rememberEquipPreview(previewValue);
         this.renderContent();
       };
       const hasEffects = item.id != null && (EQUIPMENT[item.id]?.effects != null);
@@ -433,10 +452,21 @@ export class GameMenuScene extends Phaser.Scene {
     }
   }
 
-  private setEquipSlot(slot: EquipSlot) {
+  private setEquipSlot(slot: EquipSlot, column: EquipColumn = this.equipColumn) {
+    const slotChanged = this.equipSlot !== slot;
+    const columnChanged = this.equipColumn !== column;
     this.equipSlot = slot;
-    this.equipPreviewItemId = undefined;
-    this.renderContent();
+    this.equipColumn = column;
+    if (slotChanged) {
+      const rememberedPreview = this.equipLastItemBySlot[slot];
+      this.equipPreviewItemId = rememberedPreview === undefined ? undefined : rememberedPreview;
+    }
+    if (slotChanged || columnChanged) this.renderContent();
+  }
+
+  private rememberEquipPreview(itemId: string | null) {
+    this.equipPreviewItemId = itemId;
+    this.equipLastItemBySlot[this.equipSlot] = itemId;
   }
 
   private shortBonus(id?: string): string {
@@ -531,15 +561,15 @@ export class GameMenuScene extends Phaser.Scene {
     parent.add(icon);
   }
 
-  private renderPartyPortraits(box: Phaser.GameObjects.Container, y: number, onChoose: (index: number) => void) {
+  private renderPartyPortraits(box: Phaser.GameObjects.Container, y: number, onChoose: (index: number) => void): Selectable[] {
     const run = getRun();
     this.memberIndex = Phaser.Math.Clamp(this.memberIndex, 0, run.party.length - 1);
-    run.party.forEach((member, i) => {
+    return run.party.map((member, i) => (
       this.portraitButton(box, member, 46 + i * 132, y, 112, 84, i === this.memberIndex, () => onChoose(i), 'large', () => {
         if (this.memberIndex === i) return;
         onChoose(i);
-      });
-    });
+      })
+    ));
   }
 
   private portraitButton(
@@ -639,7 +669,12 @@ export class GameMenuScene extends Phaser.Scene {
     this.menuNotice = '';
     this.selectionAnchor = undefined;
     if (tab !== 'magic') this.magicSpellId = undefined;
-    if (tab !== 'equip') this.equipPreviewItemId = undefined;
+    if (tab !== 'equip') {
+      this.equipPreviewItemId = undefined;
+      this.equipLastItemBySlot = {};
+    } else {
+      this.equipColumn = 'items';
+    }
     if (tab !== 'system') this.resetArmed = false;
     if (tab === 'magic') this.ensureMagicMember();
     this.renderContent();
@@ -663,6 +698,7 @@ export class GameMenuScene extends Phaser.Scene {
       this.changeTab(dir);
       return;
     }
+    if (this.tab === 'equip' && this.moveEquipVertical(dir)) return;
     this.moveSpatial(0, dir);
   }
 
@@ -673,8 +709,50 @@ export class GameMenuScene extends Phaser.Scene {
       if (dir < 0) this.enterContent();
       return;
     }
+    if (this.tab === 'equip' && this.moveEquipHorizontal(dir)) return;
     const moved = this.moveSpatial(dir, 0);
     if (!moved && dir > 0) this.focusCommand();
+  }
+
+  private moveEquipVertical(dir: number): boolean {
+    const current = this.selectables[this.selected];
+    if (current?.equipKind !== 'slot' && current?.equipKind !== 'item') return false;
+    const kind = current.equipKind;
+    const peers = this.contentSelectables().filter((option) => {
+      if (kind === 'slot') return option.equipKind === 'slot';
+      return option.equipKind === 'item' && option.equipSlot === this.equipSlot;
+    });
+    if (peers.length === 0) return true;
+    const currentPeer = peers.includes(current) ? current : peers[0];
+    const nextIndex = Phaser.Math.Clamp(peers.indexOf(currentPeer) + dir, 0, peers.length - 1);
+    const next = peers[nextIndex];
+    if (!next || next === currentPeer) return true;
+    this.equipColumn = kind === 'slot' ? 'slot' : 'items';
+    this.selectSelectable(next, true);
+    return true;
+  }
+
+  private moveEquipHorizontal(dir: number): boolean {
+    const current = this.selectables[this.selected];
+    if (current?.equipKind === 'slot' && dir > 0) {
+      this.equipColumn = 'items';
+      const target = this.equipItemTarget(this.contentSelectables());
+      if (target) this.selectSelectable(target, false);
+      return true;
+    }
+    if (current?.equipKind === 'item') {
+      if (dir < 0) {
+        this.equipColumn = 'slot';
+        const target = this.equipSlotTarget(this.contentSelectables());
+        if (target) this.selectSelectable(target, false);
+        return true;
+      }
+      if (dir > 0) {
+        this.focusCommand();
+        return true;
+      }
+    }
+    return false;
   }
 
   private moveSpatial(dx: number, dy: number): boolean {
@@ -763,7 +841,36 @@ export class GameMenuScene extends Phaser.Scene {
         .map((option) => ({ option, score: Phaser.Math.Distance.Between(this.selectionAnchor!.x, this.selectionAnchor!.y, this.centerOf(option).x, this.centerOf(option).y) }))
         .sort((a, b) => a.score - b.score)[0]?.option;
     }
+    if (this.tab === 'equip') {
+      const target = this.preferredEquipTarget(options);
+      if (target) return target;
+    }
     return options.find((s) => s.chosen) ?? options[0];
+  }
+
+  private preferredEquipTarget(options: Selectable[]): Selectable | undefined {
+    if (this.equipColumn === 'items') {
+      return this.equipItemTarget(options) ?? this.equipSlotTarget(options);
+    }
+    return this.equipSlotTarget(options) ?? this.equipItemTarget(options);
+  }
+
+  private equipSlotTarget(options: Selectable[]): Selectable | undefined {
+    return options.find((option) => option.equipKind === 'slot' && option.equipSlot === this.equipSlot);
+  }
+
+  private equipItemTarget(options: Selectable[]): Selectable | undefined {
+    const current = equippedFor(this.selectedMember().id)[this.equipSlot] ?? null;
+    const preview = this.equipPreviewItemId === undefined ? current : this.equipPreviewItemId;
+    return options.find((option) => (
+      option.equipKind === 'item' &&
+      option.equipSlot === this.equipSlot &&
+      option.equipItemId === preview
+    )) ?? options.find((option) => (
+      option.equipKind === 'item' &&
+      option.equipSlot === this.equipSlot &&
+      option.chosen
+    )) ?? options.find((option) => option.equipKind === 'item' && option.equipSlot === this.equipSlot);
   }
 
   private focusCommand() {
