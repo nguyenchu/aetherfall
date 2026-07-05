@@ -2,6 +2,41 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-04.
 
+## 2026-07-05: Menu System — Restart Paths + Intuitive Equip
+
+- **Title menu** (`TitleScene`): first input now opens Continue / New Game
+  (Continue only when `hasSave()`, new helper in `save.ts`). New Game over an
+  existing save shows an inline confirm ("Keep my save" is the default).
+  Menu input binds 80 ms after reveal so the opening keypress can't also
+  activate an option.
+- **System tab** (`GameMenuScene`): new 6th tab with "Return to Title" (keeps
+  save; calls `returnToTown()` first when opened from Descent — the Crystal
+  fiction) and "New Game (erase save)" with a two-step arm/confirm
+  (`resetArmed`, disarmed on tab switch) that calls `hardReset()`.
+- **Equip tab redesigned**: LOADOUT column (3 slot rows: icon + slot caption +
+  equipped name; focusing a row switches slot) · AVAILABLE list (icon, name,
+  short bonus, gold "ON" tag on the equipped item; focus previews, Z equips,
+  equipping sets a menuNotice) · one comparison panel at the bottom (item
+  name/trait/description left; all six stats right with green/red `cur>next`
+  deltas via `SHORT_STAT`). Replaced the old scattered three-panel layout and
+  the cryptic `E`/`>` prefixes. `equipPreviewItemId` is now
+  `string | null | undefined` — null means "previewing None", undefined means
+  no preview (the old code couldn't preview unequipping).
+- **Stats tab redesigned**: two-column panel — left: name/level/role, HP/MP/XP
+  gauges (`vitalBar()` helper; XP reads "N XP to Lv X"), attribute line, and a
+  magic/skills line that falls back to the next learnset unlock ("Learns Crush
+  at Lv 2") when the member knows nothing yet; right: COMBAT column via
+  `derivedStats()` (six battle-formula values, each with a plain-language
+  caption like "damage reduction" — mirrors battle.ts formulas, keep in sync).
+  Below: equipment strip (three icon cells with slot caption + compact gold
+  bonus) and run boons as chips (overflow collapses to "+N more"). Replaced
+  the old text-wall (`battleStatsLine`/`equipmentLine` deleted).
+- **Phaser gotcha**: container children render in add-order (child depth is
+  ignored inside a container) — row background rects must be added to the
+  container before icons/captions or they occlude them at fill alpha 1.
+- Verified via CDP headless-Chrome driver (title menu, confirm dialog, equip
+  preview with red deltas, system tab); tsc clean, no console errors.
+
 ## 2026-07-04: Status Ailments — Burn / Chill / Venom
 
 Combat depth pass: elemental hits now leave marks (`types.ts` `Ailment`).

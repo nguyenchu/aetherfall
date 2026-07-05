@@ -122,35 +122,113 @@ export class GameMenuScene extends Phaser.Scene {
 
   private renderStats(box: Phaser.GameObjects.Container) {
     const member = this.selectedMember();
-    const xpNeed = xpForLevel(member.level ?? 1);
     this.renderPartyPortraits(box, 78, (i) => {
       this.memberIndex = i;
       this.menuNotice = '';
       this.renderContent();
     });
 
-    const panel = this.add.rectangle(42, 178, 414, 130, 0x101d3f, 0.92)
+    const panel = this.add.rectangle(42, 170, 414, 116, 0x101d3f, 0.92)
       .setOrigin(0, 0)
       .setStrokeStyle(1, 0x5067b0, 0.72);
     box.add(panel);
-    box.add(this.add.text(58, 192, `${member.name}  Lv ${member.level ?? 1}  ${this.roleFor(member.id)}`,
-      sharpText({ fontFamily: FONT, fontSize: '12px', color: '#f0d36c', strokeThickness: 2 })));
-    box.add(this.add.text(58, 212, `HP ${member.stats.hp}/${member.stats.maxHp}    MP ${member.stats.mp}/${member.stats.maxMp}    XP ${member.xp ?? 0}/${xpNeed}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
-    box.add(this.add.text(58, 232, `STR ${member.stats.str}  VIT ${member.stats.vit}  AGI ${member.stats.agi}  INT ${member.stats.int}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8', strokeThickness: 2 })));
-    box.add(this.add.text(58, 250, this.battleStatsLine(member),
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a8d8ff', strokeThickness: 2, wordWrap: { width: 380 } })));
-    box.add(this.add.text(58, 270, this.equipmentLine(member.id),
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 380 } })));
-    box.add(this.add.text(58, 288, this.spellLine(member),
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2, wordWrap: { width: 380 } })));
+    box.add(this.add.rectangle(258, 180, 1, 96, 0x5067b0, 0.4).setOrigin(0, 0));
 
+    // Left column: identity, vitals with bars, attributes, magic.
+    box.add(this.add.text(58, 178, `${member.name}  Lv ${member.level ?? 1}  ${this.roleFor(member.id)}`,
+      sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2 })));
+    const level = member.level ?? 1;
+    const xp = member.xp ?? 0;
+    const xpNeed = xpForLevel(level);
+    this.vitalBar(box, 58, 198, 'HP', member.stats.hp, member.stats.maxHp, 0x6cf0c2);
+    this.vitalBar(box, 58, 214, 'MP', member.stats.mp, member.stats.maxMp, 0x8a6cf0);
+    this.vitalBar(box, 58, 230, 'XP', xp, xpNeed, 0xf0d36c, `${xpNeed - xp} XP to Lv ${level + 1}`);
+    box.add(this.add.text(58, 248, `STR ${member.stats.str}   VIT ${member.stats.vit}   AGI ${member.stats.agi}   INT ${member.stats.int}`,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
+    box.add(this.add.text(58, 266, this.spellLine(member),
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2, wordWrap: { width: 192 } })));
+
+    // Right column: derived combat values with plain-language captions.
+    box.add(this.add.text(268, 178, 'COMBAT', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    this.derivedStats(member).forEach((entry, i) => {
+      const x = 268 + (i % 2) * 94;
+      const y = 192 + Math.floor(i / 2) * 30;
+      box.add(this.add.text(x, y, `${entry.label} ${entry.value}`,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a8d8ff', strokeThickness: 2 })));
+      box.add(this.add.text(x, y + 11, entry.hint,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7a84a8', strokeThickness: 2 })));
+    });
+
+    // Equipment strip: one cell per slot with icon, caption and bonus.
+    const eq = equippedFor(member.id);
+    (['weapon', 'armor', 'charm'] as EquipSlot[]).forEach((slot, i) => {
+      const x = 42 + i * 138;
+      box.add(this.add.rectangle(x, 290, 134, 28, 0x101d3f, 0.92)
+        .setOrigin(0, 0).setStrokeStyle(1, 0x5067b0, 0.5));
+      const id = eq[slot];
+      this.addIcon(box, id, x + 4, 293, 22);
+      box.add(this.add.text(x + 32, 293, slot.toUpperCase(),
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
+      if (id) {
+        const compact = this.shortBonus(id).replace(/\+(\d+) /g, '+$1');
+        box.add(this.add.text(x + 72, 293, compact,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })));
+      }
+      box.add(this.add.text(x + 32, 303, id ? EQUIPMENT[id]?.name ?? id : '—',
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5', strokeThickness: 2 })));
+    });
+
+    // Run boons as chips.
     const boons = getRun().boons.map((id) => BOONS[id]?.name).filter((n) => n != null);
-    box.add(this.add.text(42, 314, boons.length > 0
-      ? `Run boons: ${boons.join(', ')}`
-      : 'Run boons: none yet — win battles to earn blessings.',
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#b8a8f8', strokeThickness: 2, wordWrap: { width: 414 } })));
+    if (boons.length === 0) {
+      box.add(this.add.text(42, 323, 'Run boons: none yet — win battles to earn blessings.',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
+    } else {
+      box.add(this.add.text(42, 323, 'BOONS', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#a58cff', strokeThickness: 2 })));
+      let cx = 80;
+      for (let i = 0; i < boons.length; i++) {
+        const name = boons[i]!;
+        const w = 10 + name.length * 4;
+        if (cx + w > 430) {
+          box.add(this.add.text(cx, 323, `+${boons.length - i} more`,
+            sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
+          break;
+        }
+        box.add(this.add.rectangle(cx, 320, w, 13, 0x2a263a, 1).setOrigin(0, 0).setStrokeStyle(1, 0x8a6cf0, 0.6));
+        box.add(this.add.text(cx + 5, 323, name, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#b8a8f8', strokeThickness: 2 })));
+        cx += w + 5;
+      }
+    }
+  }
+
+  /** Small labeled bar: caption + numbers above a filled gauge. */
+  private vitalBar(
+    box: Phaser.GameObjects.Container,
+    x: number, y: number, label: string,
+    cur: number, max: number, color: number, note?: string,
+  ) {
+    box.add(this.add.text(x, y, label, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
+    box.add(this.add.text(x + 22, y - 1, note ?? `${cur}/${max}`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5', strokeThickness: 2 })));
+    const barW = 184;
+    box.add(this.add.rectangle(x, y + 10, barW, 4, 0x0a1128, 1).setOrigin(0, 0).setStrokeStyle(1, 0x2f3658, 1));
+    const pct = max > 0 ? Math.max(0, Math.min(1, cur / max)) : 0;
+    if (pct > 0) {
+      box.add(this.add.rectangle(x + 1, y + 11, Math.max(1, Math.round((barW - 2) * pct)), 2, color, 1).setOrigin(0, 0));
+    }
+  }
+
+  /** Battle-formula values with plain-language captions. Mirrors battle.ts. */
+  private derivedStats(member: Combatant): Array<{ label: string; value: string; hint: string }> {
+    const s = member.stats;
+    return [
+      { label: 'ATTACK', value: `${Math.round(s.str * 1.6)}`, hint: 'physical damage' },
+      { label: 'MAGIC', value: `${Math.round(s.int * 0.8)}`, hint: 'spell damage' },
+      { label: 'GUARD', value: `${Math.round(s.vit * 0.6)}`, hint: 'damage reduction' },
+      { label: 'RESIST', value: `${Math.round(s.int * 0.2)}`, hint: 'spell defense' },
+      { label: 'HEALING', value: `${Math.round(s.int * 0.5)}`, hint: 'healing power' },
+      { label: 'SPEED', value: `${s.agi}+d3`, hint: 'turn order' },
+    ];
   }
 
   private renderItems(box: Phaser.GameObjects.Container) {
@@ -264,6 +342,7 @@ export class GameMenuScene extends Phaser.Scene {
       const rect = this.add.rectangle(46, y, 178, 28, 0x141a30, 0.96)
         .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
         .setInteractive({ useHandCursor: true });
+      box.add(rect); // added first: children render in container order
       this.addIcon(box, id, 50, y + 3, 22);
       box.add(this.add.text(78, y + 4, slot.toUpperCase(),
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setDepth(3));
@@ -282,7 +361,7 @@ export class GameMenuScene extends Phaser.Scene {
         this.updateSelection();
         selectable.action();
       });
-      box.add([rect, label]);
+      box.add(label);
     });
 
     // Right: everything the member can put in the active slot.
@@ -737,26 +816,22 @@ export class GameMenuScene extends Phaser.Scene {
     }
   }
 
-  private battleStatsLine(member: Combatant): string {
-    const power = Math.round(member.stats.str * 1.6);
-    const guard = Math.round(member.stats.vit * 0.6);
-    const magic = Math.round(member.stats.int * 0.8);
-    const resist = Math.round(member.stats.int * 0.2);
-    const heal = Math.round(member.stats.int * 0.5);
-    return `PWR ${power}  GUARD ${guard}  MAG ${magic}  RES ${resist}  HEAL ${heal}  TURN ${member.stats.agi}+d3`;
-  }
-
-  private equipmentLine(memberId: string): string {
-    const eq = equippedFor(memberId);
-    const name = (id?: string) => id ? EQUIPMENT[id]?.name ?? '-' : '-';
-    return `W ${name(eq.weapon)}  A ${name(eq.armor)}  C ${name(eq.charm)}`;
-  }
-
   private spellLine(member: Combatant): string {
     const spells = member.spells.map((id) => SPELLS[id]).filter((s) => s != null);
-    return spells.length > 0
-      ? `Magic ${spells.map((s) => `${s.name} ${effectiveSpellCost(s.id)}MP`).join('  |  ')}`
-      : 'Magic -';
+    const label = member.id === 'kael' ? 'Skills' : 'Magic';
+    if (spells.length > 0) {
+      return `${label}  ${spells.map((s) => `${s.name} ${effectiveSpellCost(s.id)}MP`).join(' · ')}`;
+    }
+    const level = member.level ?? 1;
+    const upcoming = Object.keys(member.learnset ?? {})
+      .map(Number)
+      .filter((lv) => lv > level)
+      .sort((a, b) => a - b)[0];
+    if (upcoming != null) {
+      const firstId = member.learnset![upcoming][0];
+      return `Learns ${SPELLS[firstId]?.name ?? firstId} at Lv ${upcoming}`;
+    }
+    return `${label}  —`;
   }
 
   private close() {
