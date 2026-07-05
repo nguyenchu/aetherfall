@@ -17,6 +17,16 @@ export interface Inflict {
   rounds: number;
 }
 
+/** Aggregated passive effects from equipped gear (party members). */
+export interface GearEffects {
+  critBonus: number; // added to base crit chance
+  lifesteal: number; // fraction of attack damage returned as HP
+  mpRegen: number; // MP restored each round
+  guardChipBonus: number; // extra guard pips removed on weakness hits
+  healBonus: number; // flat bonus to healing spells cast
+  resist: Ailment[]; // ailments this member is immune to
+}
+
 export interface Stats {
   maxHp: number;
   hp: number;
@@ -77,8 +87,12 @@ export interface Combatant {
   intent?: Command;
   // Status ailments: rounds remaining per ailment. Cleared out of battle.
   ailments?: Partial<Record<Ailment, number>>;
-  // Enemies only: basic attacks may inflict an ailment (e.g. crawler venom).
+  // Basic attacks may inflict an ailment (enemy nature or party weapon).
   attackInflict?: Inflict;
+  // Basic attacks strike as this element (party: from weapon). Default phys.
+  attackElement?: Element;
+  // Passive effects from equipped gear (party only).
+  gear?: GearEffects;
   // Progression (party only):
   level?: number;
   xp?: number;

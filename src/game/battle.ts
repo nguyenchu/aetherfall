@@ -180,11 +180,10 @@ export class Battle {
             events.push({ kind: 'recover', text: `${e.name} steadies itself — guard restored.`, actorId: e.id });
           }
         }
-        // Aether Flow boon: party regains MP each round.
-        if (this.bn.mpRegen > 0) {
-          for (const c of this.living('party')) {
-            c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + this.bn.mpRegen);
-          }
+        // MP regeneration: the Aether Flow boon and gear like the Aether Loop.
+        for (const c of this.living('party')) {
+          const regen = this.bn.mpRegen + (c.gear?.mpRegen ?? 0);
+          if (regen > 0) c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + regen);
         }
         this.phase = 'input';
       }
@@ -253,23 +252,26 @@ export class Battle {
 
   // --- Attacks and Spells -----------------------------------------------------
 
-  /** Physical strike (basic attack). Handles crit, weakness, lifesteal, thorns. */
+  /** Basic attack. Element comes from the weapon (default phys). */
   private strike(actor: Combatant, target: Combatant, spell: Spell | null, events: BattleEvent[]): void {
+    const element = actor.attackElement ?? 'phys';
     const base = actor.stats.str * 1.6 - target.stats.vit * 0.6;
-    const hit = this.computeHit(actor, target, base, 'phys');
+    const hit = this.computeHit(actor, target, base, element);
     this.applyDamage(target, hit.dmg);
     this.chipGuard(actor, target, hit.weak, spell?.guardHit ?? 0, events);
     const tags = hitTags(hit);
     events.push({
       kind: 'attack',
       text: `${actor.name} hits ${target.name} for ${hit.dmg}.${tags}`,
-      actorId: actor.id, targetId: target.id, amount: hit.dmg, crit: hit.crit, weak: hit.weak,
+      actorId: actor.id, targetId: target.id, amount: hit.dmg, element, crit: hit.crit, weak: hit.weak,
     });
-    // Venomous bites, chilling tides: some enemy attacks carry an ailment.
+    // Venomous bites, chilling blades: attacks can carry an ailment
+    // (enemy nature or a party weapon like the Tidecleaver).
     if (actor.attackInflict) this.applyAilment(target, actor.attackInflict, events);
-    // Vampiric Edge: attacks heal the attacker.
-    if (actor.side === 'party' && this.bn.lifesteal > 0) {
-      const heal = Math.round(hit.dmg * this.bn.lifesteal);
+    // Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang.
+    const lifesteal = (actor.side === 'party' ? this.bn.lifesteal : 0) + (actor.gear?.lifesteal ?? 0);
+    if (lifesteal > 0) {
+      const heal = Math.round(hit.dmg * lifesteal);
       if (heal > 0 && actor.stats.hp > 0 && actor.stats.hp < actor.stats.maxHp) {
         actor.stats.hp = Math.min(actor.stats.maxHp, actor.stats.hp + heal);
         events.push({ kind: 'info', text: `${actor.name} drains ${heal} HP.`, actorId: actor.id, targetId: actor.id, amount: -heal });
@@ -331,7 +333,7 @@ export class Battle {
   }
 
   private castHeal(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
-    const heal = Math.round(spell.power + actor.stats.int * 0.5);
+    const heal = Math.round(spell.power + actor.stats.int * 0.5 + (actor.gear?.healBonus ?? 0));
     const targets = spell.target === 'party'
       ? [...this.living(actor.side)]
       : [this.aliveTargetOr(targetId, actor.side) ?? actor];
@@ -420,7 +422,7 @@ export class Battle {
       dmg *= this.bn.dmgMult * (this.bn.elementMult[element] ?? 1);
       if (weak) dmg *= WEAK_MULT;
       if (target.broken) dmg *= BREAK_MULT + this.bn.breakDmgBonus;
-      crit = Math.random() < CRIT_BASE + this.bn.critBonus;
+      crit = Math.random() < CRIT_BASE + this.bn.critBonus + (actor.gear?.critBonus ?? 0);
       if (crit) dmg *= CRIT_MULT;
     }
     if (target.defending) dmg *= element === 'phys' ? 0.5 : 0.75;
@@ -431,7 +433,7 @@ export class Battle {
   private chipGuard(actor: Combatant, target: Combatant, weak: boolean, guardHit: number, events: BattleEvent[]): void {
     if (actor.side !== 'party' || target.side !== 'enemy') return;
     if (target.broken || (target.guard ?? 0) <= 0) return;
-    const chip = (weak ? 1 + this.bn.guardChipBonus : 0) + guardHit;
+    const chip = (weak ? 1 + this.bn.guardChipBonus + (actor.gear?.guardChipBonus ?? 0) : 0) + guardHit;
     if (chip <= 0) return;
     target.guard = Math.max(0, (target.guard ?? 0) - chip);
     if (target.guard === 0) {
@@ -459,6 +461,11 @@ export class Battle {
   private applyAilment(target: Combatant, inf: Inflict, events: BattleEvent[], sure = false): void {
     if (target.stats.hp <= 0) return;
     if (!sure && Math.random() >= inf.chance) return;
+    // Gear immunity: Tidewarden Mail shrugs off chill, Ashenguard Plate fire.
+    if (target.gear?.resist.includes(inf.ailment)) {
+      events.push({ kind: 'info', text: `${target.name}'s gear wards it off!`, targetId: target.id });
+      return;
+    }
     const had = (target.ailments?.[inf.ailment] ?? 0) > 0;
     target.ailments = target.ailments ?? {};
     target.ailments[inf.ailment] = Math.max(target.ailments[inf.ailment] ?? 0, inf.rounds);

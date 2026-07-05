@@ -682,9 +682,10 @@ export class BattleScene extends Phaser.Scene {
         .setVisible(true);
     }
     // Hint the matchup: does the pending action hit a weakness?
+    // Attacks strike as the active member's weapon element (default phys).
     if (t.side === 'enemy' && this.pending) {
       const element: Element | undefined = this.pending.kind === 'attack'
-        ? 'phys'
+        ? this.order[this.pos]?.attackElement ?? 'phys'
         : this.pending.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id]?.element : undefined;
       if (element && element !== 'none' && t.weakness?.includes(element)) {
         this.promptText.setText(`Choose target  < >   ▶ ${t.name}: WEAK to this!`);
@@ -933,7 +934,8 @@ export class BattleScene extends Phaser.Scene {
 
   private animateEvent(ev: BattleEvent) {
     if (ev.kind === 'attack' && ev.actorId && ev.targetId) {
-      this.attackAnim(ev.actorId, ev.targetId);
+      // Elemental weapons color the slash (fire sword slashes orange, ...).
+      this.attackAnim(ev.actorId, ev.targetId, ev.element);
       if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
       const isHeal = (ev.amount ?? 0) < 0;
@@ -943,7 +945,7 @@ export class BattleScene extends Phaser.Scene {
       } else {
         const color = BattleScene.spellColor(ev.element);
         if (ev.element === 'phys') {
-          this.attackAnim(ev.actorId, ev.targetId);
+          this.attackAnim(ev.actorId, ev.targetId, ev.element);
         } else {
           this.projectileAnim(ev.actorId, ev.targetId, color);
         }
@@ -988,7 +990,7 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private attackAnim(actorId: string, targetId: string) {
+  private attackAnim(actorId: string, targetId: string, element?: string) {
     const actor = this.sprites.get(actorId);
     const target = this.sprites.get(targetId);
     if (!actor || !target) return;
@@ -1005,7 +1007,10 @@ export class BattleScene extends Phaser.Scene {
       ease: 'Quad.easeOut',
       onComplete: () => actor.setPosition(ox, oy),
     });
-    this.slashAt(target.x, target.y);
+    const slashColor = element && element !== 'phys' && element !== 'none'
+      ? BattleScene.spellColor(element)
+      : 0xeef2ff;
+    this.slashAt(target.x, target.y, slashColor);
     this.cameras.main.shake(70, 0.003);
   }
 
@@ -1060,8 +1065,8 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  private slashAt(x: number, y: number) {
-    const a = this.add.rectangle(x - 6, y - 2, 22, 3, 0xeef2ff, 0.9).setAngle(-35).setDepth(32);
+  private slashAt(x: number, y: number, color = 0xeef2ff) {
+    const a = this.add.rectangle(x - 6, y - 2, 22, 3, color, 0.9).setAngle(-35).setDepth(32);
     const b = this.add.rectangle(x + 5, y + 4, 18, 2, 0xf0d36c, 0.85).setAngle(-35).setDepth(32);
     this.tweens.add({
       targets: [a, b],

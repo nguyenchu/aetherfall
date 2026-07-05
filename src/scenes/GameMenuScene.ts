@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { BOONS } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
-import { EQUIPMENT, type EquipSlot } from '../game/equipment';
+import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
 import { castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { xpForLevel } from '../game/progression';
@@ -391,8 +391,9 @@ export class GameMenuScene extends Phaser.Scene {
         this.equipPreviewItemId = previewValue;
         this.renderContent();
       };
-      box.add(this.add.text(352, y + 6, this.shortBonus(item.id),
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: equipped ? '#f0d36c' : '#9aa4c8', strokeThickness: 2 })).setDepth(3));
+      const hasEffects = item.id != null && (EQUIPMENT[item.id]?.effects != null);
+      box.add(this.add.text(352, y + 6, this.shortBonus(item.id) + (hasEffects ? ' ✦' : ''),
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: equipped ? '#f0d36c' : hasEffects ? '#7df0c8' : '#9aa4c8', strokeThickness: 2 })).setDepth(3));
       if (equipped) {
         box.add(this.add.text(432, y + 6, 'ON',
           sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
@@ -420,9 +421,15 @@ export class GameMenuScene extends Phaser.Scene {
         const delta = next - cur;
         const color = delta > 0 ? '#7df0a0' : delta < 0 ? '#ff8a8a' : '#7a84a8';
         const text = delta === 0 ? `${SHORT_STAT[stat]} ${cur}` : `${SHORT_STAT[stat]} ${cur}>${next}`;
-        box.add(this.add.text(288 + (i % 3) * 58, 278 + Math.floor(i / 3) * 16, text,
+        box.add(this.add.text(288 + (i % 3) * 58, 276 + Math.floor(i / 3) * 13, text,
           sharpText({ fontFamily: FONT, fontSize: '8px', color, strokeThickness: 2 })).setDepth(3));
       });
+    }
+    // Passive effects line — what makes this piece special beyond raw stats.
+    const effects = previewItem ? equipmentEffectText(previewItem) : [];
+    if (effects.length > 0) {
+      box.add(this.add.text(288, 304, `✦ ${effects.join(' · ')}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0c8', strokeThickness: 2, wordWrap: { width: 168 } })).setDepth(3));
     }
   }
 

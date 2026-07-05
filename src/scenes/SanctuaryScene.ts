@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { ITEMS } from '../game/content';
-import { EQUIPMENT } from '../game/equipment';
+import { EQUIPMENT, equipmentEffectText } from '../game/equipment';
 import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
 import {
@@ -26,6 +26,29 @@ const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 115;
 type Facing = 'down' | 'up' | 'left' | 'right';
+
+// Merchant gear stock, unlocked by story flags. Found gear never appears here.
+const SHOP_GEAR: Array<{ id: string; flag: string }> = [
+  { id: 'reef_mail', flag: 'ch1_complete' },
+  { id: 'tide_ring', flag: 'ch1_complete' },
+  { id: 'aether_loop', flag: 'ch1_complete' },
+  { id: 'stormcaller_rod', flag: 'ch1_complete' },
+  { id: 'winter_staff', flag: 'ch2_complete' },
+  { id: 'dawnstar', flag: 'ch2_complete' },
+  { id: 'emberweave_robe', flag: 'ch2_complete' },
+];
+
+/** Compact stat + effect hint for shop rows, e.g. "+5 INT +6 MP · Attacks strike as HOLY". */
+function gearHint(id: string): string {
+  const item = EQUIPMENT[id];
+  if (!item) return '';
+  const stats = Object.entries(item.bonus)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `+${v} ${k.replace('max', '').toUpperCase()}`)
+    .join(' ');
+  const effect = equipmentEffectText(item)[0];
+  return effect ? `${stats} · ${effect}` : stats;
+}
 
 // Sanctuary, the last city of light. Handmade map, not procedural.
 // '#' wall, '.' floor, 'P' player start, 'D' descent portal
@@ -109,7 +132,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private unsubs: (() => void)[] = [];
   private shopBox?: Phaser.GameObjects.Container;
   private shopIndex = 0;
-  private shopOptions: { label: () => string; action: () => boolean; enabled: () => boolean }[] = [];
+  private shopOptions: { label: () => string; action: () => boolean; enabled: () => boolean; column: 'buy' | 'sell' }[] = [];
   private hintText?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -445,44 +468,49 @@ export class SanctuaryScene extends Phaser.Scene {
     const inv = getRun().inventory;
     this.shopOptions = [
       {
-        label: () => `Crystal Blessing (+${8} max HP)   ${hpBlessingCost()} gold`,
+        label: () => `Crystal Blessing (+8 max HP)   ${hpBlessingCost()}g`,
         enabled: () => getRun().gold >= hpBlessingCost(),
         action: () => buyHpBlessing(),
+        column: 'buy' as const,
       },
       {
-        label: () => `Buy Elixir (+30 HP)   ${ITEMS.potion.buyPrice} gold`,
+        label: () => `Elixir (+30 HP)   ${ITEMS.potion.buyPrice}g`,
         enabled: () => getRun().gold >= (ITEMS.potion.buyPrice ?? 0),
         action: () => buyItem('potion'),
+        column: 'buy' as const,
       },
       {
-        label: () => `Buy Aether Tonic (+12 MP)   ${ITEMS.tonic.buyPrice} gold`,
+        label: () => `Aether Tonic (+12 MP)   ${ITEMS.tonic.buyPrice}g`,
         enabled: () => getRun().gold >= (ITEMS.tonic.buyPrice ?? 0),
         action: () => buyItem('tonic'),
+        column: 'buy' as const,
       },
-      ...(hasFlag('ch1_complete') ? [{
-        label: () => `Buy Reef Mail   ${equipmentPrice('reef_mail')} gold`,
-        enabled: () => getRun().gold >= (equipmentPrice('reef_mail') ?? 0) && !ownedEquipment().some((e) => e.id === 'reef_mail'),
-        action: () => { buyEquipment('reef_mail'); return true; },
-      }, {
-        label: () => `Buy Tide Ring   ${equipmentPrice('tide_ring')} gold`,
-        enabled: () => getRun().gold >= (equipmentPrice('tide_ring') ?? 0) && !ownedEquipment().some((e) => e.id === 'tide_ring'),
-        action: () => { buyEquipment('tide_ring'); return true; },
-      }] : []),
+      // Gear stock grows as chapters are cleared; owned pieces leave the list.
+      ...SHOP_GEAR
+        .filter((g) => hasFlag(g.flag) && !ownedEquipment().some((e) => e.id === g.id))
+        .map((g) => ({
+          label: () => `${EQUIPMENT[g.id].name}  ${gearHint(g.id)}  ${equipmentPrice(g.id)}g`,
+          enabled: () => getRun().gold >= (equipmentPrice(g.id) ?? 0),
+          action: () => { buyEquipment(g.id); return true; },
+          column: 'buy' as const,
+        })),
     ];
     for (const [id, count] of Object.entries(inv).filter(([, n]) => n > 0)) {
       const item = ITEMS[id];
       if (!item) continue;
       this.shopOptions.push({
-        label: () => `Sell ${item.name} x${count}   +${item.sellPrice} gold`,
+        label: () => `${item.name} x${count}   +${item.sellPrice}g`,
         enabled: () => (getRun().inventory[id] ?? 0) > 0,
         action: () => sellItem(id),
+        column: 'sell',
       });
     }
-    for (const eq of ownedEquipment().filter((e) => !['slender_blade', 'ember_staff', 'dawn_mace'].includes(e.id))) {
+    for (const eq of ownedEquipment().filter((e) => canSellEquipment(e.id))) {
       this.shopOptions.push({
-        label: () => `Sell ${EQUIPMENT[eq.id].name}   +${Math.floor((equipmentPrice(eq.id) ?? 40) * 0.5)} gold`,
+        label: () => `${EQUIPMENT[eq.id].name}   +${Math.floor((equipmentPrice(eq.id) ?? 40) * 0.5)}g`,
         enabled: () => canSellEquipment(eq.id),
         action: () => sellEquipment(eq.id),
+        column: 'sell',
       });
     }
     this.renderShop();
@@ -491,15 +519,25 @@ export class SanctuaryScene extends Phaser.Scene {
   private renderShop() {
     this.shopBox?.destroy();
     const box = this.add.container(0, 0).setDepth(40);
-    box.add(this.add.rectangle(30, 58, 560, 222, 0x0d1024, 0.98).setOrigin(0, 0).setStrokeStyle(1, COLORS.wall));
-    box.add(this.add.text(44, 70, 'MERCHANT', sharpText({ fontFamily: FONT, fontSize: '13px', color: '#f0d36c' })));
-    box.add(this.add.text(44, 91, `Gold: ${getRun().gold}  |  Elixir: ${getRun().inventory.potion ?? 0}  |  Tonic: ${getRun().inventory.tonic ?? 0}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
+    box.add(this.add.rectangle(30, 52, 560, 240, 0x0d1024, 0.98).setOrigin(0, 0).setStrokeStyle(1, COLORS.wall));
+    box.add(this.add.text(44, 62, 'MERCHANT', sharpText({ fontFamily: FONT, fontSize: '13px', color: '#f0d36c' })));
+    box.add(this.add.text(160, 66, `Gold: ${getRun().gold}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
+
+    const buys = this.shopOptions.filter((o) => o.column === 'buy');
+    const sells = this.shopOptions.filter((o) => o.column === 'sell');
+    box.add(this.add.text(44, 88, 'BUY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff' })));
+    box.add(this.add.text(330, 88, 'SELL', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff' })));
+
     this.shopOptions.forEach((o, i) => {
+      const inBuy = o.column === 'buy';
+      const colIndex = inBuy ? buys.indexOf(o) : sells.indexOf(o);
+      const x = inBuy ? 44 : 330;
+      const y = 102 + colIndex * 15;
       const color = !o.enabled() ? '#5a6080' : i === this.shopIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.shopIndex ? '> ' : '  ';
-      box.add(this.add.text(44, 116 + i * 17, prefix + o.label(), sharpText({ fontFamily: FONT, fontSize: '9px', color, strokeThickness: 2 })));
+      box.add(this.add.text(x, y, prefix + o.label(), sharpText({ fontFamily: FONT, fontSize: '8px', color, strokeThickness: 2 })));
     });
-    box.add(this.add.text(44, 262, 'Space/Enter choose  |  Esc close', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8' })));
+    box.add(this.add.text(44, 276, 'Space/Enter choose  |  Esc close', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8' })));
     this.shopBox = box;
   }
 

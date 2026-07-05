@@ -5,7 +5,7 @@
 import { boonTotals, type BoonTotals } from './boons';
 import type { ChestContents } from './chapters';
 import { ITEMS, SPELLS, makeParty } from './content';
-import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, type EquipSlot } from './equipment';
+import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
 import { restoreLevel } from './progression';
 import { QUESTS, questRewardText } from './quests';
@@ -263,11 +263,21 @@ export function castSpellOutOfBattle(casterId: string, spellId: string, targetId
   const cost = effectiveSpellCost(spellId);
   if (caster.stats.mp < cost) return false;
   caster.stats.mp -= cost;
-  const heal = Math.round(spell.power + caster.stats.int * 0.5);
+  const heal = Math.round(spell.power + caster.stats.int * 0.5 + (caster.gear?.healBonus ?? 0));
   target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
   saveProgress();
   return true;
 }
+
+// Depth-tiered gear that can drop from battles; elites drop it far more often.
+const GEAR_DROPS: Record<number, string[]> = {
+  1: ['tide_ring'],
+  2: ['tide_ring'],
+  3: ['tidewarden_mail', 'vampire_fang'],
+  4: ['tidewarden_mail', 'vampire_fang'],
+  5: ['ashenguard_plate', 'cinder_band'],
+  6: ['ashenguard_plate', 'cinder_band'],
+};
 
 export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
   const drops: string[] = [];
@@ -280,8 +290,11 @@ export function grantBattleLoot(depth: number, boss: boolean, elite = false): st
     addItem('tonic', 1);
     drops.push('Aether Tonic x1');
   }
-  const gear = !boss && Math.random() < (elite ? 0.35 : 0.12) ? 'tide_ring' : undefined;
-  if (gear && grantEquipment(gear)) drops.push(`${EQUIPMENT[gear].name} x1`);
+  if (!boss && Math.random() < (elite ? 0.4 : 0.12)) {
+    const pool = (GEAR_DROPS[depth] ?? []).filter((id) => !save.equipmentOwned.includes(id));
+    const gear = pool[Math.floor(Math.random() * pool.length)];
+    if (gear && grantEquipment(gear)) drops.push(`${EQUIPMENT[gear].name}!`);
+  }
   saveProgress();
   return drops;
 }
@@ -308,6 +321,20 @@ export function equipmentPrice(itemId: string): number | undefined {
     tide_ring: 90,
     reef_mail: 120,
     oracle_lantern: 150,
+    aether_loop: 110,
+    stormcaller_rod: 140,
+    winter_staff: 180,
+    dawnstar: 200,
+    emberweave_robe: 170,
+    // Found gear (sell value = half of this):
+    emberfang: 100,
+    tidecleaver: 150,
+    tidewrought_mace: 160,
+    tidewarden_mail: 130,
+    vampire_fang: 140,
+    sunbrand: 220,
+    ashenguard_plate: 180,
+    cinder_band: 150,
   };
   return prices[itemId] ?? 55;
 }
@@ -330,6 +357,7 @@ export function equipNext(memberId: string, slot: EquipSlot): boolean {
   applyStatDelta(member, before, -1);
   applyStatDelta(member, after, 1);
   clampVitals(member);
+  refreshGearEffects(member);
   saveProgress();
   return true;
 }
@@ -350,6 +378,7 @@ export function equipItem(memberId: string, slot: EquipSlot, itemId?: string): b
   applyStatDelta(member, before, -1);
   applyStatDelta(member, after, 1);
   clampVitals(member);
+  refreshGearEffects(member);
   saveProgress();
   return true;
 }
@@ -433,6 +462,16 @@ export function hardReset(): void {
 function applyEquipment(c: Combatant): void {
   applyStatDelta(c, currentEquipmentBonus(c.id), 1);
   clampVitals(c);
+  refreshGearEffects(c);
+}
+
+/** Recomputes weapon element/inflict and passive gear effects from equipped items. */
+function refreshGearEffects(c: Combatant): void {
+  const slots = equippedFor(c.id);
+  const fx = gearFor([slots.weapon, slots.armor, slots.charm]);
+  c.attackElement = fx.attackElement;
+  c.attackInflict = fx.attackInflict;
+  c.gear = fx.gear;
 }
 
 function currentEquipmentBonus(memberId: string): Partial<Stats> {

@@ -28,7 +28,7 @@ export const QUESTS: QuestDef[] = [
     id: 'clear_ch2',
     title: 'Drain the Flooded Keep',
     text: 'Defeat the Tide Warden at the heart of the Sunken City.',
-    rewards: { gold: 90, items: { tonic: 3, potion: 1 } },
+    rewards: { gold: 90, items: { tonic: 3, potion: 1 }, equipment: ['tidewrought_mace'] },
   },
   {
     id: 'defeat_ashbrand',

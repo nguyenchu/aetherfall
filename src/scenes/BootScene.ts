@@ -71,45 +71,45 @@ export class BootScene extends Phaser.Scene {
     });
   }
 
+  // Icons are drawn from each item's IconSpec (kind + colors), so new gear
+  // added in equipment.ts gets an icon automatically.
   private buildEquipmentIcons() {
-    for (const id of Object.keys(EQUIPMENT)) {
-      this.makeIcon(`icon_${id}`, (g) => {
-        switch (id) {
-          case 'slender_blade':
-            g.fillStyle(0xdfe4f5, 1).fillTriangle(18, 4, 22, 7, 10, 23);
-            g.fillStyle(0x6cf0c2, 1).fillRect(9, 22, 12, 3);
+    for (const item of Object.values(EQUIPMENT)) {
+      const { kind, base, accent } = item.icon;
+      this.makeIcon(`icon_${item.id}`, (g) => {
+        switch (kind) {
+          case 'blade':
+            g.fillStyle(base, 1).fillTriangle(18, 4, 22, 7, 10, 23);
+            g.fillStyle(accent, 1).fillRect(9, 22, 12, 3);
             g.fillStyle(0x5c3924, 1).fillRect(13, 21, 4, 7);
             break;
-          case 'ember_staff':
+          case 'staff':
             g.fillStyle(0x5c3924, 1).fillRect(15, 8, 3, 18);
-            g.fillStyle(0xff7a32, 1).fillCircle(16, 8, 5);
-            g.fillStyle(0xffd36c, 1).fillCircle(16, 8, 2);
+            g.fillStyle(base, 1).fillCircle(16, 8, 5);
+            g.fillStyle(accent, 1).fillCircle(16, 8, 2);
             break;
-          case 'dawn_mace':
+          case 'mace':
             g.fillStyle(0x5c3924, 1).fillRect(15, 11, 3, 16);
-            g.fillStyle(0xf0d36c, 1).fillCircle(16, 10, 6);
-            g.fillStyle(0xdfe4f5, 1).fillCircle(16, 10, 3);
+            g.fillStyle(base, 1).fillCircle(16, 10, 6);
+            g.fillStyle(accent, 1).fillCircle(16, 10, 3);
             break;
-          case 'scout_vest':
-            this.drawArmor(g, 0x4b6f7a, 0x6cf0c2);
+          case 'armor':
+            this.drawArmor(g, base, accent);
             break;
-          case 'aether_robe':
-            this.drawRobe(g, 0x5d3b9a, 0xa58cff);
+          case 'robe':
+            this.drawRobe(g, base, accent);
             break;
-          case 'reef_mail':
-            this.drawArmor(g, 0x4f7f9a, 0x9ad8ff);
+          case 'orb':
+            g.fillStyle(base, 1).fillCircle(16, 16, 6);
+            g.lineStyle(2, accent, 0.9).strokeCircle(16, 16, 9);
             break;
-          case 'sun_charm':
-            g.fillStyle(0xf0d36c, 1).fillCircle(16, 16, 6);
-            g.lineStyle(2, 0xfff0a0, 0.9).strokeCircle(16, 16, 9);
+          case 'ring':
+            g.lineStyle(4, base, 1).strokeCircle(16, 16, 8);
+            g.fillStyle(accent, 1).fillCircle(16, 9, 3);
             break;
-          case 'tide_ring':
-            g.lineStyle(4, 0x44aaff, 1).strokeCircle(16, 16, 8);
-            g.fillStyle(0xdff6ff, 1).fillCircle(16, 9, 3);
-            break;
-          case 'oracle_lantern':
-            g.fillStyle(0xf0d36c, 1).fillRoundedRect(10, 9, 12, 15, 3);
-            g.fillStyle(0xfff4b8, 1).fillCircle(16, 16, 4);
+          case 'lantern':
+            g.fillStyle(base, 1).fillRoundedRect(10, 9, 12, 15, 3);
+            g.fillStyle(accent, 1).fillCircle(16, 16, 4);
             g.lineStyle(2, 0xdfe4f5, 0.9).strokeRoundedRect(10, 9, 12, 15, 3);
             break;
         }

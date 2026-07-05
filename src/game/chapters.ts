@@ -163,7 +163,7 @@ const AREA_1: AreaDef = {
   },
   scripts: {},
   chests: {
-    '22,2': { gold: 40, items: { potion: 2 } },
+    '22,2': { gold: 25, equipment: 'emberfang' },
   },
   map: [
     '##############################',
@@ -298,7 +298,7 @@ const AREA_3: AreaDef = {
   },
   scripts: {},
   chests: {
-    '1,2': { gold: 60, equipment: 'tide_ring' },
+    '1,2': { gold: 40, equipment: 'tidecleaver' },
   },
   map: [
     '##############################',
@@ -434,7 +434,7 @@ const AREA_5: AreaDef = {
   },
   scripts: {},
   chests: {
-    '22,12': { gold: 100, items: { tonic: 2 } },
+    '22,12': { gold: 60, equipment: 'sunbrand' },
   },
   map: [
     '##############################',
