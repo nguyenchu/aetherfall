@@ -247,6 +247,30 @@ export function useItemOn(itemId: string, memberId: string): boolean {
   return true;
 }
 
+/** Field cast for party-target heals (Radiance). Blocks if nobody needs it. */
+export function castPartyHealOutOfBattle(casterId: string, spellId: string): { healed: number; count: number } | null {
+  const spell = SPELLS[spellId];
+  if (!spell || spell.kind !== 'heal' || spell.target !== 'party') return null;
+  const caster = state.party.find((c) => c.id === casterId);
+  if (!caster || !caster.spells.includes(spellId)) return null;
+  const cost = effectiveSpellCost(spellId);
+  if (caster.stats.mp < cost) return null;
+  const living = state.party.filter((c) => c.stats.hp > 0);
+  if (living.every((c) => c.stats.hp >= c.stats.maxHp)) return null;
+  caster.stats.mp -= cost;
+  const heal = Math.round(spell.power + caster.stats.int * 0.5 + (caster.gear?.healBonus ?? 0));
+  let healed = 0;
+  let count = 0;
+  for (const member of living) {
+    const before = member.stats.hp;
+    member.stats.hp = Math.min(member.stats.maxHp, member.stats.hp + heal);
+    if (member.stats.hp > before) count++;
+    healed += member.stats.hp - before;
+  }
+  saveProgress();
+  return { healed, count };
+}
+
 export function effectiveSpellCost(spellId: string): number {
   const spell = SPELLS[spellId];
   if (!spell) return 0;

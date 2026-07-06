@@ -2,6 +2,46 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-06.
 
+## 2026-07-06 (d): Items + Magic Tabs — Same Polish as Equip/Stats
+
+Closed the gap: Items and Magic were the last two tabs still in the old
+plain-text style while Stats/Equip/System had already been redone.
+
+- **Items tab**: per-target use buttons now show live vitals (`Kael 142/142`)
+  instead of a bare name, and are disabled (existing `Selectable.disabled`
+  styling) when the target is dead or already full — clicking used to be a
+  silent no-op with no feedback. Using an item now sets a `menuNotice`
+  ("Kael uses Elixir." / "can't use this right now."). Sell-only items
+  (`tide_pearl`, `warden_sigils`) get a one-line "Sell to the merchant in
+  Sanctuary" hint instead of empty space where use-buttons would go.
+- **Magic tab**: three-way split per spell instead of one heal-or-"Battle
+  only" branch — ally-heal (button, target picker, `Heals N HP` computed with
+  the caster's actual INT via new `spellHealAmount()`), **party-heal is now
+  usable in the field** (was previously stuck behind "Battle only" even
+  though Radiance/cureall has no battle-only reason not to work outside),
+  and damage/attack spells render as plain (non-boxed — a bordered look
+  implied clickability they didn't have) text showing `spell.desc` colored by
+  element (`ELEMENT_COLOR`, mirrors `BattleScene`'s convention) plus a
+  "(battle only)" suffix so the player can still plan around element/ailment
+  info without it looking like a dead button. Empty spellbook now shows the
+  next learnset unlock ("Learns Bash at Lv 2") instead of "No magic learned."
+- **New `castPartyHealOutOfBattle()`** (`run.ts`): mirrors battle.ts's
+  `castHeal` party-target formula (`power + int*0.5 + healBonus`, applied to
+  every living member). Refuses (no MP spent) if the caster can't afford it
+  or nobody needs healing — deliberate UX guard the battle version doesn't
+  have, since a battle cast is a committed action but a field cast is a menu
+  browse and shouldn't be able to waste MP by misclick.
+- Verified via CDP driver with a seeded high-level, full-inventory save
+  (screenshots of Items grid, Lyra's four battle-only spells with
+  element-colored hints, Mira's Mend/Radiance with real computed heal
+  numbers, target-picker spatial nav skipping non-interactive rows). tsc
+  clean, no console errors. Not independently screenshot-verified: the
+  disabled/greyed appearance of an item button on a damaged party member —
+  fresh saves always start at full HP/MP (current HP isn't persisted), and
+  reaching a damaged state needs a real battle; the code path reuses the
+  same `Selectable.disabled` mechanism already exercised elsewhere in this
+  file, so this is a reasoned-correct gap, not a verified one.
+
 ## 2026-07-06 (c): Equip Tab — Left/Right Swaps Character on the Slot Screen
 
 In Step 1 (slot list), `←`/`→` now switch the active party member directly

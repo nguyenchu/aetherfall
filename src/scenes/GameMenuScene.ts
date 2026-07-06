@@ -3,7 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { BOONS } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
-import { castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
+import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { xpForLevel } from '../game/progression';
 import { sharpText, FONT } from '../ui/text';
@@ -253,8 +253,8 @@ export class GameMenuScene extends Phaser.Scene {
     }
     entries.forEach(([id, count], i) => {
       const item = ITEMS[id];
-      const y = 102 + i * 46;
-      const row = this.add.rectangle(42, y - 4, 414, 42, i % 2 === 0 ? 0x101d3f : 0x0c1836, 0.88)
+      const y = 100 + i * 50;
+      const row = this.add.rectangle(42, y - 4, 414, 46, i % 2 === 0 ? 0x101d3f : 0x0c1836, 0.88)
         .setOrigin(0, 0)
         .setStrokeStyle(1, 0x5067b0, 0.5);
       box.add(row);
@@ -265,11 +265,21 @@ export class GameMenuScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 350 } })));
       if (item?.target === 'ally') {
         run.party.forEach((member, memberIndex) => {
-          this.button(84 + memberIndex * 70, y + 25, 62, member.name, () => {
-            useItemOn(id, member.id);
+          const vital = item.kind === 'heal'
+            ? { cur: member.stats.hp, max: member.stats.maxHp }
+            : { cur: member.stats.mp, max: member.stats.maxMp };
+          const usable = member.stats.hp > 0 && vital.cur < vital.max;
+          const b = this.button(84 + memberIndex * 108, y + 26, 100, `${member.name}  ${vital.cur}/${vital.max}`, () => {
+            this.menuNotice = useItemOn(id, member.id)
+              ? `${member.name} uses ${item.name}.`
+              : `${member.name} can't use this right now.`;
             this.renderContent();
           }, box, '7px');
+          b.disabled = !usable;
         });
+      } else if (item?.kind === 'sell') {
+        box.add(this.add.text(84, y + 27, 'Sell to the merchant in Sanctuary — no use in the field.',
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
       }
     });
   }
@@ -285,27 +295,33 @@ export class GameMenuScene extends Phaser.Scene {
     });
 
     const spells = member.spells.map((id) => SPELLS[id]).filter((s) => s != null);
-    const fieldSpells = spells.filter((s) => s.kind === 'heal' && s.target === 'ally');
-    if (fieldSpells.length > 0 && !fieldSpells.some((s) => s.id === this.magicSpellId)) {
-      this.magicSpellId = fieldSpells[0].id;
-    }
+    const allyHeals = spells.filter((s) => s.kind === 'heal' && s.target === 'ally');
+    this.magicSpellId = allyHeals.length > 0
+      ? (allyHeals.some((s) => s.id === this.magicSpellId) ? this.magicSpellId : allyHeals[0].id)
+      : undefined;
     const selectedSpell = this.magicSpellId ? SPELLS[this.magicSpellId] : undefined;
 
-    box.add(this.add.text(46, 176, `${member.name}  MP ${member.stats.mp}/${member.stats.maxMp}`,
-      sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c', strokeThickness: 2 })));
-    box.add(this.add.text(46, 190, 'Field magic can heal the party outside battle.',
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2 })));
+    box.add(this.add.text(46, 168, `${member.name}   MP ${member.stats.mp}/${member.stats.maxMp}`,
+      sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2 })));
 
     if (spells.length === 0) {
-      box.add(this.add.text(54, 216, 'No magic learned.', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
+      const level = member.level ?? 1;
+      const upcoming = Object.keys(member.learnset ?? {}).map(Number).filter((lv) => lv > level).sort((a, b) => a - b)[0];
+      box.add(this.add.text(46, 190,
+        upcoming != null ? `Learns ${SPELLS[member.learnset![upcoming][0]]?.name} at Lv ${upcoming}.` : 'No spells to learn.',
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
       return;
     }
 
+    box.add(this.add.text(46, 184, 'Only healing magic works outside battle.',
+      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })));
+
     spells.forEach((spell, i) => {
-      const y = 214 + i * 24;
+      const y = 202 + i * 32;
       const cost = effectiveSpellCost(spell.id);
+      const elementColor = ELEMENT_COLOR[spell.element] ?? '#dfe4f5';
       if (spell.kind === 'heal' && spell.target === 'ally') {
-        const b = this.button(54, y, 128, `${spell.name}  ${cost}MP`, () => {
+        const b = this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => {
           this.magicSpellId = spell.id;
           this.menuNotice = 'Choose a target portrait.';
           this.renderContent();
@@ -317,22 +333,48 @@ export class GameMenuScene extends Phaser.Scene {
           this.menuNotice = 'Choose a target portrait.';
           this.renderContent();
         };
-        box.add(this.add.text(194, y + 4, `Heal ${spell.power}+INT`, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a8d8ff', strokeThickness: 2 })));
+        box.add(this.add.text(46, y + 22, `Heals ${this.spellHealAmount(member, spell)} HP`,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2 })));
+      } else if (spell.kind === 'heal' && spell.target === 'party') {
+        this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => this.castFieldPartyHeal(member, spell.id), box, '8px');
+        box.add(this.add.text(46, y + 22, `Heals the whole party ~${this.spellHealAmount(member, spell)} HP each`,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2, wordWrap: { width: 220 } })));
       } else {
-        box.add(this.add.text(58, y + 4, `${spell.name}  ${cost}MP`,
+        // Not a button: this spell can't be cast here, so it shouldn't look clickable.
+        box.add(this.add.text(46, y + 2, `${spell.name}  ${cost}MP`,
           sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
-        box.add(this.add.text(194, y + 4, 'Battle only',
-          sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
+        box.add(this.add.text(46, y + 15, `${spell.desc ?? 'Battle only.'}  (battle only)`,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: elementColor, strokeThickness: 2, wordWrap: { width: 220 } })));
       }
     });
 
-    if (!selectedSpell || selectedSpell.kind !== 'heal') return;
-    box.add(this.add.text(294, 176, 'Target', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a58cff', strokeThickness: 2 })));
+    if (!selectedSpell) return;
+    box.add(this.add.text(294, 184, 'TARGET', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
     run.party.forEach((target, i) => {
-      this.portraitButton(box, target, 286, 196 + i * 42, 156, 36, false, () => {
+      this.portraitButton(box, target, 286, 200 + i * 42, 156, 36, false, () => {
         this.castFieldMagic(member, selectedSpell.id, target);
       }, 'compact');
     });
+  }
+
+  /** Actual field-heal amount for display: mirrors castSpellOutOfBattle's formula. */
+  private spellHealAmount(caster: Combatant, spell: { power: number }): number {
+    return Math.round(spell.power + caster.stats.int * 0.5 + (caster.gear?.healBonus ?? 0));
+  }
+
+  private castFieldPartyHeal(caster: Combatant, spellId: string) {
+    const spell = SPELLS[spellId];
+    const cost = effectiveSpellCost(spellId);
+    if (!spell) return;
+    if (caster.stats.mp < cost) {
+      this.menuNotice = `${caster.name} needs ${cost} MP.`;
+    } else {
+      const result = castPartyHealOutOfBattle(caster.id, spellId);
+      this.menuNotice = result
+        ? `${caster.name} casts ${spell.name}. Party +${result.healed} HP total.`
+        : 'The whole party is already at full HP.';
+    }
+    this.renderContent();
   }
 
   // Equip is a two-step flow: pick a slot (equipColumn === 'slot'), then the
@@ -1124,6 +1166,11 @@ function title(tab: MenuTab): string {
 
 const SHORT_STAT: Record<string, string> = {
   maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT',
+};
+
+// Mirrors BattleScene's ELEMENT_COLOR so spell info reads consistently across screens.
+const ELEMENT_COLOR: Record<string, string> = {
+  phys: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
 
 /** Rows visible at once in the equip item list; more scrolls (▲/▼ markers). */
