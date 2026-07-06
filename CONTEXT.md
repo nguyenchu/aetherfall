@@ -1,6 +1,86 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-04.
+> Paste this into a new session to continue the work. Last updated: 2026-07-06.
+
+## 2026-07-06 (c): Equip Tab — Left/Right Swaps Character on the Slot Screen
+
+In Step 1 (slot list), `←`/`→` now switch the active party member directly
+instead of duplicating Z (right) or doing nothing (left) — lets you compare
+the same slot across the party without backing out to the portraits first.
+Wraps around; resets preview state the same way choosing a portrait does.
+Only Step 1: in Step 2 (item list) `←`/`→` still mean "back to slots" /
+"jump to command", which are load-bearing there, so member-switch was kept
+out to avoid stealing those. New `switchEquipMember()`; hint line updated to
+"Z: open list · ↑↓: slot · ←→: character". Re-verified with the CDP driver
+(8 new steps: switch + wrap both directions, opening the item list carries
+the new member through, seed-state cleanup so the reused Chrome profile's
+leftover equipped-charm from a prior run doesn't leak into scroll assertions).
+
+## 2026-07-06 (b): Equip Tab — Step-by-Step (One Screen at a Time)
+
+Follow-up to the drill-down below: instead of showing the loadout column and
+the item list side by side, equip is now a **two-phase, full-width flow** —
+each phase has one job, so there's less on screen at once.
+
+- **Phase 1 (`equipColumn === 'slot'`)** `renderEquipSlots()`: portraits +
+  three full-width slot rows (icon, slot caption, equipped name, bonus + ✦
+  marker, a gold `›` disclosure), and a bottom panel detailing the *highlighted*
+  slot's equipped item (name/trait/description/effects) so you know what you'd
+  replace. Header "CHOOSE A SLOT TO CHANGE"; hint "Z: open list · ↑↓: pick slot".
+- **Phase 2 (`equipColumn === 'items'`)** `renderEquipItems()`: portraits are
+  replaced by a compact breadcrumb ("‹ WEAPON  Kael"), freeing vertical space
+  for a full-width item list. Each row now shows name + bonus stacked on the
+  left and the **passive effect text inline** on the right (e.g. "✦ Attacks heal
+  15% of damage") — the old side-by-side layout only had room for "+2 STR ✦".
+  Shared bottom compare panel (`renderEquipCompare()`) with CURRENT/PREVIEW +
+  stat deltas + effects. Hint "↑↓: preview · Z: equip · X: back".
+- **Navigation**: Z (or →) on a slot drills into its list; Z equips and returns
+  to the slot list; X (or ←) steps back out; ↑ past the top item returns to the
+  slots, ↑ past the top slot reaches the portraits (switch member there). Slot
+  and item lists are their own vertical rings (`moveEquipVertical`).
+- **Key fix (`focusEquipColumn`)**: phase switches now select the target row
+  *after* re-rendering instead of via a `selectionAnchor`. The two phases occupy
+  the same screen region, so an anchor carried from the old phase snapped the
+  cursor to whatever row was nearest (a portrait), which is why equipping used
+  to jump the cursor onto Lyra's face. Equip/unequip and X-back all route
+  through this now.
+- `EQUIP_LIST_ROWS` bumped 4→5 (portrait row reclaimed); scroll ▲N/▼N counts
+  moved to the right gutter (x 474) so they don't collide with a row's "ON" tag.
+- Re-verified with the CDP driver: 32 scripted steps (up-x3 reaches equip
+  without the magic tab's auto-caster-select, keeping Kael deterministic),
+  drill-down + X-back at every level, portrait reach, unequip/re-equip notices +
+  EQUIPPED panel, charm-list scrolling with a seeded all-gear save. tsc clean.
+
+## 2026-07-06: Equip Tab — Drill-Down Navigation + Scrolling List
+
+The equip tab now follows a classic JRPG drill-down: **member → slot → item**.
+
+- **Flow**: entering the tab focuses the LOADOUT column (choose slot first);
+  Z (or →) on a slot row opens the item list for that slot; in the list, ↑↓
+  previews, Z equips and hands the cursor back to the slot row (which now
+  shows the new gear), X steps back up one level (items → slots → command).
+  Phase-aware hint line top-right ("↑↓: slot · Z: open list" vs "↑↓: preview ·
+  Z: equip · X: back"); the list header names the slot ("CHOOSE WEAPON"); a
+  gold `›` connects the active slot row to its list.
+- **Keyboard fix**: up past the top of either column now reaches the party
+  portraits (was impossible — `moveEquipVertical` clamped and swallowed the
+  press, so switching member required a mouse).
+- **Stale-anchor fix** (`selectSelectable`): when a row's `onFocus`
+  early-returns without re-rendering, the `selectionAnchor` it set is now
+  cleared; a stale anchor used to hijack the next programmatic cursor move
+  (e.g. X-back landed back on the item row). `focusEquipColumn()` sets the
+  anchor explicitly so column jumps survive re-renders.
+- **Scrolling list**: item lists are windowed to `EQUIP_LIST_ROWS` (4) rows —
+  late-game charm lists (6+ entries) used to overflow into the comparison
+  panel. Keyboard movement walks the full logical list (`equipChoiceIds`) and
+  scrolls the window at the edges; ▲N/▼N markers show hidden entries; mouse
+  wheel moves the cursor too. Render clamps the window so the previewed entry
+  stays visible.
+- **Clarity**: "None" renamed "(Nothing)"; comparison panel is now prefixed
+  "CURRENT:" (gold) or "PREVIEW:" (cyan) so preview state is unmistakable.
+- Verified via CDP headless-Chrome driver (30 scripted steps: drill-down,
+  X-back levels, portrait reach, unequip/re-equip notices, charm-list
+  scrolling with a seeded all-gear save, indicator counts); tsc clean.
 
 ## 2026-07-05: Menu System — Restart Paths + Intuitive Equip
 

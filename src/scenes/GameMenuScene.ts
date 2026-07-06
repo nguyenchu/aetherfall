@@ -43,7 +43,10 @@ export class GameMenuScene extends Phaser.Scene {
   private tabButtons = new Map<MenuTab, Selectable>();
   private memberIndex = 0;
   private equipSlot: EquipSlot = 'weapon';
-  private equipColumn: EquipColumn = 'items';
+  private equipColumn: EquipColumn = 'slot';
+  private equipScroll = 0;
+  /** Full ordered id list for the active slot (null = the "(Nothing)" entry). */
+  private equipChoiceIds: Array<string | null> = [];
   private equipLastItemBySlot: Partial<Record<EquipSlot, string | null>> = {};
   /** undefined = no preview (show equipped); null = previewing "None". */
   private equipPreviewItemId?: string | null;
@@ -84,6 +87,9 @@ export class GameMenuScene extends Phaser.Scene {
     });
     this.renderContent();
     this.bindMenuInput();
+    this.input.on('wheel', (_p: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
+      if (this.tab === 'equip' && this.focus === 'content' && dy !== 0) this.moveSelection(dy > 0 ? 1 : -1);
+    });
     attachTouchControls(this, 'bottom', 'menu');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
     this.updateSelection();
@@ -329,38 +335,54 @@ export class GameMenuScene extends Phaser.Scene {
     });
   }
 
+  // Equip is a two-step flow: pick a slot (equipColumn === 'slot'), then the
+  // item list for that slot takes the full width (equipColumn === 'items').
+  // One thing on screen at a time keeps it readable; Z drills in, X steps out.
   private renderEquip(box: Phaser.GameObjects.Container) {
     const member = this.selectedMember();
-    const eq = equippedFor(member.id);
+    if (this.equipColumn === 'items') this.renderEquipItems(box, member);
+    else this.renderEquipSlots(box, member);
+  }
 
+  /** Step 1: portraits + the member's loadout, one row per slot. */
+  private renderEquipSlots(box: Phaser.GameObjects.Container, member: Combatant) {
+    const eq = equippedFor(member.id);
     const portraits = this.renderPartyPortraits(box, 78, (i) => {
       this.memberIndex = i;
       this.equipPreviewItemId = undefined;
       this.equipLastItemBySlot = {};
-      this.equipColumn = 'items';
+      this.equipColumn = 'slot';
+      this.equipScroll = 0;
       this.menuNotice = '';
       this.renderContent();
     });
     portraits.forEach((portrait) => { portrait.equipKind = 'member'; });
 
-    // Left: the member's loadout — one row per slot.
-    box.add(this.add.text(46, 168, 'LOADOUT', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(46, 168, 'CHOOSE A SLOT TO CHANGE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(456, 168, 'Z: open list  ·  ↑↓: slot  ·  ←→: character', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
+
     (['weapon', 'armor', 'charm'] as EquipSlot[]).forEach((slot, i) => {
-      const y = 180 + i * 30;
+      const y = 182 + i * 30;
       const id = eq[slot];
       const name = id ? EQUIPMENT[id]?.name ?? id : '—';
-      const rect = this.add.rectangle(46, y, 178, 28, 0x141a30, 0.96)
+      const rect = this.add.rectangle(42, y, 414, 28, 0x141a30, 0.96)
         .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
         .setInteractive({ useHandCursor: true });
       box.add(rect); // added first: children render in container order
-      this.addIcon(box, id, 50, y + 3, 22);
-      box.add(this.add.text(78, y + 4, slot.toUpperCase(),
+      this.addIcon(box, id, 46, y + 3, 22);
+      box.add(this.add.text(76, y + 4, slot.toUpperCase(),
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setDepth(3));
-      const label = this.add.text(78, y + 13, name,
-        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(3);
+      const label = this.add.text(76, y + 13, name,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: id ? '#dfe4f5' : '#8a93b8', strokeThickness: 2 })).setDepth(3);
+      if (id) {
+        const hasEffects = EQUIPMENT[id]?.effects != null;
+        box.add(this.add.text(250, y + 9, this.shortBonus(id) + (hasEffects ? ' ✦' : ''),
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: hasEffects ? '#7df0c8' : '#f0d36c', strokeThickness: 2 })).setDepth(3));
+      }
+      box.add(this.add.text(452, y + 8, '›', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
       const selectable: Selectable = {
         rect, label,
-        action: () => this.setEquipSlot(slot, 'items'),
+        action: () => this.focusEquipColumn('items', slot),
         chosen: slot === this.equipSlot,
         equipKind: 'slot',
         equipSlot: slot,
@@ -378,56 +400,126 @@ export class GameMenuScene extends Phaser.Scene {
       box.add(label);
     });
 
-    // Right: everything the member can put in the active slot.
-    box.add(this.add.text(236, 168, 'AVAILABLE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
-    box.add(this.add.text(310, 168, 'move: preview  ·  Z: equip', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })));
-    const current = eq[this.equipSlot];
+    // Bottom: detail of the highlighted slot's equipped item (so you know what
+    // you'd be replacing before opening the list).
+    const cur = eq[this.equipSlot];
+    const curItem = cur ? EQUIPMENT[cur] : undefined;
+    box.add(this.add.rectangle(42, 278, 414, 48, 0x101d3f, 0.92)
+      .setOrigin(0, 0).setStrokeStyle(1, 0x5067b0, 0.5).setDepth(2));
+    this.addIcon(box, cur, 46, 282, 20);
+    box.add(this.add.text(72, 282, curItem ? `EQUIPPED: ${curItem.name} — ${curItem.trait}` : `${this.equipSlot.toUpperCase()}: nothing equipped`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
+    box.add(this.add.text(72, 294, curItem?.description ?? 'Open the list to equip something here.',
+      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, lineSpacing: 2, wordWrap: { width: 240 } })).setDepth(3));
+    const fx = curItem ? equipmentEffectText(curItem) : [];
+    if (fx.length > 0) {
+      box.add(this.add.text(320, 282, `✦ ${fx.join(' · ')}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0c8', strokeThickness: 2, wordWrap: { width: 130 } })).setDepth(3));
+    }
+  }
+
+  /** Step 2: full-width list of everything the member can put in the active slot. */
+  private renderEquipItems(box: Phaser.GameObjects.Container, member: Combatant) {
+    const current = equippedFor(member.id)[this.equipSlot];
+
+    // Breadcrumb replaces the portrait row — the list gets the vertical space.
+    box.add(this.add.text(46, 74, `‹ ${this.equipSlot.toUpperCase()}`,
+      sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2 })));
+    box.add(this.add.text(150, 78, member.name,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(456, 78, '↑↓: preview  ·  Z: equip  ·  X: back', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
+
     const choices = ownedEquipment().filter((item) => item.slot === this.equipSlot && item.users.includes(member.id));
     const allChoices: Array<{ id?: string; name: string }> = [
-      { id: undefined, name: 'None' },
+      { id: undefined, name: '(Nothing)' },
       ...choices.map((item) => ({ id: item.id, name: item.name })),
     ];
-    allChoices.forEach((item, i) => {
-      const y = 180 + i * 24;
-      const equipped = item.id === current || (!item.id && !current);
-      this.addIcon(box, item.id, 240, y + 1, 18);
-      const b = this.button(262, y, 194, item.name, () => {
-        this.equipColumn = 'items';
-        this.rememberEquipPreview(item.id ?? null);
-        if (equipItem(member.id, this.equipSlot, item.id)) {
-          this.menuNotice = `${member.name} equips ${item.id ? EQUIPMENT[item.id]?.name : 'nothing'}.`;
-        }
-        this.renderContent();
-      }, box, '8px');
-      b.chosen = equipped;
-      b.equipKind = 'item';
-      b.equipSlot = this.equipSlot;
-      b.equipItemId = item.id ?? null;
-      b.onFocus = () => {
-        const previewValue = item.id ?? null;
-        if (this.equipPreviewItemId === previewValue) return;
-        this.equipColumn = 'items';
-        this.rememberEquipPreview(previewValue);
-        this.renderContent();
-      };
-      const hasEffects = item.id != null && (EQUIPMENT[item.id]?.effects != null);
-      box.add(this.add.text(352, y + 6, this.shortBonus(item.id) + (hasEffects ? ' ✦' : ''),
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: equipped ? '#f0d36c' : hasEffects ? '#7df0c8' : '#9aa4c8', strokeThickness: 2 })).setDepth(3));
-      if (equipped) {
-        box.add(this.add.text(432, y + 6, 'ON',
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
-      }
-    });
+    this.equipChoiceIds = allChoices.map((c) => c.id ?? null);
+    // Keep the previewed (or equipped) entry inside the visible window.
+    const focusId = this.equipPreviewItemId === undefined ? (current ?? null) : this.equipPreviewItemId;
+    const focusIdx = Math.max(0, allChoices.findIndex((c) => (c.id ?? null) === focusId));
+    this.equipScroll = Phaser.Math.Clamp(this.equipScroll, 0, Math.max(0, allChoices.length - EQUIP_LIST_ROWS));
+    if (focusIdx < this.equipScroll) this.equipScroll = focusIdx;
+    else if (focusIdx >= this.equipScroll + EQUIP_LIST_ROWS) this.equipScroll = focusIdx - EQUIP_LIST_ROWS + 1;
 
-    // Bottom: one comparison panel — item info left, stat changes right.
+    const listTop = 98;
+    allChoices.slice(this.equipScroll, this.equipScroll + EQUIP_LIST_ROWS).forEach((item, vi) => {
+      const y = listTop + vi * 28;
+      const equipped = item.id === current || (!item.id && !current);
+      const rect = this.add.rectangle(42, y, 414, 26, 0x141a30, 0.96)
+        .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
+        .setInteractive({ useHandCursor: true });
+      box.add(rect);
+      this.addIcon(box, item.id, 46, y + 3, 20);
+      const label = this.add.text(74, y + 3, item.name,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: equipped ? '#f0d36c' : '#dfe4f5', strokeThickness: 2 })).setDepth(3);
+      box.add(this.add.text(74, y + 15, item.id ? this.shortBonus(item.id) : 'no bonus',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2 })).setDepth(3));
+      const eqItem = item.id ? EQUIPMENT[item.id] : undefined;
+      const fx = eqItem ? equipmentEffectText(eqItem) : [];
+      if (fx.length > 0) {
+        box.add(this.add.text(228, y + 4, `✦ ${fx.join(' · ')}`,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0c8', strokeThickness: 2, lineSpacing: 1, wordWrap: { width: 190 } })).setDepth(3));
+      }
+      if (equipped) {
+        box.add(this.add.text(452, y + 3, 'ON',
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
+      }
+      const selectable: Selectable = {
+        rect, label,
+        action: () => {
+          this.rememberEquipPreview(item.id ?? null);
+          if (equipItem(member.id, this.equipSlot, item.id)) {
+            this.menuNotice = `${member.name} equips ${item.id ? EQUIPMENT[item.id]?.name : 'nothing'}.`;
+          }
+          this.focusEquipColumn('slot'); // done with this slot — back to the loadout
+        },
+        chosen: equipped,
+        equipKind: 'item',
+        equipSlot: this.equipSlot,
+        equipItemId: item.id ?? null,
+        onFocus: () => {
+          const previewValue = item.id ?? null;
+          if (this.equipPreviewItemId === previewValue) return;
+          this.rememberEquipPreview(previewValue);
+          this.renderContent();
+        },
+      };
+      this.selectables.push(selectable);
+      rect.on('pointerdown', () => {
+        this.selected = this.selectables.indexOf(selectable);
+        this.focus = 'content';
+        this.updateSelection();
+        selectable.action();
+      });
+      box.add(label);
+    });
+    // Scroll counts live in the right gutter (x > 456) so they never collide
+    // with a row's "ON" tag.
+    if (this.equipScroll > 0) {
+      box.add(this.add.text(474, listTop + 4, `▲${this.equipScroll}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
+    }
+    const hiddenBelow = allChoices.length - this.equipScroll - EQUIP_LIST_ROWS;
+    if (hiddenBelow > 0) {
+      box.add(this.add.text(474, listTop + (EQUIP_LIST_ROWS - 1) * 28 + 4, `▼${hiddenBelow}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
+    }
+
+    this.renderEquipCompare(box, member, current);
+  }
+
+  /** Shared bottom panel: previewed item's info + stat deltas + effects. */
+  private renderEquipCompare(box: Phaser.GameObjects.Container, member: Combatant, current: string | undefined) {
     const previewId = this.equipPreviewItemId === undefined ? current : this.equipPreviewItemId ?? undefined;
     const previewItem = previewId ? EQUIPMENT[previewId] : undefined;
+    const isCurrent = (previewId ?? null) === (current ?? null);
     const previewStats = equipmentPreviewStats(member.id, this.equipSlot, previewId);
     box.add(this.add.rectangle(42, 272, 414, 48, 0x101d3f, 0.92)
       .setOrigin(0, 0).setStrokeStyle(1, 0x5067b0, 0.5).setDepth(2));
     this.addIcon(box, previewId, 46, 276, 20);
-    box.add(this.add.text(72, 276, previewItem ? `${previewItem.name} — ${previewItem.trait}` : 'Empty slot',
-      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3));
+    box.add(this.add.text(72, 276, `${isCurrent ? 'CURRENT' : 'PREVIEW'}: ${previewItem ? `${previewItem.name} — ${previewItem.trait}` : 'Empty slot'}`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: isCurrent ? '#f0d36c' : '#6cf0c2', strokeThickness: 2 })).setDepth(3));
     box.add(this.add.text(72, 288, previewItem?.description ?? 'No equipment in this slot.',
       sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, lineSpacing: 2, wordWrap: { width: 200 } })).setDepth(3));
     if (!previewStats) {
@@ -444,7 +536,6 @@ export class GameMenuScene extends Phaser.Scene {
           sharpText({ fontFamily: FONT, fontSize: '8px', color, strokeThickness: 2 })).setDepth(3));
       });
     }
-    // Passive effects line — what makes this piece special beyond raw stats.
     const effects = previewItem ? equipmentEffectText(previewItem) : [];
     if (effects.length > 0) {
       box.add(this.add.text(288, 304, `✦ ${effects.join(' · ')}`,
@@ -458,10 +549,44 @@ export class GameMenuScene extends Phaser.Scene {
     this.equipSlot = slot;
     this.equipColumn = column;
     if (slotChanged) {
+      this.equipScroll = 0;
       const rememberedPreview = this.equipLastItemBySlot[slot];
       this.equipPreviewItemId = rememberedPreview === undefined ? undefined : rememberedPreview;
     }
     if (slotChanged || columnChanged) this.renderContent();
+  }
+
+  /**
+   * Switches equip phase (slot list <-> item list) and lands the cursor on the
+   * right target. We pick the target *after* re-rendering rather than via a
+   * selection anchor: the two columns sit far apart, so an anchor from the old
+   * phase would snap to the nearest wrong row (e.g. a portrait).
+   */
+  private focusEquipColumn(column: EquipColumn, slot: EquipSlot = this.equipSlot) {
+    if (this.equipSlot !== slot) {
+      this.equipSlot = slot;
+      this.equipScroll = 0;
+      const remembered = this.equipLastItemBySlot[slot];
+      this.equipPreviewItemId = remembered === undefined ? undefined : remembered;
+    }
+    this.equipColumn = column;
+    this.selectionAnchor = undefined;
+    this.renderContent();
+    const options = this.contentSelectables();
+    const target = column === 'items' ? this.equipItemTarget(options) : this.equipSlotTarget(options);
+    if (target) {
+      this.selected = this.selectables.indexOf(target);
+      this.focus = 'content';
+      this.updateSelection();
+    }
+  }
+
+  /** Puts the cursor on the active member's portrait (up past the top of a column). */
+  private focusEquipPortrait(): boolean {
+    const portraits = this.contentSelectables().filter((option) => option.equipKind === 'member');
+    const portrait = portraits[this.memberIndex] ?? portraits[0];
+    if (portrait) this.selectSelectable(portrait, false);
+    return true;
   }
 
   private rememberEquipPreview(itemId: string | null) {
@@ -673,7 +798,8 @@ export class GameMenuScene extends Phaser.Scene {
       this.equipPreviewItemId = undefined;
       this.equipLastItemBySlot = {};
     } else {
-      this.equipColumn = 'items';
+      this.equipColumn = 'slot';
+      this.equipScroll = 0;
     }
     if (tab !== 'system') this.resetArmed = false;
     if (tab === 'magic') this.ensureMagicMember();
@@ -717,42 +843,71 @@ export class GameMenuScene extends Phaser.Scene {
   private moveEquipVertical(dir: number): boolean {
     const current = this.selectables[this.selected];
     if (current?.equipKind !== 'slot' && current?.equipKind !== 'item') return false;
-    const kind = current.equipKind;
-    const peers = this.contentSelectables().filter((option) => {
-      if (kind === 'slot') return option.equipKind === 'slot';
-      return option.equipKind === 'item' && option.equipSlot === this.equipSlot;
-    });
-    if (peers.length === 0) return true;
-    const currentPeer = peers.includes(current) ? current : peers[0];
-    const nextIndex = Phaser.Math.Clamp(peers.indexOf(currentPeer) + dir, 0, peers.length - 1);
-    const next = peers[nextIndex];
-    if (!next || next === currentPeer) return true;
-    this.equipColumn = kind === 'slot' ? 'slot' : 'items';
-    this.selectSelectable(next, true);
+
+    if (current.equipKind === 'slot') {
+      const peers = this.contentSelectables().filter((option) => option.equipKind === 'slot');
+      const nextIndex = peers.indexOf(current) + dir;
+      if (nextIndex < 0) return this.focusEquipPortrait(); // up past the top slot -> party portraits
+      if (nextIndex >= peers.length) return true;
+      this.equipColumn = 'slot';
+      this.selectSelectable(peers[nextIndex], true);
+      return true;
+    }
+
+    // Items: walk the full logical list, scrolling the window when the target is hidden.
+    const ids = this.equipChoiceIds;
+    const index = ids.findIndex((id) => id === (current.equipItemId ?? null));
+    const nextIndex = index + dir;
+    if (nextIndex < 0) { this.focusEquipColumn('slot'); return true; } // up past the top item -> back to slots
+    if (nextIndex >= ids.length) return true;
+    const visible = this.contentSelectables().filter((option) => option.equipKind === 'item' && option.equipSlot === this.equipSlot);
+    const target = visible.find((option) => (option.equipItemId ?? null) === ids[nextIndex]);
+    if (target) {
+      this.selectSelectable(target, true);
+      return true;
+    }
+    // Off-window: scroll so the target lands on the edge row the cursor is on.
+    this.equipScroll = dir > 0 ? nextIndex - EQUIP_LIST_ROWS + 1 : nextIndex;
+    this.selectionAnchor = this.centerOf(current);
+    this.rememberEquipPreview(ids[nextIndex]);
+    this.renderContent();
     return true;
   }
 
   private moveEquipHorizontal(dir: number): boolean {
     const current = this.selectables[this.selected];
-    if (current?.equipKind === 'slot' && dir > 0) {
-      this.equipColumn = 'items';
-      const target = this.equipItemTarget(this.contentSelectables());
-      if (target) this.selectSelectable(target, false);
+    // Slots: left/right swaps the active party member without leaving Step 1,
+    // so you can compare the same slot across the party. Z is the only way to
+    // open the item list now (right used to duplicate it).
+    if (current?.equipKind === 'slot') {
+      this.switchEquipMember(dir);
       return true;
     }
+    // Items: left steps back to the slots, right jumps to the command column.
     if (current?.equipKind === 'item') {
-      if (dir < 0) {
-        this.equipColumn = 'slot';
-        const target = this.equipSlotTarget(this.contentSelectables());
-        if (target) this.selectSelectable(target, false);
-        return true;
-      }
-      if (dir > 0) {
-        this.focusCommand();
-        return true;
-      }
+      if (dir < 0) this.focusEquipColumn('slot');
+      else this.focusCommand();
+      return true;
     }
-    return false;
+    return false; // portraits: let spatial movement switch party members
+  }
+
+  /** Swaps the active member while staying on the same slot row (Step 1 only). */
+  private switchEquipMember(dir: number) {
+    const partyLen = getRun().party.length;
+    if (partyLen <= 1) return;
+    this.memberIndex = (this.memberIndex + dir + partyLen) % partyLen;
+    this.equipPreviewItemId = undefined;
+    this.equipLastItemBySlot = {};
+    this.equipScroll = 0;
+    this.menuNotice = '';
+    this.renderContent();
+    const target = this.equipSlotTarget(this.contentSelectables());
+    if (target) {
+      this.selected = this.selectables.indexOf(target);
+      this.focus = 'content';
+      this.updateSelection();
+    }
   }
 
   private moveSpatial(dx: number, dy: number): boolean {
@@ -810,6 +965,11 @@ export class GameMenuScene extends Phaser.Scene {
 
   private back() {
     if (this.focus === 'content') {
+      // Equip drills down member -> slot -> item; cancel steps back up one level.
+      if (this.tab === 'equip' && this.selectables[this.selected]?.equipKind === 'item') {
+        this.focusEquipColumn('slot');
+        return;
+      }
       this.focus = 'command';
       this.syncSelectionToFocus();
       this.updateSelection();
@@ -887,6 +1047,9 @@ export class GameMenuScene extends Phaser.Scene {
     if (runFocus && target.onFocus) {
       this.selectionAnchor = this.centerOf(target);
       target.onFocus();
+      // If onFocus did not re-render (renderContent consumes and clears the
+      // anchor), drop it here so a stale anchor can't hijack a later render.
+      this.selectionAnchor = undefined;
     }
   }
 
@@ -962,3 +1125,6 @@ function title(tab: MenuTab): string {
 const SHORT_STAT: Record<string, string> = {
   maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT',
 };
+
+/** Rows visible at once in the equip item list; more scrolls (▲/▼ markers). */
+const EQUIP_LIST_ROWS = 5;
