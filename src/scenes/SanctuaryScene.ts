@@ -14,12 +14,14 @@ import {
   getRun,
   hasFlag,
   hpBlessingCost,
+  isQuestActive,
   ownedEquipment,
   sellEquipment,
   sellItem,
   setFlag,
 } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
+import { showQuestToast } from '../ui/questToast';
 import { tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
@@ -77,6 +79,10 @@ interface Npc {
   name: string;
   kind: 'dialogue' | 'vendor';
   scriptId?: string;
+  /** Shows a bouncing "!" above the figure while true — an unclaimed quest. */
+  questActive?: boolean;
+  /** Quest resolved by talking to this NPC while questActive is true. */
+  questId?: string;
 }
 
 function npcs(): Record<string, Npc> {
@@ -87,14 +93,17 @@ function npcs(): Record<string, Npc> {
     K: {
       spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
       scriptId: ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
+      questActive: isQuestActive('speak_eda'), questId: 'speak_eda',
     },
     L: {
       spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
       scriptId: ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+      questActive: isQuestActive('learn_of_anchors'), questId: 'learn_of_anchors',
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
       scriptId: ch3Done ? 'npc_child_after3' : ch1Done ? 'npc_child_after1' : 'npc_child',
+      questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip',
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
     // The Stranger appears after Ch1 in the northwest corner
@@ -102,6 +111,7 @@ function npcs(): Record<string, Npc> {
       T: {
         spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
         scriptId: ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
+        questActive: isQuestActive('heed_the_stranger'), questId: 'heed_the_stranger',
       },
     } : {}),
   };
@@ -134,6 +144,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private shopIndex = 0;
   private shopOptions: { label: () => string; action: () => boolean; enabled: () => boolean; column: 'buy' | 'sell' }[] = [];
   private hintText?: Phaser.GameObjects.Text;
+  private questMarkers = new Map<string, Phaser.GameObjects.Text>();
 
   constructor() {
     super('Sanctuary');
@@ -145,6 +156,7 @@ export class SanctuaryScene extends Phaser.Scene {
     this.state = 'roam';
     this.unsubs = [];
     this.npcAt.clear();
+    this.questMarkers.clear();
     this.grid = MAP;
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
@@ -191,6 +203,9 @@ export class SanctuaryScene extends Phaser.Scene {
           this.add.ellipse(x + GAME.tile / 2, y + GAME.tile / 2 + 7, 14, 5, 0x000000, 0.34).setDepth(3);
           this.add.image(x + GAME.tile / 2, y + GAME.tile / 2, npc.spriteKey).setScale(npc.scale).setDepth(4);
           this.add.text(x + GAME.tile / 2, y + GAME.tile + 1, npc.name, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5' })).setOrigin(0.5, 0).setDepth(4);
+          if (npc.questActive && npc.questId) {
+            this.questMarkers.set(npc.questId, this.addBounceMarker(x + GAME.tile / 2, y - 4, '!', '#f0d36c'));
+          }
         }
       }
     }
@@ -379,15 +394,12 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private interact(npc: Npc) {
     if (npc.kind === 'vendor') this.openShop();
-    else if (npc.scriptId) {
-      if (npc.scriptId === 'npc_keeper') completeQuest('speak_eda');
-      this.openDialogue(npc.scriptId);
-    }
+    else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
   // --- Dialog ---------------------------------------------------------------
 
-  private openDialogue(scriptId: string) {
+  private openDialogue(scriptId: string, questId?: string) {
     this.state = 'busy';
     input.releaseAll();
     this.scene.pause();
@@ -398,6 +410,14 @@ export class SanctuaryScene extends Phaser.Scene {
         this.scene.resume();
         this.state = 'roam';
         this.moveLockedUntil = this.time.now + 300;
+        // Quests resolve once the conversation actually closes, so the
+        // reward toast isn't hidden behind the dialogue box.
+        const completed = questId ? completeQuest(questId) : null;
+        if (completed) {
+          this.questMarkers.get(questId!)?.destroy();
+          this.questMarkers.delete(questId!);
+          showQuestToast(this, completed);
+        }
       },
     });
   }
@@ -434,6 +454,23 @@ export class SanctuaryScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff8844' })).setOrigin(0.5, 1).setDepth(5);
       this.ch3PortalPos = { x: px, y: py };
     }
+
+    // Point toward whichever descent still holds the active main quest.
+    const mainPortal = dTiles.length > 0 ? { x: dTiles[Math.floor(dTiles.length / 2)].c, y: dTiles[Math.floor(dTiles.length / 2)].r } : null;
+    const nextObjective = !hasFlag('ch1_complete') ? mainPortal
+      : !hasFlag('ch2_complete') ? this.ch2PortalPos
+      : !hasFlag('ch3_complete') ? this.ch3PortalPos
+      : null;
+    if (nextObjective) {
+      this.addBounceMarker(nextObjective.x * GAME.tile + GAME.tile / 2, nextObjective.y * GAME.tile - 12, '▼', '#6cf0c2');
+    }
+  }
+
+  /** A small bouncing glyph (pixel coords, center-origin) used for quest/objective markers. */
+  private addBounceMarker(x: number, y: number, glyph: string, color: string): Phaser.GameObjects.Text {
+    const marker = this.add.text(x, y, glyph, sharpText({ fontFamily: FONT, fontSize: '11px', color })).setOrigin(0.5).setDepth(6);
+    this.tweens.add({ targets: marker, y: y - 4, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    return marker;
   }
 
   private ch2PortalPos: { x: number; y: number } | null = null;

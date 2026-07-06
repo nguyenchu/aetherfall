@@ -730,14 +730,29 @@ export class GameMenuScene extends Phaser.Scene {
   }
 
   private renderQuests(box: Phaser.GameObjects.Container) {
-    questList().forEach((q, i) => {
-      const y = 112 + i * 44;
-      const mark = q.status === 'complete' ? '[x]' : '[ ]';
-      const color = q.status === 'complete' ? '#8a93b8' : '#dfe4f5';
-      box.add(this.add.text(46, y, `${mark} ${q.title}`, sharpText({ fontFamily: FONT, fontSize: '10px', color })));
-      box.add(this.add.text(62, y + 15, q.text, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 390 } })));
-      box.add(this.add.text(62, y + 25, rewardTextForQuest(q.id), sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })));
-    });
+    const list = questList();
+    const done = list.filter((q) => q.status === 'complete');
+    box.add(this.add.text(300, 56, `${done.length}/${list.length} complete`,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8' })));
+
+    // Active quests lead with full detail; completed ones trail as a compact,
+    // dimmed log so the open checklist is never buried by finished business.
+    const active = list.filter((q) => q.status !== 'complete');
+    let y = 82;
+    for (const q of active) {
+      box.add(this.add.text(46, y, `[ ] ${q.title}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
+      box.add(this.add.text(62, y + 11, q.text, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9aa2c8', strokeThickness: 2, wordWrap: { width: 390 } })));
+      box.add(this.add.text(62, y + 21, rewardTextForQuest(q.id), sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })));
+      y += 32;
+    }
+    if (active.length > 0 && done.length > 0) {
+      box.add(this.add.text(46, y, 'COMPLETE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080' })));
+      y += 13;
+    }
+    for (const q of done) {
+      box.add(this.add.text(46, y, `[x] ${q.title}`, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#5a6080' })));
+      y += 14;
+    }
   }
 
   private button(

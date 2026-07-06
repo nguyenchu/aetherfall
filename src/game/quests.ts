@@ -19,16 +19,34 @@ export const QUESTS: QuestDef[] = [
     rewards: { gold: 15, items: { potion: 1 } },
   },
   {
+    id: 'learn_of_anchors',
+    title: 'Consult Scholar Voss',
+    text: 'Ask Scholar Voss what she knows about the Aether anchors.',
+    rewards: { gold: 20 },
+  },
+  {
     id: 'clear_ch1',
     title: 'Clear the Ancient Grove',
     text: 'Defeat the corrupted spirit at the heart of Ashenveil Forest.',
     rewards: { gold: 50, items: { tonic: 2 } },
   },
   {
+    id: 'find_pip',
+    title: 'Find Pip',
+    text: 'A child in Sanctuary lost their dog in Ashenveil Forest.',
+    rewards: { gold: 25 },
+  },
+  {
     id: 'clear_ch2',
     title: 'Drain the Flooded Keep',
     text: 'Defeat the Tide Warden at the heart of the Sunken City.',
     rewards: { gold: 90, items: { tonic: 3, potion: 1 }, equipment: ['tidewrought_mace'] },
+  },
+  {
+    id: 'heed_the_stranger',
+    title: 'Heed the Stranger',
+    text: 'A hooded stranger has been asking after you since Ashenveil fell quiet.',
+    rewards: { gold: 20, items: { tonic: 1 } },
   },
   {
     id: 'defeat_ashbrand',

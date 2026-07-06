@@ -4,6 +4,7 @@ import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
+import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music, sfx } from '../audio/music';
@@ -819,9 +820,9 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
       setFlag(flag);
-      if (flag === 'ch1_complete') completeQuest('clear_ch1');
-      if (flag === 'ch2_complete') completeQuest('clear_ch2');
-      if (flag === 'ch3_complete') completeQuest('defeat_ashbrand');
+      const questId = flag === 'ch1_complete' ? 'clear_ch1' : flag === 'ch2_complete' ? 'clear_ch2' : 'defeat_ashbrand';
+      const completedQuest = completeQuest(questId);
+      if (completedQuest) this.pushLog(`Quest complete: ${completedQuest.title} — ${questRewardText(completedQuest)}`);
     }
     saveProgress();
     music.fanfare('victory');

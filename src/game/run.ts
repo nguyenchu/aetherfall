@@ -8,7 +8,7 @@ import { ITEMS, SPELLS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
 import { restoreLevel } from './progression';
-import { QUESTS, questRewardText } from './quests';
+import { QUESTS, questRewardText, type QuestDef } from './quests';
 import { loadSave, writeSave, wipeSave, type SaveData } from './save';
 import type { Combatant, Stats } from './types';
 
@@ -143,13 +143,20 @@ export function questList() {
   return QUESTS.map((q) => ({ ...q, status: save.quests[q.id] ?? 'active' }));
 }
 
-export function completeQuest(id: string): void {
-  if (save.quests[id] !== 'complete') {
-    save.quests[id] = 'complete';
-    const quest = QUESTS.find((q) => q.id === id);
-    if (quest) grantRewards(quest.rewards);
-    saveProgress();
-  }
+/** Marks a quest complete and grants its rewards. Returns the quest the
+ * first time it completes, or null if it was already complete (or unknown)
+ * so callers can decide whether to show a "quest complete" notification. */
+export function completeQuest(id: string): QuestDef | null {
+  if (save.quests[id] === 'complete') return null;
+  save.quests[id] = 'complete';
+  const quest = QUESTS.find((q) => q.id === id);
+  if (quest) grantRewards(quest.rewards);
+  saveProgress();
+  return quest ?? null;
+}
+
+export function isQuestActive(id: string): boolean {
+  return (save.quests[id] ?? 'active') === 'active';
 }
 
 // --- Sanctuary Economy ------------------------------------------------------
