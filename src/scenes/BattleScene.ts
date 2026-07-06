@@ -404,7 +404,7 @@ export class BattleScene extends Phaser.Scene {
       .some(([id, n]) => n > 0 && ITEMS[id]?.target === 'ally');
     this.options = [
       { label: 'Attack', action: 'attack', enabled: true },
-      { label: m.id === 'kael' ? 'Skills' : 'Magic', action: 'magic', enabled: hasSpells },
+      { label: battleArtLabel(m.id), action: 'magic', enabled: hasSpells },
       { label: 'Item', action: 'item', enabled: itemsAvail },
       { label: 'Defend', action: 'defend', enabled: true },
       { label: 'Flee', action: 'flee', enabled: true },
@@ -605,7 +605,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.pending = { kind: 'spell' };
-    this.renderSubmenu(`${m.name} - ${m.id === 'kael' ? 'skills' : 'magic'}`);
+    this.renderSubmenu(`${m.name} - ${battleArtLabel(m.id).toLowerCase()}`);
   }
 
   private openItems() {
@@ -863,12 +863,17 @@ export class BattleScene extends Phaser.Scene {
 
   private gameOver() {
     this.ui = 'over';
+    const depth = getRun().depth;
     const lost = applyWipePenalty();
     this.pushLog('The Crystal draws you back...');
     if (lost > 0) this.pushLog(`${lost} gold scatters into the dark.`);
     this.refreshStatus();
     music.fanfare('defeat');
-    this.time.delayedCall(2400, () => this.toTown());
+    this.time.delayedCall(2400, () => {
+      this.scene.stop('Descent');
+      this.scene.start('RunSummary', { reason: 'wipe', lostGold: lost, depth });
+      this.scene.stop();
+    });
   }
 
   /** Leaves the descent and returns to Sanctuary. */
@@ -1309,5 +1314,14 @@ export class BattleScene extends Phaser.Scene {
     this.log.push(line);
     if (this.log.length > 3) this.log.shift();
     this.logText.setText(this.log.join('\n'));
+  }
+}
+
+function battleArtLabel(memberId: string): string {
+  switch (memberId) {
+    case 'kael': return 'Aether Arts';
+    case 'lyra': return 'Hexes';
+    case 'mira': return 'Prayers';
+    default: return 'Magic';
   }
 }

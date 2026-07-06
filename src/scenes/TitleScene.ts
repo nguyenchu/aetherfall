@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
-import { music } from '../audio/music';
+import { music, sfx } from '../audio/music';
 import { input } from '../game/input';
-import { hasSave } from '../game/save';
+import { loadSaveSummary } from '../game/save';
 import { hardReset } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
 
 interface TitleOption {
   text: Phaser.GameObjects.Text;
+  label: string;
   action: () => void;
 }
 
@@ -24,6 +25,7 @@ export class TitleScene extends Phaser.Scene {
   private prompt?: Phaser.GameObjects.Text;
   private menuBox?: Phaser.GameObjects.Container;
   private unsubs: (() => void)[] = [];
+  private saveStatus?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Title');
@@ -99,8 +101,12 @@ export class TitleScene extends Phaser.Scene {
       if (!this.scene.isActive()) return;
       this.unsubs.push(input.on('up', () => this.move(-1)));
       this.unsubs.push(input.on('down', () => this.move(1)));
-      this.unsubs.push(input.on('confirm', () => this.options[this.index]?.action()));
+      this.unsubs.push(input.on('confirm', () => {
+        sfx.play('confirm');
+        this.options[this.index]?.action();
+      }));
       this.unsubs.push(input.on('cancel', () => {
+        sfx.play('cancel');
         if (this.mode === 'confirm') this.buildMenu();
       }));
     });
@@ -109,13 +115,16 @@ export class TitleScene extends Phaser.Scene {
   private buildMenu() {
     this.mode = 'menu';
     const entries: Array<{ label: string; action: () => void }> = [];
-    if (hasSave()) {
-      entries.push({ label: 'Continue', action: () => this.begin(false) });
+    const summary = loadSaveSummary();
+    if (summary) {
+      entries.push({ label: `Continue  -  Lv ${summary.highestLevel}, Stratum ${summary.deepest}, ${summary.gold}g`, action: () => this.begin(false) });
       entries.push({ label: 'New Game', action: () => this.buildConfirm() });
     } else {
       entries.push({ label: 'New Game', action: () => this.begin(true) });
     }
-    this.renderOptions(entries);
+    this.renderOptions(entries, undefined, summary
+      ? `${summary.partyLevels}\nGear ${summary.equipmentCount}  Potions ${summary.potions}  Quests ${summary.completeQuests}`
+      : 'No save found.');
   }
 
   private buildConfirm() {
@@ -126,12 +135,19 @@ export class TitleScene extends Phaser.Scene {
     ], 'This deletes ALL progress: levels, gold and gear.');
   }
 
-  private renderOptions(entries: Array<{ label: string; action: () => void }>, warning?: string) {
+  private renderOptions(entries: Array<{ label: string; action: () => void }>, warning?: string, saveStatus?: string) {
     this.menuBox?.destroy();
+    this.saveStatus?.destroy();
     this.options = [];
     this.index = 0;
     const box = this.add.container(0, 0);
     this.menuBox = box;
+    if (saveStatus) {
+      this.saveStatus = this.add.text(GAME.width / 2, 236, saveStatus, sharpText({
+        fontFamily: FONT, fontSize: '8px', color: '#8a93b8', align: 'center', strokeThickness: 2, lineSpacing: 3,
+      })).setOrigin(0.5);
+      box.add(this.saveStatus);
+    }
     if (warning) {
       box.add(this.add.text(GAME.width / 2, 254, warning, sharpText({
         fontFamily: FONT, fontSize: '9px', color: '#ff8a8a', align: 'center',
@@ -139,12 +155,12 @@ export class TitleScene extends Phaser.Scene {
     }
     entries.forEach((entry, i) => {
       const text = this.add.text(GAME.width / 2, 278 + i * 20, entry.label, sharpText({
-        fontFamily: FONT, fontSize: '11px', color: '#dfe4f5',
+        fontFamily: FONT, fontSize: entry.label.length > 26 ? '9px' : '11px', color: '#dfe4f5',
       })).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      text.on('pointerover', () => { this.index = i; this.updateFocus(); });
-      text.on('pointerdown', () => { this.index = i; this.updateFocus(); entry.action(); });
+      text.on('pointerover', () => { this.index = i; sfx.play('cursor'); this.updateFocus(); });
+      text.on('pointerdown', () => { this.index = i; sfx.play('confirm'); this.updateFocus(); entry.action(); });
       box.add(text);
-      this.options.push({ text, action: entry.action });
+      this.options.push({ text, label: entry.label, action: entry.action });
     });
     this.updateFocus();
   }
@@ -152,6 +168,7 @@ export class TitleScene extends Phaser.Scene {
   private move(dir: number) {
     if (this.options.length === 0) return;
     this.index = (this.index + dir + this.options.length) % this.options.length;
+    sfx.play('cursor');
     this.updateFocus();
   }
 
@@ -159,7 +176,7 @@ export class TitleScene extends Phaser.Scene {
     this.options.forEach((option, i) => {
       const focused = i === this.index;
       option.text.setColor(focused ? '#6cf0c2' : '#dfe4f5');
-      option.text.setText(`${focused ? '> ' : ''}${option.text.text.replace(/^> /, '')}`);
+      option.text.setText(`${focused ? '> ' : ''}${option.label}`);
     });
   }
 

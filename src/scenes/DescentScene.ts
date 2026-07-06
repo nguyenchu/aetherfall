@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
 import { BOONS } from '../game/boons';
-import { getRun, applyDescentModifier, openChest, returnToTown, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
+import { getRun, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -504,9 +504,8 @@ export class DescentScene extends Phaser.Scene {
   private goHome() {
     if (this.busy) return;
     this.busy = true;
-    returnToTown();
     this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Sanctuary'));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth }));
   }
 
   private updateHint() {

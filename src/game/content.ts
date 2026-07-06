@@ -19,49 +19,49 @@ function stats(s: Partial<Stats> & Pick<Stats, 'maxHp' | 'str' | 'agi' | 'vit' |
 }
 
 export const SPELLS: Record<string, Spell> = {
-  // Lyra — black mage
+  // Lyra — Hexweaver: elemental damage plus status setup.
   fire: {
-    id: 'fire', name: 'Ember', cost: 4, kind: 'damage', power: 14,
-    element: 'fire', target: 'enemy', desc: 'Fire damage. May Burn.',
+    id: 'fire', name: 'Ember Hex', cost: 4, kind: 'damage', power: 14,
+    element: 'fire', target: 'enemy', desc: 'Fire hex. May Burn.',
     inflict: { ailment: 'burn', chance: 0.35, rounds: 2 },
   },
   frost: {
-    id: 'frost', name: 'Rime', cost: 5, kind: 'damage', power: 16,
-    element: 'ice', target: 'enemy', desc: 'Ice damage. May Chill.',
+    id: 'frost', name: 'Rime Hex', cost: 5, kind: 'damage', power: 16,
+    element: 'ice', target: 'enemy', desc: 'Ice hex. May Chill.',
     inflict: { ailment: 'chill', chance: 0.35, rounds: 2 },
   },
   firewave: {
-    id: 'firewave', name: 'Emberstorm', cost: 9, kind: 'damage', power: 11,
-    element: 'fire', target: 'all-enemies', desc: 'Fire damage to all. May Burn.',
+    id: 'firewave', name: 'Hexstorm', cost: 9, kind: 'damage', power: 11,
+    element: 'fire', target: 'all-enemies', desc: 'Fire hex on all enemies. May Burn.',
     inflict: { ailment: 'burn', chance: 0.25, rounds: 2 },
   },
   blizzard: {
-    id: 'blizzard', name: 'Blizzard', cost: 12, kind: 'damage', power: 14,
-    element: 'ice', target: 'all-enemies', desc: 'Ice damage to all. May Chill.',
+    id: 'blizzard', name: 'Winter Sigil', cost: 12, kind: 'damage', power: 14,
+    element: 'ice', target: 'all-enemies', desc: 'Ice sigil on all enemies. May Chill.',
     inflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
   },
-  // Mira — cleric
+  // Mira — Dawnkeeper: healing, holy pressure, and party sustain.
   smite: {
-    id: 'smite', name: 'Lightstrike', cost: 6, kind: 'damage', power: 18,
+    id: 'smite', name: 'Dawnstrike', cost: 6, kind: 'damage', power: 18,
     element: 'holy', target: 'enemy', desc: 'Holy damage to one enemy.',
   },
   cure: {
-    id: 'cure', name: 'Mend', cost: 4, kind: 'heal', power: 26,
+    id: 'cure', name: 'Dawnmend', cost: 4, kind: 'heal', power: 26,
     element: 'none', target: 'ally', desc: 'Heals one ally.',
   },
   cureall: {
-    id: 'cureall', name: 'Radiance', cost: 9, kind: 'heal', power: 16,
+    id: 'cureall', name: 'Sunward', cost: 9, kind: 'heal', power: 16,
     element: 'none', target: 'party', desc: 'Heals the whole party.',
   },
-  // Kael — vanguard skills (uses a small stamina pool shown as MP)
+  // Kael — Aetherblade: fast physical pressure and guard breaking.
   bash: {
-    id: 'bash', name: 'Crush', cost: 3, kind: 'damage', power: 18,
+    id: 'bash', name: 'Guardbreak', cost: 3, kind: 'damage', power: 18,
     element: 'phys', target: 'enemy', guardHit: 1,
-    desc: 'Heavy blow. Always chips 1 guard pip.',
+    desc: 'Aetherblade strike. Always chips 1 guard pip.',
   },
   cleave: {
-    id: 'cleave', name: 'Cleave', cost: 4, kind: 'damage', power: 9,
-    element: 'phys', target: 'all-enemies', desc: 'Sweeping strike on all enemies.',
+    id: 'cleave', name: 'Arc Sweep', cost: 4, kind: 'damage', power: 9,
+    element: 'phys', target: 'all-enemies', desc: 'Sweeping aether slash on all enemies.',
   },
 };
 
@@ -118,10 +118,10 @@ export function makeParty(): Combatant[] {
   return [
     {
       id: 'kael', name: 'Kael', side: 'party', spriteKey: 'c_kael',
-      color: C.warrior, size: 22, spells: [], level: 1, xp: 0,
+      color: C.warrior, size: 22, spells: ['bash'], level: 1, xp: 0,
       stats: stats({ maxHp: 60, maxMp: 8, str: 14, agi: 8, vit: 10, int: 2 }),
       growth: { maxHp: 10, maxMp: 2, str: 2, vit: 2, agi: 1 },
-      learnset: { 2: ['bash'], 4: ['cleave'] },
+      learnset: { 4: ['cleave'] },
     },
     {
       id: 'lyra', name: 'Lyra', side: 'party', spriteKey: 'c_lyra',

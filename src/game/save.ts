@@ -18,6 +18,16 @@ export interface SaveData {
   quests: Record<string, QuestStatus>;
 }
 
+export interface SaveSummary {
+  gold: number;
+  deepest: number;
+  potions: number;
+  highestLevel: number;
+  partyLevels: string;
+  equipmentCount: number;
+  completeQuests: number;
+}
+
 const KEY = 'aetherfall.save.v1';
 
 function defaults(): SaveData {
@@ -43,6 +53,25 @@ export function loadSave(): SaveData {
   } catch {
     return defaults();
   }
+}
+
+export function loadSaveSummary(): SaveSummary | null {
+  if (!hasSave()) return null;
+  const data = loadSave();
+  const levels = {
+    kael: data.levels.kael ?? 1,
+    lyra: data.levels.lyra ?? 1,
+    mira: data.levels.mira ?? data.levels.bram ?? 1,
+  };
+  return {
+    gold: data.gold,
+    deepest: data.deepest,
+    potions: data.items.potion ?? data.potions ?? 0,
+    highestLevel: Math.max(...Object.values(levels)),
+    partyLevels: `Kael L${levels.kael}  Lyra L${levels.lyra}  Mira L${levels.mira}`,
+    equipmentCount: data.equipmentOwned.length,
+    completeQuests: Object.values(data.quests).filter((status) => status === 'complete').length,
+  };
 }
 
 function normalize(data: SaveData): SaveData {

@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
+import { music, sfx } from '../audio/music';
 import { BOONS } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
 import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { xpForLevel } from '../game/progression';
+import { loadSaveSummary } from '../game/save';
 import { sharpText, FONT } from '../ui/text';
 import type { Combatant, Stats } from '../game/types';
 
@@ -26,6 +28,7 @@ interface Selectable {
   tab?: MenuTab;
   chosen?: boolean;
   disabled?: boolean;
+  baseFill?: number;
   onFocus?: () => void;
   equipKind?: EquipSelectableKind;
   equipSlot?: EquipSlot;
@@ -407,13 +410,14 @@ export class GameMenuScene extends Phaser.Scene {
       const y = 182 + i * 30;
       const id = eq[slot];
       const name = id ? EQUIPMENT[id]?.name ?? id : '—';
-      const rect = this.add.rectangle(42, y, 414, 28, 0x141a30, 0.96)
-        .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
+      const color = SLOT_COLOR[slot];
+      const rect = this.add.rectangle(42, y, 414, 28, color.fill, 0.96)
+        .setOrigin(0, 0).setStrokeStyle(1, color.stroke).setDepth(2)
         .setInteractive({ useHandCursor: true });
       box.add(rect); // added first: children render in container order
       this.addIcon(box, id, 46, y + 3, 22);
       box.add(this.add.text(76, y + 4, slot.toUpperCase(),
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setDepth(3));
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: color.text, strokeThickness: 2 })).setDepth(3));
       const label = this.add.text(76, y + 13, name,
         sharpText({ fontFamily: FONT, fontSize: '9px', color: id ? '#dfe4f5' : '#8a93b8', strokeThickness: 2 })).setDepth(3);
       if (id) {
@@ -426,6 +430,7 @@ export class GameMenuScene extends Phaser.Scene {
         rect, label,
         action: () => this.focusEquipColumn('items', slot),
         chosen: slot === this.equipSlot,
+        baseFill: color.fill,
         equipKind: 'slot',
         equipSlot: slot,
         onFocus: () => {
@@ -434,6 +439,7 @@ export class GameMenuScene extends Phaser.Scene {
       };
       this.selectables.push(selectable);
       rect.on('pointerdown', () => {
+        sfx.play('confirm');
         this.selected = this.selectables.indexOf(selectable);
         this.focus = 'content';
         this.updateSelection();
@@ -488,7 +494,8 @@ export class GameMenuScene extends Phaser.Scene {
     allChoices.slice(this.equipScroll, this.equipScroll + EQUIP_LIST_ROWS).forEach((item, vi) => {
       const y = listTop + vi * 28;
       const equipped = item.id === current || (!item.id && !current);
-      const rect = this.add.rectangle(42, y, 414, 26, 0x141a30, 0.96)
+      const previewed = (this.equipPreviewItemId === undefined ? (current ?? null) : this.equipPreviewItemId) === (item.id ?? null);
+      const rect = this.add.rectangle(42, y, 414, 26, previewed ? 0x1c2d4a : 0x141a30, 0.96)
         .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
         .setInteractive({ useHandCursor: true });
       box.add(rect);
@@ -499,9 +506,17 @@ export class GameMenuScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2 })).setDepth(3));
       const eqItem = item.id ? EQUIPMENT[item.id] : undefined;
       const fx = eqItem ? equipmentEffectText(eqItem) : [];
+      if (eqItem) {
+        box.add(this.add.text(228, y + 15, `Fits: ${this.userNames(eqItem.users)}`,
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7a84a8', strokeThickness: 2, wordWrap: { width: 168 } })).setDepth(3));
+      }
       if (fx.length > 0) {
         box.add(this.add.text(228, y + 4, `✦ ${fx.join(' · ')}`,
           sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0c8', strokeThickness: 2, lineSpacing: 1, wordWrap: { width: 190 } })).setDepth(3));
+      }
+      if (previewed && !equipped) {
+        box.add(this.add.text(452, y + 3, 'VIEW',
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
       }
       if (equipped) {
         box.add(this.add.text(452, y + 3, 'ON',
@@ -517,6 +532,7 @@ export class GameMenuScene extends Phaser.Scene {
           this.focusEquipColumn('slot'); // done with this slot — back to the loadout
         },
         chosen: equipped,
+        baseFill: previewed ? 0x1c2d4a : 0x141a30,
         equipKind: 'item',
         equipSlot: this.equipSlot,
         equipItemId: item.id ?? null,
@@ -529,6 +545,7 @@ export class GameMenuScene extends Phaser.Scene {
       };
       this.selectables.push(selectable);
       rect.on('pointerdown', () => {
+        sfx.play('confirm');
         this.selected = this.selectables.indexOf(selectable);
         this.focus = 'content';
         this.updateSelection();
@@ -564,6 +581,10 @@ export class GameMenuScene extends Phaser.Scene {
       sharpText({ fontFamily: FONT, fontSize: '8px', color: isCurrent ? '#f0d36c' : '#6cf0c2', strokeThickness: 2 })).setDepth(3));
     box.add(this.add.text(72, 288, previewItem?.description ?? 'No equipment in this slot.',
       sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, lineSpacing: 2, wordWrap: { width: 200 } })).setDepth(3));
+    if (previewItem) {
+      box.add(this.add.text(72, 312, `Fits: ${this.userNames(previewItem.users)}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7a84a8', strokeThickness: 2 })).setDepth(3));
+    }
     if (!previewStats) {
       box.add(this.add.text(288, 288, `${member.name} cannot equip this`,
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#ff8a8a', strokeThickness: 2 })).setDepth(3));
@@ -646,23 +667,46 @@ export class GameMenuScene extends Phaser.Scene {
       .join(' ');
   }
 
-  private renderSystem(box: Phaser.GameObjects.Container) {
-    const run = getRun();
-    box.add(this.add.text(46, 96, 'Progress is saved automatically after battles,\npurchases and equipment changes.',
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8', strokeThickness: 2, lineSpacing: 4 })));
-    box.add(this.add.text(46, 132, `Party   ${run.party.map((m) => `${m.name} L${m.level ?? 1}`).join('   ')}`,
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })));
+  private userNames(ids: string[]): string {
+    const names: Record<string, string> = { kael: 'Kael', lyra: 'Lyra', mira: 'Mira', bram: 'Mira' };
+    return ids.map((id) => names[id] ?? id).join(', ');
+  }
 
-    this.button(46, 176, 200, 'Return to Title', () => this.quitToTitle(), box, '9px');
-    box.add(this.add.text(256, 180, 'Back to the title screen. Keeps your save.',
+  private renderSystem(box: Phaser.GameObjects.Container) {
+    const summary = loadSaveSummary();
+    box.add(this.add.text(46, 96, 'SAVE STATUS', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(46, 110, summary
+      ? `Auto-saved  ·  Stratum ${summary.deepest}  ·  ${summary.gold}g  ·  Gear ${summary.equipmentCount}\n${summary.partyLevels}`
+      : 'No persistent save found yet. Start a new game to create one.',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, lineSpacing: 4 })));
+
+    box.add(this.add.text(46, 148, 'CONTROLS', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(46, 162, `Move WASD/arrows  ·  Z confirm  ·  X cancel  ·  Tab menu\nAudio ${music.isEnabled() ? 'on' : 'off'}  ·  M toggles sound`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2, lineSpacing: 4 })));
+
+    if (this.caller === 'Descent') {
+      this.button(46, 204, 200, 'Return to Town', () => this.returnHome(), box, '9px');
+      box.add(this.add.text(256, 208, 'Ends this run and shows a summary.',
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
+    }
+
+    this.button(46, 236, 200, 'Return to Title', () => this.quitToTitle(), box, '9px');
+    box.add(this.add.text(256, 240, 'Back to the title screen. Keeps your save.',
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
 
     const resetLabel = this.resetArmed ? 'CONFIRM: erase everything' : 'New Game (erase save)';
-    this.button(46, 208, 200, resetLabel, () => this.newGame(), box, '9px');
-    box.add(this.add.text(256, 212, this.resetArmed
+    this.button(46, 268, 200, resetLabel, () => this.newGame(), box, '9px');
+    box.add(this.add.text(256, 272, this.resetArmed
       ? 'Choosing again erases ALL progress!'
       : 'Deletes levels, gold, gear and story.',
       sharpText({ fontFamily: FONT, fontSize: '8px', color: this.resetArmed ? '#ff8a8a' : '#8a93b8', strokeThickness: 2 })));
+  }
+
+  private returnHome() {
+    input.releaseAll();
+    this.scene.stop(this.caller);
+    this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth });
+    this.scene.stop();
   }
 
   private quitToTitle() {
@@ -712,6 +756,7 @@ export class GameMenuScene extends Phaser.Scene {
     this.selectables.push(selectable);
     rect.on('pointerdown', () => {
       if (selectable.disabled) return;
+      sfx.play('confirm');
       this.selected = this.selectables.indexOf(selectable);
       this.focus = selectable.tab ? 'command' : 'content';
       this.updateSelection();
@@ -862,6 +907,7 @@ export class GameMenuScene extends Phaser.Scene {
   private moveSelection(dir: number) {
     this.cleanSelectables();
     if (this.selectables.length === 0) return;
+    sfx.play('cursor');
     if (this.focus === 'command') {
       this.changeTab(dir);
       return;
@@ -873,6 +919,7 @@ export class GameMenuScene extends Phaser.Scene {
   private moveHorizontal(dir: number) {
     this.cleanSelectables();
     if (this.selectables.length === 0) return;
+    sfx.play('cursor');
     if (this.focus === 'command') {
       if (dir < 0) this.enterContent();
       return;
@@ -981,6 +1028,7 @@ export class GameMenuScene extends Phaser.Scene {
 
   private activateSelection() {
     this.cleanSelectables();
+    sfx.play('confirm');
     if (this.focus === 'command') {
       this.enterContent();
       return;
@@ -1006,6 +1054,7 @@ export class GameMenuScene extends Phaser.Scene {
   }
 
   private back() {
+    sfx.play('cancel');
     if (this.focus === 'content') {
       // Equip drills down member -> slot -> item; cancel steps back up one level.
       if (this.tab === 'equip' && this.selectables[this.selected]?.equipKind === 'item') {
@@ -1120,7 +1169,7 @@ export class GameMenuScene extends Phaser.Scene {
       const chosen = s.chosen === true;
       const disabled = s.disabled === true;
       const commandFocus = this.focus === 'command' && activeTab;
-      s.rect.setFillStyle(selected ? 0x263054 : activeTab || chosen ? 0x2a263a : 0x141a30, disabled ? 0.48 : selected || activeTab || chosen ? 1 : 0.96);
+      s.rect.setFillStyle(selected ? 0x263054 : activeTab || chosen ? 0x2a263a : s.baseFill ?? 0x141a30, disabled ? 0.48 : selected || activeTab || chosen ? 1 : 0.96);
       s.rect.setStrokeStyle(selected || activeTab || chosen ? 2 : 1, disabled ? 0x50607a : commandFocus ? 0x6cf0c2 : selected ? 0x6cf0c2 : activeTab || chosen ? 0xf0d36c : COLORS.wall);
       s.label.setColor(disabled ? '#8a93b8' : commandFocus ? '#6cf0c2' : selected ? '#6cf0c2' : activeTab || chosen ? '#f0d36c' : '#dfe4f5');
     });
@@ -1128,16 +1177,16 @@ export class GameMenuScene extends Phaser.Scene {
 
   private roleFor(memberId: string): string {
     switch (memberId) {
-      case 'kael': return 'Vanguard';
-      case 'lyra': return 'Black Mage';
-      case 'mira': return 'Cleric';
+      case 'kael': return 'Aetherblade';
+      case 'lyra': return 'Hexweaver';
+      case 'mira': return 'Dawnkeeper';
       default: return 'Hero';
     }
   }
 
   private spellLine(member: Combatant): string {
     const spells = member.spells.map((id) => SPELLS[id]).filter((s) => s != null);
-    const label = member.id === 'kael' ? 'Skills' : 'Magic';
+    const label = member.id === 'kael' ? 'Aether Arts' : member.id === 'lyra' ? 'Hexes' : member.id === 'mira' ? 'Prayers' : 'Magic';
     if (spells.length > 0) {
       return `${label}  ${spells.map((s) => `${s.name} ${effectiveSpellCost(s.id)}MP`).join(' · ')}`;
     }
@@ -1166,6 +1215,12 @@ function title(tab: MenuTab): string {
 
 const SHORT_STAT: Record<string, string> = {
   maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT',
+};
+
+const SLOT_COLOR: Record<EquipSlot, { fill: number; stroke: number; text: string }> = {
+  weapon: { fill: 0x1b1830, stroke: 0x8a6cf0, text: '#c7b8ff' },
+  armor: { fill: 0x142232, stroke: 0x6cb8ff, text: '#a8d8ff' },
+  charm: { fill: 0x241f18, stroke: 0xf0d36c, text: '#f0d36c' },
 };
 
 // Mirrors BattleScene's ELEMENT_COLOR so spell info reads consistently across screens.
