@@ -158,6 +158,11 @@ export class SanctuaryScene extends Phaser.Scene {
     this.npcAt.clear();
     this.questMarkers.clear();
     this.grid = MAP;
+    // Phaser destroys the previous instance's display objects on shutdown,
+    // but this class instance (and its fields) survives scene restarts —
+    // without resetting these, update() can touch a destroyed GameObject.
+    this.hintText = undefined;
+    this.shopBox = undefined;
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
     this.drawMap(npcs());
