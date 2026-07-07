@@ -29,10 +29,60 @@
         box-shadow: 0 0 60px rgba(108, 240, 194, 0.12), 0 0 120px rgba(138, 108, 240, 0.08);
         border-radius: 2px;
       }
+      #rotate-prompt {
+        display: none;
+      }
+      /* Aetherfall is a fixed 16:9 landscape game: on a touch device held in
+         portrait, Phaser's FIT scaling shrinks the whole canvas (and every
+         touch button on it) down to a sliver. Native builds lock the
+         orientation, but a browser tab can't be force-rotated, so cover the
+         tiny canvas with a legible prompt instead of leaving it unusable. */
+      @media (orientation: portrait) and (pointer: coarse) {
+        #game {
+          display: none;
+        }
+        #rotate-prompt {
+          display: flex;
+          position: fixed;
+          inset: 0;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          background: #07060e;
+          color: #dfe4f5;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          text-align: center;
+          padding: 24px;
+          box-sizing: border-box;
+        }
+        #rotate-prompt .icon {
+          font-size: 40px;
+          animation: rotate-hint 1.6s ease-in-out infinite;
+        }
+        #rotate-prompt .title {
+          font-size: 15px;
+          font-weight: 800;
+          color: #f0d36c;
+        }
+        #rotate-prompt .subtitle {
+          font-size: 11px;
+          color: #8a93b8;
+        }
+      }
+      @keyframes rotate-hint {
+        0%, 100% { transform: rotate(0deg); }
+        50% { transform: rotate(90deg); }
+      }
     </style>
   </head>
   <body>
     <div id="game"></div>
+    <div id="rotate-prompt">
+      <div class="icon">📱</div>
+      <div class="title">Rotate your device</div>
+      <div class="subtitle">Aetherfall is played in landscape.</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
