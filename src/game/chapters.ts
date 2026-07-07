@@ -28,17 +28,17 @@ function shadowWolf(id: string): Combatant {
   return armed({
     id, name: 'Shadow Wolf', side: 'enemy',
     spriteKey: 'e_ghoul', color: 0x334466, size: 24,
-    spells: [], goldReward: 8, xpReward: 10,
+    spells: [], goldReward: 12, xpReward: 10,
     attackInflict: { ailment: 'venom', chance: 0.2, rounds: 2 },
     stats: s(30, 11, 10, 5, 1),
-  }, ['phys', 'fire'], 1);
+  }, ['fire'], 1);
 }
 
 function corruptedSprite(id: string): Combatant {
   return armed({
     id, name: 'Corrupted Sprite', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x7755aa, size: 18,
-    spells: ['frost'], goldReward: 10, xpReward: 12,
+    spells: ['frost'], goldReward: 15, xpReward: 12,
     stats: s(20, 5, 13, 3, 10, 14),
   }, ['fire'], 1);
 }
@@ -47,7 +47,7 @@ function aetherWisp(id: string): Combatant {
   return armed({
     id, name: 'Aether Wisp', side: 'enemy',
     spriteKey: 'e_sprite', color: 0xaaaaff, size: 16,
-    spells: ['smite'], goldReward: 12, xpReward: 14,
+    spells: ['smite'], goldReward: 18, xpReward: 14,
     stats: s(16, 4, 15, 2, 13, 18),
   }, ['ice'], 1);
 }
@@ -56,19 +56,19 @@ function alphaWolf(): Combatant {
   return armed({
     id: 'elite0', name: 'Alpha Shade Wolf', side: 'enemy',
     spriteKey: 'e_ghoul', color: 0x1a2244, size: 30,
-    spells: [], goldReward: 35, xpReward: 45, isElite: true,
+    spells: [], goldReward: 50, xpReward: 45, isElite: true,
     attackInflict: { ailment: 'venom', chance: 0.35, rounds: 3 },
     stats: s(72, 14, 11, 7, 2),
-  }, ['phys', 'fire'], 2);
+  }, ['fire'], 2);
 }
 
 function forestShade(): Combatant {
   return armed({
     id: 'forest_shade', name: 'Forest Shade', side: 'enemy',
     spriteKey: 'e_leviathan', color: 0x112233, size: 38,
-    spells: ['frost', 'fire'], goldReward: 60, xpReward: 100,
+    spells: ['frost', 'fire'], goldReward: 85, xpReward: 100,
     isBoss: true,
-    stats: s(300, 16, 9, 10, 18, 50),
+    stats: s(260, 16, 9, 10, 18, 50),
   }, ['fire', 'holy'], 3);
 }
 
@@ -163,7 +163,7 @@ const AREA_1: AreaDef = {
   },
   scripts: {},
   chests: {
-    '22,2': { gold: 25, equipment: 'emberfang' },
+    '22,2': { gold: 35, equipment: 'emberfang' },
   },
   map: [
     '##############################',
@@ -197,7 +197,7 @@ const AREA_2: AreaDef = {
     '14,4': 'ch1_crystal',
   },
   chests: {
-    '11,11': { gold: 30 },
+    '11,11': { gold: 42 },
   },
   map: [
     '##############################',
@@ -266,7 +266,7 @@ function tideWarden(): Combatant {
     spells: ['frost', 'cure'], goldReward: 80, xpReward: 140,
     isBoss: true,
     attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
-    stats: s(460, 20, 10, 16, 20, 60),
+    stats: s(400, 20, 10, 16, 20, 60),
   }, ['fire', 'holy'], 3);
 }
 
@@ -400,7 +400,7 @@ function ashbrand(): Combatant {
     spells: ['fire', 'smite'], goldReward: 100, xpReward: 180,
     isBoss: true,
     attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
-    stats: s(620, 24, 12, 18, 26, 80),
+    stats: s(540, 24, 12, 18, 26, 80),
   }, ['ice'], 4);
 }
 
