@@ -162,15 +162,28 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
     mkCircle(cx, cy + 24, 'v', 'down');
     mkCircle(cx - 24, cy, '<', 'left');
     mkCircle(cx + 24, cy, '>', 'right');
-  } else if (layout === 'battle') {
-    mkPill(cx - 16, cy, 58, 'Prev', 'left');
-    mkPill(cx + 54, cy, 58, 'Next', 'right');
   } else if (layout === 'side') {
     mkCircle(cx - 24, cy, '<', 'left');
     mkCircle(cx + 24, cy, '>', 'right');
   }
+  // 'battle' has no d-pad: menu rows and target sprites are tap-first
+  // (see BattleScene's renderMenu/beginTargeting touch zones), so a
+  // Prev/Next pair here would just sit dead over the enemies and do
+  // nothing while a menu is open.
 
-  mkPill(442, cy - 8, 48, 'OK', 'confirm');
-  mkPill(402, cy + 20, 58, 'Back', 'cancel');
-  mkPill(474, cy + 20, 58, 'Menu', 'menu');
+  if (layout === 'battle') {
+    // BattleScene fills the middle two-thirds of the screen with sprites
+    // (enemies on the left, party on the right, home row as high as y=64)
+    // and the bottom third with panels, so the usual bottom-anchored OK/
+    // Back/Menu row would have nowhere free. Pack them into a tight row
+    // hugging the very top edge instead, clear of every sprite and of the
+    // turn-order strip (which is centered, not off to this side).
+    mkPill(480, 14, 44, 'OK', 'confirm');
+    mkPill(540, 14, 50, 'Back', 'cancel');
+    mkPill(598, 14, 50, 'Menu', 'menu');
+  } else {
+    mkPill(442, cy - 8, 48, 'OK', 'confirm');
+    mkPill(402, cy + 20, 58, 'Back', 'cancel');
+    mkPill(474, cy + 20, 58, 'Menu', 'menu');
+  }
 }
