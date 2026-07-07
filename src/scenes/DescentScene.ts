@@ -327,7 +327,6 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private bindInput() {
-    this.unsubs.push(input.on('cancel', () => this.goHome()));
     this.unsubs.push(input.on('menu', () => {
       if (this.scene.isActive('GameMenu')) return;
       this.scene.pause();
@@ -501,6 +500,7 @@ export class DescentScene extends Phaser.Scene {
     this.scene.restart();
   }
 
+  /** Only the '<' portal tile leads home; there is no global retreat key. */
   private goHome() {
     if (this.busy) return;
     this.busy = true;
