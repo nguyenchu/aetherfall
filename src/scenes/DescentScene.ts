@@ -4,7 +4,7 @@ import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters'
 import { BOONS } from '../game/boons';
 import { getRun, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
-import { music, sfx } from '../audio/music';
+import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { markSeen } from '../game/dialogue';
 import { paintPixelGrid } from '../art/sprites';
@@ -86,12 +86,12 @@ export class DescentScene extends Phaser.Scene {
     this.bindInput();
     attachTouchControls(this);
 
-    music.play('explore');
+    music.play('explore', this.currentThemeId as AreaThemeId);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
     this.events.on(Phaser.Scenes.Events.RESUME, (_sys: unknown, data?: { won?: boolean; fromBattle?: boolean }) => {
       this.busy = false;
-      music.play('explore');
+      music.play('explore', this.currentThemeId as AreaThemeId);
       this.moveLockedUntil = this.time.now + 220;
       // Only give a grace period after an actual fight (win or flee) — resuming
       // from the menu or a dialogue shouldn't cost the player their progress

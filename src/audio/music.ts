@@ -8,7 +8,8 @@
 // Replace with recorded tracks later by swapping this module while keeping
 // the play/stop/toggle API stable.
 
-export type TrackName = 'explore' | 'battle' | 'sanctuary';
+export type TrackName = 'explore' | 'battle' | 'sanctuary' | 'title';
+export type AreaThemeId = 'forest' | 'sunken' | 'ashen' | 'crystal';
 
 interface TrackDef {
   bpm: number;
@@ -22,11 +23,15 @@ interface TrackDef {
 
 // Helpers for compact patterns.
 const q = (n: number): number[] => [n, -1]; // quarter note (two eighths)
+const half = (n: number): number[] => [n, -1, -1, -1]; // half note (four eighths)
 const bar = (n: number): number[] => [n, -1, -1, -1, -1, -1, -1, -1]; // whole note across one bar
 const flat = (xs: number[][]): number[] => xs.flat();
 
-// --- Explore: calm Am - F - C - G, quarter-note melody over sustained bass.
-const EXPLORE: TrackDef = {
+// --- Explore themes: one per chapter, sharing the quarter-note-arpeggio
+// shape but distinct in key, register, tempo, and oscillator timbre.
+
+// Forest (Ch1): calm Am - F - C - G.
+const EXPLORE_FOREST: TrackDef = {
   bpm: 82,
   melody: flat([
     q(69), q(72), q(76), q(72), // Am: A4 C5 E5 C5
@@ -41,9 +46,63 @@ const EXPLORE: TrackDef = {
   bassVol: 0.22,
 };
 
-// --- Battle: driving Dm - Bb - C - A with pulsing bass and a sharper riff.
+// Sunken City (Ch2): slower, drifting Dm - Gm - Bb - F. Sine melody for a
+// soft, waterlogged feel instead of the forest's crisp square lead.
+const EXPLORE_SUNKEN: TrackDef = {
+  bpm: 74,
+  melody: flat([
+    q(74), q(69), q(65), q(69), // Dm: D5 A4 F4 A4
+    q(67), q(62), q(58), q(62), // Gm: G4 D4 Bb3 D4
+    q(70), q(65), q(62), q(65), // Bb: Bb4 F4 D4 F4
+    q(65), q(60), q(57), q(60), // F:  F4 C4 A3 C4
+  ]),
+  bass: flat([bar(50), bar(43), bar(46), bar(41)]), // D3 G2 Bb2 F2
+  melodyWave: 'sine',
+  bassWave: 'triangle',
+  melodyVol: 0.14,
+  bassVol: 0.2,
+};
+
+// Ashen Peaks (Ch3): tenser Em - C - D - Em, a little faster. Sawtooth lead
+// for a smoldering, rougher edge.
+const EXPLORE_ASHEN: TrackDef = {
+  bpm: 90,
+  melody: flat([
+    q(64), q(67), q(71), q(67), // Em: E4 G4 B4 G4
+    q(60), q(64), q(67), q(64), // C:  C4 E4 G4 E4
+    q(62), q(66), q(69), q(66), // D:  D4 F#4 A4 F#4
+    q(64), q(67), q(71), q(67), // Em: E4 G4 B4 G4
+  ]),
+  bass: flat([bar(40), bar(48), bar(50), bar(40)]), // E2 C3 D3 E2
+  melodyWave: 'sawtooth',
+  bassWave: 'triangle',
+  melodyVol: 0.13,
+  bassVol: 0.21,
+};
+
+// Crystal Depths (Ch4): slow and spacious C - D - Em - G, high register for
+// a bright, alien shimmer. Sine bass keeps it from feeling cluttered.
+const EXPLORE_CRYSTAL: TrackDef = {
+  bpm: 66,
+  melody: flat([
+    q(72), q(79), q(76), q(79), // C:  C5 G5 E5 G5
+    q(74), q(81), q(78), q(81), // D:  D5 A5 F#5 A5
+    q(76), q(83), q(79), q(83), // Em: E5 B5 G5 B5
+    q(79), q(86), q(83), q(86), // G:  G5 D6 B5 D6
+  ]),
+  bass: flat([bar(48), bar(50), bar(52), bar(55)]), // C3 D3 E3 G3
+  melodyWave: 'triangle',
+  bassWave: 'sine',
+  melodyVol: 0.12,
+  bassVol: 0.16,
+};
+
+// --- Battle themes: one per chapter, sharing the galloping
+// root-rest-third-root-fifth-rest-third-root riff shape over a pulsing bass.
 const p = 0; // rest shorthand
-const BATTLE: TrackDef = {
+
+// Forest (Ch1): driving Dm - Bb - C - A.
+const BATTLE_FOREST: TrackDef = {
   bpm: 150,
   melody: [
     74, p, 77, 74, 81, p, 77, 74, // Dm: D5 . F5 D5 A5 . F5 D5
@@ -63,6 +122,71 @@ const BATTLE: TrackDef = {
   bassVol: 0.2,
 };
 
+// Sunken City (Ch2): a tidal pulse through Gm - Eb - F - D.
+const BATTLE_SUNKEN: TrackDef = {
+  bpm: 145,
+  melody: [
+    67, p, 70, 67, 74, p, 70, 67, // Gm: G4 . Bb4 G4 D5 . Bb4 G4
+    63, p, 67, 63, 70, p, 67, 63, // Eb: Eb4 . G4 Eb4 Bb4 . G4 Eb4
+    65, p, 69, 65, 72, p, 69, 65, // F:  F4 . A4 F4 C5 . A4 F4
+    62, p, 66, 62, 69, p, 66, 62, // D:  D4 . F#4 D4 A4 . F#4 D4
+  ],
+  bass: [
+    43, 43, 43, 43, 43, 43, 43, 43, // G2
+    39, 39, 39, 39, 39, 39, 39, 39, // Eb2
+    41, 41, 41, 41, 41, 41, 41, 41, // F2
+    38, 38, 38, 38, 38, 38, 38, 38, // D2
+  ],
+  melodyWave: 'square',
+  bassWave: 'triangle',
+  melodyVol: 0.16,
+  bassVol: 0.19,
+};
+
+// Ashen Peaks (Ch3): the fastest and harshest, Em - C - D - B with a
+// sawtooth lead and a punchier square bass.
+const BATTLE_ASHEN: TrackDef = {
+  bpm: 168,
+  melody: [
+    64, p, 67, 64, 71, p, 67, 64, // Em: E4 . G4 E4 B4 . G4 E4
+    60, p, 64, 60, 67, p, 64, 60, // C:  C4 . E4 C4 G4 . E4 C4
+    62, p, 66, 62, 69, p, 66, 62, // D:  D4 . F#4 D4 A4 . F#4 D4
+    59, p, 63, 59, 66, p, 63, 59, // B:  B3 . D#4 B3 F#4 . D#4 B3
+  ],
+  bass: [
+    40, 40, 40, 40, 40, 40, 40, 40, // E2
+    48, 48, 48, 48, 48, 48, 48, 48, // C3
+    50, 50, 50, 50, 50, 50, 50, 50, // D3
+    47, 47, 47, 47, 47, 47, 47, 47, // B2
+  ],
+  melodyWave: 'sawtooth',
+  bassWave: 'square',
+  melodyVol: 0.15,
+  bassVol: 0.19,
+};
+
+// Crystal Depths (Ch4): bright and glassy, Bm - G - A - Bm in a higher
+// register, resolving home each loop instead of drifting.
+const BATTLE_CRYSTAL: TrackDef = {
+  bpm: 158,
+  melody: [
+    71, p, 74, 71, 78, p, 74, 71, // Bm: B4 . D5 B4 F#5 . D5 B4
+    67, p, 71, 67, 74, p, 71, 67, // G:  G4 . B4 G4 D5 . B4 G4
+    69, p, 73, 69, 76, p, 73, 69, // A:  A4 . C#5 A4 E5 . C#5 A4
+    71, p, 74, 71, 78, p, 74, 71, // Bm: B4 . D5 B4 F#5 . D5 B4
+  ],
+  bass: [
+    47, 47, 47, 47, 47, 47, 47, 47, // B2
+    43, 43, 43, 43, 43, 43, 43, 43, // G2
+    45, 45, 45, 45, 45, 45, 45, 45, // A2
+    47, 47, 47, 47, 47, 47, 47, 47, // B2
+  ],
+  melodyWave: 'square',
+  bassWave: 'sine',
+  melodyVol: 0.16,
+  bassVol: 0.18,
+};
+
 // --- Sanctuary: warm C major hub theme. Triangle waves, slow pulse.
 //     C - Am - F - G: rising arpeggio melody over held bass notes.
 const SANCTUARY: TrackDef = {
@@ -80,7 +204,49 @@ const SANCTUARY: TrackDef = {
   bassVol: 0.18,
 };
 
-const TRACKS: Record<TrackName, TrackDef> = { explore: EXPLORE, battle: BATTLE, sanctuary: SANCTUARY };
+// --- Title: a distinct call-and-response theme so the title screen has its
+// own identity instead of borrowing Sanctuary's hub music. Dm - Bb - F - C,
+// wider melodic leaps (open fifths/octaves) and a moving half-note bass give
+// it a more anthemic, "adventure begins" feel; square lead (vs. Sanctuary's
+// soft double-triangle) keeps it bright without duplicating any other track's
+// instrumentation.
+const TITLE: TrackDef = {
+  bpm: 70,
+  melody: flat([
+    q(62), q(69), q(74), q(69), // Dm: D4 A4 D5 A4      (call, rising)
+    q(70), q(65), q(70), q(74), // Bb: Bb4 F4 Bb4 D5     (call continues, building)
+    q(65), q(72), q(77), q(72), // F:  F4 C5 F5 C5       (response, peak)
+    q(72), q(67), q(64), q(62), // C:  C5 G4 E4 D4       (resolve, loops back to D4)
+  ]),
+  bass: flat([
+    half(50), half(45), // Dm: D3 A2
+    half(46), half(41), // Bb: Bb2 F2
+    half(41), half(48), // F:  F2 C3
+    half(48), half(43), // C:  C3 G2
+  ]),
+  melodyWave: 'square',
+  bassWave: 'triangle',
+  melodyVol: 0.18,
+  bassVol: 0.21,
+};
+
+const TRACKS: Record<string, TrackDef> = {
+  sanctuary: SANCTUARY,
+  title: TITLE,
+  explore_forest: EXPLORE_FOREST,
+  explore_sunken: EXPLORE_SUNKEN,
+  explore_ashen: EXPLORE_ASHEN,
+  explore_crystal: EXPLORE_CRYSTAL,
+  battle_forest: BATTLE_FOREST,
+  battle_sunken: BATTLE_SUNKEN,
+  battle_ashen: BATTLE_ASHEN,
+  battle_crystal: BATTLE_CRYSTAL,
+};
+
+/** explore/battle are keyed per chapter theme; sanctuary and title are single tracks. */
+function trackKey(name: TrackName, theme: AreaThemeId): string {
+  return name === 'explore' || name === 'battle' ? `${name}_${theme}` : name;
+}
 
 export type StingName = 'victory' | 'defeat';
 
@@ -132,7 +298,8 @@ class MusicEngine {
   private ctx?: AudioContext;
   private master?: GainNode;
   private enabled = false;
-  private current: TrackName | null = null;
+  private currentKey: string | null = null;
+  private currentTrack: TrackDef | null = null;
   private timer?: number;
 
   // Scheduler state.
@@ -143,15 +310,21 @@ class MusicEngine {
   private readonly lookahead = 0.12; // seconds to schedule ahead
   private readonly tickMs = 25;
 
-  play(name: TrackName): void {
+  /** `theme` picks the chapter variant for explore/battle; ignored for sanctuary. */
+  play(name: TrackName, theme: AreaThemeId = 'forest'): void {
+    const key = trackKey(name, theme);
+    const track = TRACKS[key];
+    if (!track) return;
     if (!this.enabled) {
-      this.current = name; // remember desired track when sound is re-enabled
+      this.currentKey = key; // remember desired track when sound is re-enabled
+      this.currentTrack = track;
       return;
     }
-    if (this.current === name && this.timer != null) return; // already playing
+    if (this.currentKey === key && this.timer != null) return; // already playing
     this.ensureContext();
-    const switching = this.current !== null;
-    this.current = name;
+    const switching = this.currentKey !== null;
+    this.currentKey = key;
+    this.currentTrack = track;
     this.step = 0;
     this.nextNoteTime = (this.ctx?.currentTime ?? 0) + 0.06;
     if (switching && this.master) this.dip(); // small gain dip to avoid clicks
@@ -163,7 +336,8 @@ class MusicEngine {
       clearInterval(this.timer);
       this.timer = undefined;
     }
-    this.current = null;
+    this.currentKey = null;
+    this.currentTrack = null;
   }
 
   /** Plays a one-shot fanfare and stops the current looping track. */
@@ -192,7 +366,12 @@ class MusicEngine {
       this.master.gain.cancelScheduledValues(this.ctx.currentTime);
       this.master.gain.linearRampToValueAtTime(target, this.ctx.currentTime + 0.1);
     }
-    if (on && this.current && this.timer == null) this.play(this.current);
+    if (on && this.currentKey && this.currentTrack && this.timer == null) {
+      this.ensureContext();
+      this.step = 0;
+      this.nextNoteTime = (this.ctx?.currentTime ?? 0) + 0.06;
+      this.startScheduler();
+    }
   }
 
   isEnabled(): boolean {
@@ -214,8 +393,16 @@ class MusicEngine {
     master.connect(filter).connect(ctx.destination);
     this.ctx = ctx;
     this.master = master;
+    // Resume right away — if this is running inside the user-gesture handler
+    // that triggered it (e.g. the M keydown that just called setEnabled),
+    // the context was created suspended and this call is what actually
+    // starts it. A listener added *during* that same event's dispatch would
+    // not fire for this event, only the next one — which left sound silent
+    // until a second keypress or click.
+    void ctx.resume();
 
-    // Browsers block audio until user action, so resume on first input.
+    // Fallback: if the context still needed a gesture (e.g. it was created
+    // outside one), resume on the next keydown/pointerdown.
     const resume = () => {
       void ctx.resume();
       window.removeEventListener('keydown', resume);
@@ -232,7 +419,7 @@ class MusicEngine {
 
   private tick(): void {
     const ctx = this.ctx;
-    if (!ctx || !this.current) return;
+    if (!ctx || !this.currentTrack) return;
     const running = ctx.state === 'running';
     if (!running) {
       // Keep the scheduler idle while the context is suspended.
@@ -245,7 +432,7 @@ class MusicEngine {
       this.nextNoteTime = ctx.currentTime + 0.06;
       this.wasRunning = true;
     }
-    const track = TRACKS[this.current];
+    const track = this.currentTrack;
     const sec8 = 60 / track.bpm / 2;
     while (this.nextNoteTime < ctx.currentTime + this.lookahead) {
       this.scheduleStep(track, this.step, this.nextNoteTime, sec8);

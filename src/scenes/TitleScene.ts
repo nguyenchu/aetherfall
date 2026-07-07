@@ -35,6 +35,7 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.cameras.main.fadeIn(600, 7, 6, 14);
     this.mode = 'prompt';
+    this.ready = false; // this instance survives scene restarts; reset the grace-period gate
     this.options = [];
     this.unsubs = [];
 
@@ -83,8 +84,18 @@ export class TitleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '7px', color: '#3a4060',
     })).setOrigin(0.5);
 
-    this.input.once('pointerdown', () => this.showMenu());
-    this.input.keyboard?.once('keydown', () => this.showMenu());
+    music.play('title');
+
+    // Not .once(): a keypress landing inside the 400ms grace window below
+    // would be consumed-but-rejected by the ready check and never retried,
+    // leaving keyboard input dead until the player happened to click instead.
+    const tryShowMenu = () => this.showMenu();
+    this.input.on('pointerdown', tryShowMenu);
+    this.input.keyboard?.on('keydown', tryShowMenu);
+    this.unsubs.push(() => {
+      this.input.off('pointerdown', tryShowMenu);
+      this.input.keyboard?.off('keydown', tryShowMenu);
+    });
     this.time.delayedCall(400, () => { this.ready = true; });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
   }
@@ -184,7 +195,7 @@ export class TitleScene extends Phaser.Scene {
     if (reset) hardReset();
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
-    music.play('sanctuary');
+    music.play('sanctuary'); // head start before the fade into Sanctuary
     this.cameras.main.fadeOut(400, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => {
       this.scene.start('Sanctuary');

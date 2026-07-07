@@ -3,11 +3,12 @@ import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
+import { getArea } from '../game/chapters';
 import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
-import { music, sfx } from '../audio/music';
+import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import type { Ailment, BattleEvent, Combatant, Command, Element } from '../game/types';
 
@@ -156,7 +157,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.bindKeys();
     this.syncDisplay();
-    music.play('battle');
+    music.play('battle', getArea(run.depth).theme.id as AreaThemeId);
     this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
     this.startCommandPhase();
   }
