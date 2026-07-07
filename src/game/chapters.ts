@@ -226,7 +226,7 @@ function drownedSoldier(id: string): Combatant {
   return armed({
     id, name: 'Drowned Soldier', side: 'enemy',
     spriteKey: 'e_warden', color: 0x2a4a6a, size: 26,
-    spells: [], goldReward: 14, xpReward: 18,
+    spells: [], goldReward: 20, xpReward: 18,
     stats: s(80, 17, 7, 13, 2),
   }, ['holy'], 2);
 }
@@ -235,7 +235,7 @@ function mireSprite(id: string): Combatant {
   return armed({
     id, name: 'Mire Sprite', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x5a8a5a, size: 18,
-    spells: ['fire', 'frost'], goldReward: 16, xpReward: 20,
+    spells: ['fire', 'frost'], goldReward: 23, xpReward: 20,
     stats: s(52, 8, 15, 5, 16, 24),
   }, ['fire'], 1);
 }
@@ -244,7 +244,7 @@ function tombCrawler(id: string): Combatant {
   return armed({
     id, name: 'Tomb Crawler', side: 'enemy',
     spriteKey: 'e_crawler', color: 0x6a4a2a, size: 28,
-    spells: [], goldReward: 12, xpReward: 16,
+    spells: [], goldReward: 17, xpReward: 16,
     attackInflict: { ailment: 'venom', chance: 0.3, rounds: 3 },
     stats: s(90, 14, 6, 15, 1),
   }, ['ice'], 2);
@@ -254,7 +254,7 @@ function keepSentinel(): Combatant {
   return armed({
     id: 'elite0', name: 'Keep Sentinel', side: 'enemy',
     spriteKey: 'e_warden', color: 0x152e4a, size: 32,
-    spells: ['frost'], goldReward: 50, xpReward: 70, isElite: true,
+    spells: ['frost'], goldReward: 72, xpReward: 70, isElite: true,
     stats: s(150, 20, 8, 16, 8, 20),
   }, ['holy', 'fire'], 3);
 }
@@ -263,7 +263,7 @@ function tideWarden(): Combatant {
   return armed({
     id: 'tide_warden', name: 'Tide Warden', side: 'enemy',
     spriteKey: 'e_leviathan', color: 0x1a3a5a, size: 40,
-    spells: ['frost', 'cure'], goldReward: 80, xpReward: 140,
+    spells: ['frost', 'cure'], goldReward: 115, xpReward: 140,
     isBoss: true,
     attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
     stats: s(400, 20, 10, 16, 20, 60),
@@ -298,7 +298,7 @@ const AREA_3: AreaDef = {
   },
   scripts: {},
   chests: {
-    '1,2': { gold: 40, equipment: 'tidecleaver' },
+    '1,2': { gold: 58, equipment: 'tidecleaver' },
   },
   map: [
     '##############################',
@@ -331,7 +331,7 @@ const AREA_4: AreaDef = {
     '14,4': 'ch2_warden',
   },
   chests: {
-    '17,11': { gold: 50, items: { tonic: 1 } },
+    '17,11': { gold: 72, items: { tonic: 1 } },
   },
   map: [
     '##############################',
