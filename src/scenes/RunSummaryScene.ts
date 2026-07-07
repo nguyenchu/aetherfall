@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
-import { input, attachTouchControls } from '../game/input';
+import { input } from '../game/input';
 import { getRun, returnToTown } from '../game/run';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -64,7 +64,8 @@ export class RunSummaryScene extends Phaser.Scene {
       this.unsubs.push(input.on('confirm', () => this.continue()));
       this.unsubs.push(input.on('cancel', () => this.continue()));
     });
-    attachTouchControls(this, 'bottom', 'menu');
+    // No on-screen buttons: the whole screen is already one big tap target
+    // (see the pointerdown listener above), matching the "Z / tap" hint text.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
   }
 

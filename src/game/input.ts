@@ -157,19 +157,14 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
     mkCircle(cx, cy + 24, 'v', 'down');
     mkCircle(cx - 24, cy, '<', 'left');
     mkCircle(cx + 24, cy, '>', 'right');
-  } else if (layout === 'menu') {
-    mkCircle(cx, cy - 24, '^', 'up');
-    mkCircle(cx, cy + 24, 'v', 'down');
-    mkCircle(cx - 24, cy, '<', 'left');
-    mkCircle(cx + 24, cy, '>', 'right');
   } else if (layout === 'side') {
     mkCircle(cx - 24, cy, '<', 'left');
     mkCircle(cx + 24, cy, '>', 'right');
   }
-  // 'battle' has no d-pad: menu rows and target sprites are tap-first
-  // (see BattleScene's renderMenu/beginTargeting touch zones), so a
-  // Prev/Next pair here would just sit dead over the enemies and do
-  // nothing while a menu is open.
+  // 'battle' and 'menu' have no d-pad: every row/target is already directly
+  // tappable there (BattleScene's renderMenu/beginTargeting touch zones,
+  // GameMenuScene's button() rows), so arrow buttons would just sit dead
+  // over the content and do nothing while a list is open.
 
   if (layout === 'battle') {
     // BattleScene fills the middle two-thirds of the screen with sprites
@@ -181,6 +176,14 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
     mkPill(480, 14, 44, 'OK', 'confirm');
     mkPill(540, 14, 50, 'Back', 'cancel');
     mkPill(598, 14, 50, 'Menu', 'menu');
+  } else if (layout === 'menu') {
+    // GameMenuScene's three panels fill almost the entire 640x360 screen,
+    // so the default bottom-anchored cluster landed on top of real stat
+    // text. OK is also dead here (tapping a row already selects *and*
+    // activates it), so only Back/Menu remain, pushed into the thin strip
+    // below every panel instead.
+    mkPill(550, 347, 56, 'Back', 'cancel');
+    mkPill(610, 347, 50, 'Menu', 'menu');
   } else {
     mkPill(442, cy - 8, 48, 'OK', 'confirm');
     mkPill(402, cy + 20, 58, 'Back', 'cancel');
