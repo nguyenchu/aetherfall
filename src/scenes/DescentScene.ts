@@ -466,7 +466,11 @@ export class DescentScene extends Phaser.Scene {
 
     const area = getArea(depth);
     const groups = Array.from(new Set(Object.values(area.encounters).filter((group) => group !== 'boss' && group !== 'elite' && !group.endsWith('_boss'))));
-    const group = groups.length > 0 ? Phaser.Utils.Array.GetRandom(groups) : 'wolves';
+    // Boss rooms only register their boss's group, so there's nothing valid
+    // to draw a random trash fight from here - skip it instead of falling
+    // back to a hardcoded group name that doesn't exist past Chapter 1.
+    if (groups.length === 0) return;
+    const group = Phaser.Utils.Array.GetRandom(groups);
     this.busy = true;
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
