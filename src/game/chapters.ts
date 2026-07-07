@@ -144,6 +144,14 @@ export const THEMES: Record<string, AreaTheme> = {
     accent: 0xcc4411,
     fogColor: 0xaa3311, fogAlpha: 0.12,
   },
+  crystal: {
+    id: 'crystal',
+    bg: 0x05040e,
+    floor: 0x14102a, floorAlt: 0x1a1433,
+    wall: 0x0a0620,
+    accent: 0x8a4ae0,
+    fogColor: 0x6a3ac0, fogAlpha: 0.16,
+  },
 };
 
 // Area 1 – Forest Entrance. 30 cols × 15 rows.
@@ -417,6 +425,71 @@ export function makeChapter3Encounter(group: Ch3EncounterGroup): Combatant[] {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Chapter 4 enemies — Crystal Depths (depth 7-8)
+// ---------------------------------------------------------------------------
+
+function crystalWisp(id: string): Combatant {
+  return armed({
+    id, name: 'Crystal Wisp', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0x8a5ad0, size: 18,
+    spells: [], goldReward: 24, xpReward: 30,
+    stats: s(60, 16, 17, 6, 8),
+  }, ['fire'], 1);
+}
+
+function caveStalker(id: string): Combatant {
+  return armed({
+    id, name: 'Cave Stalker', side: 'enemy',
+    spriteKey: 'e_crawler', color: 0x4a3a6a, size: 28,
+    spells: [], goldReward: 22, xpReward: 28,
+    attackInflict: { ailment: 'chill', chance: 0.3, rounds: 2 },
+    stats: s(100, 20, 10, 14, 2),
+  }, ['holy'], 2);
+}
+
+function prismSprite(id: string): Combatant {
+  return armed({
+    id, name: 'Prism Sprite', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0xc78aff, size: 18,
+    spells: ['smite', 'frost'], goldReward: 26, xpReward: 32,
+    stats: s(70, 9, 16, 6, 22, 32),
+  }, ['ice'], 1);
+}
+
+function geodeWarden(): Combatant {
+  return armed({
+    id: 'elite0', name: 'Geode Warden', side: 'enemy',
+    spriteKey: 'e_warden', color: 0x5a2a8a, size: 34,
+    spells: ['frost'], goldReward: 90, xpReward: 130, isElite: true,
+    stats: s(310, 26, 9, 24, 10, 20),
+  }, ['fire'], 4);
+}
+
+function prismSovereign(): Combatant {
+  return armed({
+    id: 'prism_sovereign', name: 'Prism Sovereign', side: 'enemy',
+    spriteKey: 'e_leviathan', color: 0x9a3aff, size: 44,
+    spells: ['frost', 'smite'], goldReward: 130, xpReward: 230,
+    isBoss: true,
+    attackInflict: { ailment: 'chill', chance: 0.3, rounds: 2 },
+    stats: s(700, 28, 14, 22, 30, 90),
+  }, ['fire', 'holy'], 4);
+}
+
+type Ch4EncounterGroup = 'wisps' | 'wisp_stalker' | 'stalkers' | 'prisms' | 'elite' | 'ch4_boss';
+
+export function makeChapter4Encounter(group: Ch4EncounterGroup): Combatant[] {
+  switch (group) {
+    case 'wisps':        return [crystalWisp('e0'), crystalWisp('e1')];
+    case 'wisp_stalker': return [crystalWisp('e0'), caveStalker('e1')];
+    case 'stalkers':     return [caveStalker('e0'), caveStalker('e1')];
+    case 'prisms':       return [prismSprite('e0'), prismSprite('e1'), prismSprite('e2')];
+    case 'elite':        return [geodeWarden(), caveStalker('e1')];
+    case 'ch4_boss':     return [prismSovereign()];
+  }
+}
+
 // Area 5 – Ashen Foothills. 30 cols × 15 rows.
 // An elite colossus (X) guards a treasure corridor in the southeast.
 const AREA_5: AreaDef = {
@@ -486,7 +559,78 @@ const AREA_6: AreaDef = {
   ],
 };
 
-export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6];
+// Area 7 – Crystal Depths. 30 cols × 15 rows.
+// An elite geode guardian (X) guards a treasure corridor in the southeast.
+const AREA_7: AreaDef = {
+  id: 'crystal_1',
+  name: 'Crystal Depths',
+  theme: THEMES.crystal,
+  encounters: {
+    '25,2':  'wisp_stalker',
+    '10,3':  'wisps',
+    '4,7':   'stalkers',
+    '26,7':  'prisms',
+    '10,10': 'wisp_stalker',
+    '23,10': 'wisps',
+    '24,12': 'elite',
+  },
+  scripts: {},
+  chests: {
+    '22,12': { gold: 45, equipment: 'prism_edge' },
+  },
+  map: [
+    '##############################',
+    '#............................#',
+    '#..###..........###......E...#',
+    '#..###....E.....###..........#',
+    '#..###..........###..........#',
+    '#............................#',
+    '#.......H....................#',
+    '#...E.....................E..#',
+    '#............................#',
+    '#..###..........###..........#',
+    '#..###....E.....###....E.....#',
+    '#....................#######.#',
+    '#.........>..........#T.X....#',
+    '#<............P......#########',
+    '##############################',
+  ],
+};
+
+// Area 8 – Radiant Sanctum. Boss area. 30 cols × 15 rows.
+const AREA_8: AreaDef = {
+  id: 'crystal_2',
+  name: 'Radiant Sanctum',
+  theme: THEMES.crystal,
+  encounters: {
+    '14,7': 'ch4_boss',
+  },
+  scripts: {
+    '14,4': 'ch4_story',
+  },
+  chests: {
+    '17,11': { gold: 55, items: { tonic: 1 } },
+  },
+  map: [
+    '##############################',
+    '#............................#',
+    '#.####.................####..#',
+    '#.####.................####..#',
+    '#.####........S........####..#',
+    '#.####.................####..#',
+    '#............................#',
+    '#....H........B..............#',
+    '#............................#',
+    '#.####.................####..#',
+    '#.####.................####..#',
+    '#.####...........T.....####..#',
+    '#............................#',
+    '#<...........P...............#',
+    '##############################',
+  ],
+};
+
+export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8];
 
 /** Returns the area for the given depth (1-based). */
 export function getArea(depth: number): AreaDef {
@@ -498,5 +642,6 @@ export function makeEncounterForArea(area: AreaDef, group: string): Combatant[] 
   if (area.id.startsWith('forest')) return makeChapter1Encounter(group as EncounterGroup);
   if (area.id.startsWith('sunken')) return makeChapter2Encounter(group as Ch2EncounterGroup);
   if (area.id.startsWith('ashen'))  return makeChapter3Encounter(group as Ch3EncounterGroup);
+  if (area.id.startsWith('crystal')) return makeChapter4Encounter(group as Ch4EncounterGroup);
   return makeChapter1Encounter(group as EncounterGroup);
 }

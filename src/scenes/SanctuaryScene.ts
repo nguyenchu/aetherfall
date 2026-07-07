@@ -38,6 +38,9 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'winter_staff', flag: 'ch2_complete' },
   { id: 'dawnstar', flag: 'ch2_complete' },
   { id: 'emberweave_robe', flag: 'ch2_complete' },
+  { id: 'stormglass_rod', flag: 'ch4_complete' },
+  { id: 'hollowguard_plate', flag: 'ch4_complete' },
+  { id: 'prism_band', flag: 'ch4_complete' },
 ];
 
 /** Compact stat + effect hint for shop rows, e.g. "+5 INT +6 MP · Attacks strike as HOLY". */
@@ -86,23 +89,24 @@ interface Npc {
 }
 
 function npcs(): Record<string, Npc> {
+  const ch4Done = hasFlag('ch4_complete');
   const ch3Done = hasFlag('ch3_complete');
   const ch2Done = hasFlag('ch2_complete');
   const ch1Done = hasFlag('ch1_complete');
   return {
     K: {
       spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
-      scriptId: ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
+      scriptId: ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
       questActive: isQuestActive('speak_eda'), questId: 'speak_eda',
     },
     L: {
       spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
-      scriptId: ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+      scriptId: ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
       questActive: isQuestActive('learn_of_anchors'), questId: 'learn_of_anchors',
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
-      scriptId: ch3Done ? 'npc_child_after3' : ch1Done ? 'npc_child_after1' : 'npc_child',
+      scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch1Done ? 'npc_child_after1' : 'npc_child',
       questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip',
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
@@ -110,7 +114,7 @@ function npcs(): Record<string, Npc> {
     ...(ch1Done ? {
       T: {
         spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
-        scriptId: ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
+        scriptId: ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
         questActive: isQuestActive('heed_the_stranger'), questId: 'heed_the_stranger',
       },
     } : {}),
@@ -286,6 +290,10 @@ export class SanctuaryScene extends Phaser.Scene {
       this.descendToChapter3();
       return;
     }
+    if (this.ch4PortalPos && nx === this.ch4PortalPos.x && ny === this.ch4PortalPos.y) {
+      this.descendToChapter4();
+      return;
+    }
 
     const npc = this.npcAt.get(`${nx},${ny}`);
     if (npc && npc.name) {
@@ -332,6 +340,9 @@ export class SanctuaryScene extends Phaser.Scene {
       }
       if (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y) {
         return this.portalAction(() => this.descendToChapter3());
+      }
+      if (this.ch4PortalPos && nx === this.ch4PortalPos.x && ny === this.ch4PortalPos.y) {
+        return this.portalAction(() => this.descendToChapter4());
       }
 
       const npc = this.npcAt.get(`${nx},${ny}`);
@@ -460,11 +471,21 @@ export class SanctuaryScene extends Phaser.Scene {
       this.ch3PortalPos = { x: px, y: py };
     }
 
+    if (hasFlag('ch3_complete')) {
+      const px = 27, py = 7;
+      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
+        .setOrigin(0, 0).setTint(0xaa44ff).setDepth(1);
+      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Crystal Depths',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#c78aff' })).setOrigin(0.5, 1).setDepth(5);
+      this.ch4PortalPos = { x: px, y: py };
+    }
+
     // Point toward whichever descent still holds the active main quest.
     const mainPortal = dTiles.length > 0 ? { x: dTiles[Math.floor(dTiles.length / 2)].c, y: dTiles[Math.floor(dTiles.length / 2)].r } : null;
     const nextObjective = !hasFlag('ch1_complete') ? mainPortal
       : !hasFlag('ch2_complete') ? this.ch2PortalPos
       : !hasFlag('ch3_complete') ? this.ch3PortalPos
+      : !hasFlag('ch4_complete') ? this.ch4PortalPos
       : null;
     if (nextObjective) {
       this.addBounceMarker(nextObjective.x * GAME.tile + GAME.tile / 2, nextObjective.y * GAME.tile - 12, '▼', '#6cf0c2');
@@ -480,6 +501,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private ch2PortalPos: { x: number; y: number } | null = null;
   private ch3PortalPos: { x: number; y: number } | null = null;
+  private ch4PortalPos: { x: number; y: number } | null = null;
 
   private descend() {
     this.state = 'busy';
@@ -498,6 +520,13 @@ export class SanctuaryScene extends Phaser.Scene {
   private descendToChapter3() {
     this.state = 'busy';
     getRun().depth = 5;
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
+  }
+
+  private descendToChapter4() {
+    this.state = 'busy';
+    getRun().depth = 7;
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }

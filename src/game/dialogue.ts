@@ -112,10 +112,26 @@ export const SCRIPTS: Record<string, Script> = {
     { text: 'The Ashen Peaks grow quiet for the first time in living memory.', color: NARRATOR },
   ],
 
+  // Chapter 4 — Crystal Depths story trigger before the Prism Sovereign.
+  ch4_story: [
+    { text: 'The cavern opens into a hollow so vast the crystal walls seem to breathe light.', color: NARRATOR },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Radiant Anchor. It\'s whole — but something has grown around it, layer over layer.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'A guardian, once. Now it\'s wearing its own prison like armor.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we crack it open.' },
+  ],
+
+  ch4_win: [
+    { text: 'The crystal shell fractures and falls away. The Prism Sovereign beneath it dims, then steadies.', color: NARRATOR },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Four anchors. Whatever is pushing up from underneath, it just lost ground.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'It knows we\'re coming now. All of them will.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight more. Let it know.' },
+    { text: 'Deep beneath Sanctuary, something ancient turns its attention upward.', color: NARRATOR },
+  ],
+
   ending: [
-    { text: 'Three anchors restored. Three corrupted guardians returned to the light.', color: NARRATOR },
+    { text: 'Four anchors restored. Four corrupted guardians returned to the light.', color: NARRATOR },
     { text: 'The world still sinks — but slower now. Sanctuary stands.', color: NARRATOR },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Nine anchors remain. We know what we\'re doing now.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight anchors remain. We know what we\'re doing now.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Aether is responding. Every anchor we restore is one more thread holding the world together.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'We rest. Then we keep going. Together.' },
     { text: '— The story continues in a future update —', color: NARRATOR },
@@ -150,6 +166,23 @@ export const SCRIPTS: Record<string, Script> = {
   npc_child_after3: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'I can see three stars now that were missing before. Mum says those are the anchors you fixed.' },
     { speaker: 'Child', color: 0x6cf0c2, text: 'The Stranger told me there are nine more. Are you going to fix all of them?' },
+  ],
+  // Post-Ch4 NPC follow-ups
+  npc_keeper_after4: [
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Four anchors. The scouts who go near the deep caverns don\'t come back the same — quieter, like they heard something.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Whatever the Hollow is, it isn\'t waiting anymore. Watch yourselves.' },
+  ],
+  npc_scholar_after4: [
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Four anchors restored, and the old texts agree on one thing now: the anchors aren\'t just lamps. They\'re a seal.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Every one we fix pushes the Hollow back down. And every one we fix, it pushes harder.' },
+  ],
+  npc_stranger_after4: [
+    { speaker: '???', color: 0x8a93b8, text: 'Four now. It felt that one — I saw it flinch, if a thing like that can flinch.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Eight anchors left. It will not let you reach all of them quietly.' },
+  ],
+  npc_child_after4: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Four stars now. I drew them on my wall so I don\'t forget which ones are yours.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum said something\'s digging under the city at night. Is that the thing you\'re fighting?' },
   ],
 };
 

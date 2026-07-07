@@ -1,3 +1,5 @@
+import { ITEMS } from './content';
+
 export type QuestStatus = 'active' | 'complete';
 
 export interface QuestDef {
@@ -54,13 +56,19 @@ export const QUESTS: QuestDef[] = [
     text: 'Defeat the ancient fire spirit bound to the Summit Shrine.',
     rewards: { gold: 150, equipment: ['oracle_lantern'], items: { warden_sigils: 2 } },
   },
+  {
+    id: 'defeat_prism_sovereign',
+    title: 'Crack the Prism Sovereign',
+    text: 'Defeat the crystal guardian bound to the Radiant Anchor in the Crystal Depths.',
+    rewards: { gold: 140, equipment: ['radiant_mace'], items: { warden_sigils: 2 } },
+  },
 ];
 
 export function questRewardText(q: QuestDef): string {
   const parts: string[] = [];
   if (q.rewards?.gold) parts.push(`${q.rewards.gold} gold`);
   for (const [id, count] of Object.entries(q.rewards?.items ?? {})) {
-    const name = id === 'potion' ? 'Elixir' : id === 'tonic' ? 'Aether Tonic' : id === 'tide_pearl' ? 'Tide Pearl' : 'Warden Sigils';
+    const name = ITEMS[id]?.name ?? id;
     parts.push(`${name} x${count}`);
   }
   if (q.rewards?.equipment?.length) parts.push('rare equipment');

@@ -308,6 +308,8 @@ const GEAR_DROPS: Record<number, string[]> = {
   4: ['tidewarden_mail', 'vampire_fang'],
   5: ['ashenguard_plate', 'cinder_band'],
   6: ['ashenguard_plate', 'cinder_band'],
+  7: ['geode_plate', 'prism_band'],
+  8: ['geode_plate', 'prism_band'],
 };
 
 export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
@@ -366,6 +368,13 @@ export function equipmentPrice(itemId: string): number | undefined {
     sunbrand: 220,
     ashenguard_plate: 180,
     cinder_band: 150,
+    // Chapter 4 tier:
+    stormglass_rod: 220,
+    hollowguard_plate: 210,
+    prism_band: 190,
+    prism_edge: 240,
+    geode_plate: 200,
+    radiant_mace: 260,
   };
   return prices[itemId] ?? 55;
 }

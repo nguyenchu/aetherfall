@@ -396,6 +396,20 @@ export class Battle {
         events.push({ kind: 'info', text: 'Ashbrand burns with primal fury — all power amplified!' });
         break;
       }
+      case 'prism_sovereign': {
+        events.push({ kind: 'phase', text: 'The Prism Sovereign shatters its own shell — light scatters into blades!', actorId: boss.id });
+        const shards = Math.round(20 + boss.stats.int * 0.85);
+        for (const t of this.living('party')) {
+          this.applyDamage(t, shards);
+          events.push({ kind: 'spell', text: `Refracted Blades tear into ${t.name}! −${shards} HP`, actorId: boss.id, targetId: t.id, amount: shards, element: 'ice' });
+          this.maybeKo(t, events);
+          if (this.living('party').length === 0) break;
+        }
+        const heal = Math.round(boss.stats.maxHp * 0.12);
+        boss.stats.hp = Math.min(boss.stats.maxHp, boss.stats.hp + heal);
+        events.push({ kind: 'info', text: `The crystal knits itself back together — +${heal} HP!` });
+        break;
+      }
       default:
         events.push({ kind: 'phase', text: `${boss.name} transforms!`, actorId: boss.id });
     }

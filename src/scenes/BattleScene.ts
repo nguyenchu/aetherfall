@@ -818,9 +818,10 @@ export class BattleScene extends Phaser.Scene {
     const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
     if (boss) {
-      const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : 'ch3_complete';
+      const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : depth <= 6 ? 'ch3_complete' : 'ch4_complete';
       setFlag(flag);
-      const questId = flag === 'ch1_complete' ? 'clear_ch1' : flag === 'ch2_complete' ? 'clear_ch2' : 'defeat_ashbrand';
+      const questId = flag === 'ch1_complete' ? 'clear_ch1' : flag === 'ch2_complete' ? 'clear_ch2'
+        : flag === 'ch3_complete' ? 'defeat_ashbrand' : 'defeat_prism_sovereign';
       const completedQuest = completeQuest(questId);
       if (completedQuest) this.pushLog(`Quest complete: ${completedQuest.title} — ${questRewardText(completedQuest)}`);
     }
@@ -830,8 +831,8 @@ export class BattleScene extends Phaser.Scene {
 
     if (boss) {
       this.time.delayedCall(1000, () => {
-        const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : 'ch3_win';
-        const afterWin = depth > 4
+        const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : depth <= 6 ? 'ch3_win' : 'ch4_win';
+        const afterWin = depth > 6
           ? () => this.scene.launch('Dialogue', { scriptId: 'ending', onDone: () => this.toTown() })
           : () => this.toTown();
         this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
