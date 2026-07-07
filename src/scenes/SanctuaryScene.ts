@@ -33,6 +33,7 @@ type Facing = 'down' | 'up' | 'left' | 'right';
 const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'reef_mail', flag: 'ch1_complete' },
   { id: 'tide_ring', flag: 'ch1_complete' },
+  { id: 'moonveil_charm', flag: 'ch1_complete' },
   { id: 'aether_loop', flag: 'ch1_complete' },
   { id: 'stormcaller_rod', flag: 'ch1_complete' },
   { id: 'winter_staff', flag: 'ch2_complete' },
@@ -41,6 +42,14 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'stormglass_rod', flag: 'ch4_complete' },
   { id: 'hollowguard_plate', flag: 'ch4_complete' },
   { id: 'prism_band', flag: 'ch4_complete' },
+];
+
+// Merchant consumable stock beyond the always-available Elixir/Tonic.
+const SHOP_ITEMS: Array<{ id: string; flag: string; hint: string }> = [
+  { id: 'hi_potion', flag: 'ch1_complete', hint: '+65 HP' },
+  { id: 'hi_tonic', flag: 'ch1_complete', hint: '+24 MP' },
+  { id: 'purifying_draught', flag: 'ch2_complete', hint: 'cures ailments' },
+  { id: 'phoenix_down', flag: 'ch3_complete', hint: 'revives at 40%' },
 ];
 
 /** Compact stat + effect hint for shop rows, e.g. "+5 INT +6 MP · Attacks strike as HOLY". */
@@ -556,6 +565,15 @@ export class SanctuaryScene extends Phaser.Scene {
         action: () => buyItem('tonic'),
         column: 'buy' as const,
       },
+      // Stronger consumables unlock as chapters are cleared.
+      ...SHOP_ITEMS
+        .filter((it) => hasFlag(it.flag))
+        .map((it) => ({
+          label: () => `${ITEMS[it.id].name} (${it.hint})   ${ITEMS[it.id].buyPrice}g`,
+          enabled: () => getRun().gold >= (ITEMS[it.id].buyPrice ?? 0),
+          action: () => buyItem(it.id),
+          column: 'buy' as const,
+        })),
       // Gear stock grows as chapters are cleared; owned pieces leave the list.
       ...SHOP_GEAR
         .filter((g) => hasFlag(g.flag) && !ownedEquipment().some((e) => e.id === g.id))

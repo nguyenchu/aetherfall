@@ -139,8 +139,12 @@ export function setFlag(flag: string): void {
 
 // --- Quests -----------------------------------------------------------------
 
+/** Quests the player hasn't reached yet are left out entirely, so the log
+ * only ever shows a quest once it has actually started. */
 export function questList() {
-  return QUESTS.map((q) => ({ ...q, status: save.quests[q.id] ?? 'active' }));
+  return QUESTS
+    .filter((q) => !q.unlockFlag || hasFlag(q.unlockFlag))
+    .map((q) => ({ ...q, status: save.quests[q.id] ?? 'active' }));
 }
 
 /** Marks a quest complete and grants its rewards. Returns the quest the
@@ -156,6 +160,8 @@ export function completeQuest(id: string): QuestDef | null {
 }
 
 export function isQuestActive(id: string): boolean {
+  const quest = QUESTS.find((q) => q.id === id);
+  if (quest?.unlockFlag && !hasFlag(quest.unlockFlag)) return false;
   return (save.quests[id] ?? 'active') === 'active';
 }
 
@@ -238,7 +244,16 @@ export function useItemOn(itemId: string, memberId: string): boolean {
   const item = ITEMS[itemId];
   if (!item || item.target !== 'ally' || (state.inventory[itemId] ?? 0) <= 0) return false;
   const member = state.party.find((c) => c.id === memberId);
-  if (!member || member.stats.hp <= 0) return false;
+  if (!member) return false;
+  // Revive is the one kind that targets a fallen ally instead of a living one.
+  if (item.kind === 'revive') {
+    if (member.stats.hp > 0) return false;
+    state.inventory[itemId]--;
+    member.stats.hp = Math.max(1, Math.round(member.stats.maxHp * item.power));
+    saveProgress();
+    return true;
+  }
+  if (member.stats.hp <= 0) return false;
   if (item.kind === 'heal') {
     if (member.stats.hp >= member.stats.maxHp) return false;
     state.inventory[itemId]--;
@@ -247,6 +262,12 @@ export function useItemOn(itemId: string, memberId: string): boolean {
     if (member.stats.mp >= member.stats.maxMp) return false;
     state.inventory[itemId]--;
     member.stats.mp = Math.min(member.stats.maxMp, member.stats.mp + item.power);
+  } else if (item.kind === 'cure') {
+    // Ailments are battle-scoped and already cleared once a fight ends, so
+    // there is nothing to cure here — this kind only does anything mid-battle.
+    if (!member.ailments || Object.keys(member.ailments).length === 0) return false;
+    state.inventory[itemId]--;
+    member.ailments = undefined;
   } else {
     return false;
   }
@@ -302,8 +323,8 @@ export function castSpellOutOfBattle(casterId: string, spellId: string, targetId
 
 // Depth-tiered gear that can drop from battles; elites drop it far more often.
 const GEAR_DROPS: Record<number, string[]> = {
-  1: ['tide_ring'],
-  2: ['tide_ring'],
+  1: ['tide_ring', 'moonveil_charm'],
+  2: ['tide_ring', 'moonveil_charm'],
   3: ['tidewarden_mail', 'vampire_fang'],
   4: ['tidewarden_mail', 'vampire_fang'],
   5: ['ashenguard_plate', 'cinder_band'],
@@ -312,16 +333,35 @@ const GEAR_DROPS: Record<number, string[]> = {
   8: ['geode_plate', 'prism_band'],
 };
 
+// Depth-tiered sell junk, one flavor per chapter.
+const JUNK_DROPS: Record<number, string> = {
+  1: 'wolf_pelt', 2: 'wolf_pelt',
+  3: 'tide_pearl', 4: 'tide_pearl',
+  5: 'cinder_shard', 6: 'cinder_shard',
+  7: 'prism_shard', 8: 'prism_shard',
+};
+
 export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
   const drops: string[] = [];
+  const junk = JUNK_DROPS[depth] ?? 'tide_pearl';
   const pearlChance = boss || elite ? 1 : 0.45 + depth * 0.05;
   if (Math.random() < pearlChance) {
-    addItem(boss ? 'warden_sigils' : 'tide_pearl', boss || elite ? 2 : 1);
-    drops.push(boss ? 'Warden Sigils x2' : elite ? 'Tide Pearl x2' : 'Tide Pearl x1');
+    const id = boss ? 'warden_sigils' : junk;
+    const count = boss || elite ? 2 : 1;
+    addItem(id, count);
+    drops.push(`${ITEMS[id].name} x${count}`);
   }
   if (!boss && Math.random() < (elite ? 0.6 : 0.16)) {
     addItem('tonic', 1);
     drops.push('Aether Tonic x1');
+  }
+  if (!boss && Math.random() < (elite ? 0.3 : 0.08)) {
+    addItem('purifying_draught', 1);
+    drops.push('Purifying Draught x1');
+  }
+  if (elite && Math.random() < 0.25) {
+    addItem('phoenix_down', 1);
+    drops.push('Phoenix Down x1');
   }
   if (!boss && Math.random() < (elite ? 0.4 : 0.12)) {
     const pool = (GEAR_DROPS[depth] ?? []).filter((id) => !save.equipmentOwned.includes(id));
@@ -352,6 +392,7 @@ export function equipmentPrice(itemId: string): number | undefined {
   if (!EQUIPMENT[itemId]) return undefined;
   const prices: Record<string, number> = {
     tide_ring: 90,
+    moonveil_charm: 80,
     reef_mail: 120,
     oracle_lantern: 150,
     aether_loop: 110,

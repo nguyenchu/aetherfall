@@ -644,12 +644,14 @@ export class BattleScene extends Phaser.Scene {
       this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget');
     } else if (this.pending?.kind === 'item') {
       this.pending.id = sel.id;
-      this.beginTargeting('party', 'subtarget');
+      const item = ITEMS[sel.id];
+      this.beginTargeting('party', 'subtarget', item?.kind === 'revive');
     }
   }
 
-  private beginTargeting(side: 'party' | 'enemy', state: 'target' | 'subtarget') {
-    this.targets = this.battle.living(side);
+  private beginTargeting(side: 'party' | 'enemy', state: 'target' | 'subtarget', downedOnly = false) {
+    // Revive items target a fallen ally instead of a living one.
+    this.targets = downedOnly ? this.battle.party.filter((c) => c.stats.hp <= 0) : this.battle.living(side);
     if (this.targets.length === 0) {
       this.openMenu();
       return;
@@ -769,6 +771,13 @@ export class BattleScene extends Phaser.Scene {
       if (a) this.mpDisplay.set(a.id, a.stats.mp);
     }
     if (ev.kind === 'ko' && ev.targetId) this.fadeKo(ev.targetId);
+    // Revives (Phoenix Down, or the Crystal Promise boon) bring hp back above
+    // zero on a sprite fadeKo left dimmed and dropped — undo that visually.
+    if (ev.targetId) {
+      const revived = this.battle.byId(ev.targetId);
+      const img = this.sprites.get(ev.targetId);
+      if (revived && img && revived.stats.hp > 0 && img.alpha < 1) this.reviveSprite(ev.targetId);
+    }
 
     this.refreshStatus();
     // Hold confirm to fast-forward the round.
@@ -844,7 +853,7 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(900, () => {
       const choices = rollBoonChoices(run.boons, this.isElite);
       const finish = () => {
-        this.scene.resume('Descent', { won: true });
+        this.scene.resume('Descent', { won: true, fromBattle: true });
         this.scene.stop();
       };
       if (choices.length === 0) {
@@ -858,7 +867,7 @@ export class BattleScene extends Phaser.Scene {
   private endBattle(delay: number) {
     this.ui = 'over';
     this.time.delayedCall(delay, () => {
-      this.scene.resume('Descent');
+      this.scene.resume('Descent', { fromBattle: true });
       this.scene.stop();
     });
   }
@@ -1188,6 +1197,13 @@ export class BattleScene extends Phaser.Scene {
     const img = this.sprites.get(id);
     if (!img) return;
     this.tweens.add({ targets: img, alpha: 0.18, y: img.y + 8, duration: 360, ease: 'Sine.easeIn' });
+  }
+
+  private reviveSprite(id: string) {
+    const img = this.sprites.get(id);
+    const home = this.spriteHome.get(id);
+    if (!img) return;
+    this.tweens.add({ targets: img, alpha: 1, y: home?.y ?? img.y - 8, duration: 300, ease: 'Sine.easeOut' });
   }
 
   private syncDisplay() {

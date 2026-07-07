@@ -13,7 +13,7 @@ import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
-const RANDOM_BATTLE_MIN_STEPS = 6;
+const RANDOM_BATTLE_MIN_STEPS = 3;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 interface PartyHudRow {
@@ -24,9 +24,9 @@ interface PartyHudRow {
 
 /**
  * Fixed dungeon exploration. Each depth maps to a hand-crafted area defined
- * in chapters.ts. Encounters trigger at marked tiles and are cleared once won.
- * Treasure chests (T), healing springs (H), and elite guardians (X) reward
- * exploring off the main path.
+ * in chapters.ts. Trash fights trigger randomly while walking floor tiles;
+ * bosses (B) and elite guardians (X) are fixed, marked encounters.
+ * Treasure chests (T) and healing springs (H) reward exploring off the main path.
  */
 export class DescentScene extends Phaser.Scene {
   private map: string[] = [];
@@ -89,11 +89,14 @@ export class DescentScene extends Phaser.Scene {
     music.play('explore');
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
-    this.events.on(Phaser.Scenes.Events.RESUME, (_sys: unknown, data?: { won?: boolean }) => {
+    this.events.on(Phaser.Scenes.Events.RESUME, (_sys: unknown, data?: { won?: boolean; fromBattle?: boolean }) => {
       this.busy = false;
       music.play('explore');
       this.moveLockedUntil = this.time.now + 220;
-      this.randomBattleSteps = 0;
+      // Only give a grace period after an actual fight (win or flee) — resuming
+      // from the menu or a dialogue shouldn't cost the player their progress
+      // toward the next random encounter.
+      if (data?.fromBattle) this.randomBattleSteps = 0;
       if (data?.won && this.pendingEncounterKey) {
         const key = this.pendingEncounterKey;
         setFlag(`enc_${getRun().depth}_${key}`);
@@ -176,11 +179,8 @@ export class DescentScene extends Phaser.Scene {
         if (ch === 'P') { this.px = c; this.py = r; }
 
         const tileKey = `${c},${r}`;
-        if (ch === 'E' && !hasFlag(`enc_${depth}_${tileKey}`)) {
-          this.addEncounterMarker(c, r, tileKey, false);
-        }
         if (ch === 'X' && !hasFlag(`enc_${depth}_${tileKey}`)) {
-          this.addEncounterMarker(c, r, tileKey, true);
+          this.addEncounterMarker(c, r, tileKey);
         }
         if (ch === 'T' && !hasFlag(`chest_${depth}_${tileKey}`)) {
           const img = this.add.image(c * GAME.tile, r * GAME.tile, 'chest').setOrigin(0, 0).setDepth(2);
@@ -223,15 +223,13 @@ export class DescentScene extends Phaser.Scene {
     }
   }
 
-  private addEncounterMarker(c: number, r: number, key: string, elite: boolean) {
+  private addEncounterMarker(c: number, r: number, key: string) {
     const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
-      .setOrigin(0, 0).setTint(elite ? 0xff8800 : 0xff4444).setAlpha(elite ? 0.95 : 0.7).setDepth(2);
-    if (elite) {
-      this.tweens.add({ targets: img, alpha: { from: 0.95, to: 0.5 }, duration: 650, yoyo: true, repeat: -1 });
-      this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile - 2, '!!', sharpText({
-        fontFamily: FONT, fontSize: '9px', color: '#ffa03c', strokeThickness: 3,
-      })).setOrigin(0.5, 1).setDepth(3).setName(`elite_label_${key}`);
-    }
+      .setOrigin(0, 0).setTint(0xff8800).setAlpha(0.95).setDepth(2);
+    this.tweens.add({ targets: img, alpha: { from: 0.95, to: 0.5 }, duration: 650, yoyo: true, repeat: -1 });
+    this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile - 2, '!!', sharpText({
+      fontFamily: FONT, fontSize: '9px', color: '#ffa03c', strokeThickness: 3,
+    })).setOrigin(0.5, 1).setDepth(3).setName(`elite_label_${key}`);
     this.tileImages.set(key, img);
   }
 
@@ -373,7 +371,7 @@ export class DescentScene extends Phaser.Scene {
     const tileKey = `${this.px},${this.py}`;
     const depth = getRun().depth;
 
-    if ((ch === 'E' || ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${tileKey}`)) {
+    if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${tileKey}`)) {
       this.triggerEncounter(tileKey, ch === 'B', ch === 'X');
       return;
     }
@@ -393,9 +391,9 @@ export class DescentScene extends Phaser.Scene {
     this.maybeTriggerRandomEncounter(ch);
   }
 
-  private triggerEncounter(tileKey: string, isBoss: boolean, isElite = false) {
+  private triggerEncounter(tileKey: string, isBoss: boolean, isElite: boolean) {
     const area = getArea(getRun().depth);
-    const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : isElite ? 'elite' : 'wolves');
+    const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : 'elite');
     this.busy = true;
     this.pendingEncounterKey = tileKey;
     this.scene.pause();
@@ -461,7 +459,7 @@ export class DescentScene extends Phaser.Scene {
     if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
 
     const depth = getRun().depth;
-    const chance = Math.min(0.16, 0.065 + depth * 0.008);
+    const chance = Math.min(0.22, 0.11 + depth * 0.01);
     if (Math.random() >= chance) return;
 
     const area = getArea(depth);
@@ -523,8 +521,8 @@ export class DescentScene extends Phaser.Scene {
       if (!ch) continue;
       if (ch === '>') { label = 'Z / tap  ·  descend'; break; }
       if (ch === '<') { label = 'Z / tap  ·  return home'; break; }
-      if ((ch === 'E' || ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
-        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : ch === 'X' ? 'Z / tap  ·  elite guardian!' : 'Z / tap  ·  encounter';
+      if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
+        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
         break;
       }
       if (ch === 'T' && !hasFlag(`chest_${depth}_${nx},${ny}`)) {

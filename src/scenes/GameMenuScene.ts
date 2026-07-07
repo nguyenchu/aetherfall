@@ -266,7 +266,21 @@ export class GameMenuScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c', strokeThickness: 2 })));
       box.add(this.add.text(84, y + 13, item?.description ?? '',
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 350 } })));
-      if (item?.target === 'ally') {
+      if (item?.kind === 'cure') {
+        box.add(this.add.text(84, y + 27, 'Cures ailments — only useful mid-battle.',
+          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
+      } else if (item?.kind === 'revive') {
+        run.party.forEach((member, memberIndex) => {
+          const usable = member.stats.hp <= 0;
+          const b = this.button(84 + memberIndex * 108, y + 26, 100, `${member.name}  ${usable ? 'KO' : 'OK'}`, () => {
+            this.menuNotice = useItemOn(id, member.id)
+              ? `${member.name} returns to the fight.`
+              : `${member.name} can't use this right now.`;
+            this.renderContent();
+          }, box, '7px');
+          b.disabled = !usable;
+        });
+      } else if (item?.target === 'ally') {
         run.party.forEach((member, memberIndex) => {
           const vital = item.kind === 'heal'
             ? { cur: member.stats.hp, max: member.stats.maxHp }
@@ -681,7 +695,7 @@ export class GameMenuScene extends Phaser.Scene {
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, lineSpacing: 4 })));
 
     box.add(this.add.text(46, 148, 'CONTROLS', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
-    box.add(this.add.text(46, 162, `Move WASD/arrows  ·  Z confirm  ·  X cancel  ·  Tab menu\nAudio ${music.isEnabled() ? 'on' : 'off'}  ·  M toggles sound`,
+    box.add(this.add.text(46, 162, `Move WASD/arrows  ·  Z confirm  ·  X cancel  ·  C/Tab menu\nAudio ${music.isEnabled() ? 'on' : 'off'}  ·  M toggles sound`,
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2, lineSpacing: 4 })));
 
     if (this.caller === 'Descent') {

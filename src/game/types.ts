@@ -54,7 +54,10 @@ export interface Spell {
 export interface Item {
   id: string;
   name: string;
-  kind: 'heal' | 'mp' | 'sell';
+  // heal/mp restore `power` as a flat amount; revive restores `power` as a
+  // fraction of max HP (e.g. 0.4 = 40%); cure clears all ailments and
+  // ignores `power`; sell has no field use beyond trading it in.
+  kind: 'heal' | 'mp' | 'sell' | 'cure' | 'revive';
   power: number;
   target: 'ally' | 'none';
   buyPrice?: number;

@@ -148,6 +148,17 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { mpRegen: 1 },
     icon: { kind: 'ring', base: 0xa58cff, accent: 0xdfe4f5 },
   },
+  moonveil_charm: {
+    id: 'moonveil_charm',
+    name: 'Moonveil Charm',
+    slot: 'charm',
+    users: ['kael', 'lyra', 'mira'],
+    bonus: { agi: 2 },
+    trait: 'Moonlit hush',
+    description: 'A sliver of quiet moonlight. Quickens the draw and the eye.',
+    effects: { critBonus: 0.04 },
+    icon: { kind: 'ring', base: 0x6c8cf0, accent: 0xdfe4f5 },
+  },
 
   // --- Chapter 2 tier (Sunken City) --------------------------------------------
   tidecleaver: {

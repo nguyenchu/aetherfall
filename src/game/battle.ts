@@ -234,6 +234,19 @@ export class Battle {
       case 'item': {
         const item = ITEMS[cmd.itemId];
         if (!item || item.target !== 'ally' || (this.inventory[item.id] ?? 0) <= 0) return;
+        // Revive is the one item kind that targets a fallen ally directly —
+        // aliveTargetOr would just redirect it to someone still standing.
+        if (item.kind === 'revive') {
+          const target = this.byId(cmd.targetId);
+          if (!target || target.side !== actor.side || target.stats.hp > 0) return;
+          this.inventory[item.id]--;
+          target.stats.hp = Math.min(target.stats.maxHp, Math.max(1, Math.round(target.stats.maxHp * item.power)));
+          events.push({
+            kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} returns to the fight!`,
+            actorId: actor.id, targetId: target.id, amount: -target.stats.hp,
+          });
+          return;
+        }
         this.inventory[item.id]--;
         const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
         const boost = actor.side === 'party' ? 1 + this.bn.potionBoost : 1;
@@ -244,6 +257,14 @@ export class Battle {
         } else if (item.kind === 'mp') {
           target.stats.mp = Math.min(target.stats.maxMp, target.stats.mp + power);
           events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${power} MP.`, actorId: actor.id, targetId: target.id });
+        } else if (item.kind === 'cure') {
+          const had = !!target.ailments && Object.keys(target.ailments).length > 0;
+          target.ailments = undefined;
+          events.push({
+            kind: 'item',
+            text: had ? `${actor.name} uses ${item.name}; ${target.name} is cleansed of ailments.` : `${actor.name} uses ${item.name}, but ${target.name} has nothing to cure.`,
+            actorId: actor.id, targetId: target.id,
+          });
         }
         return;
       }

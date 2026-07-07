@@ -50,10 +50,42 @@ export class BootScene extends Phaser.Scene {
           case 'tonic':
             this.drawBottle(g, 0x44aaff, 0xb8e8ff);
             break;
+          case 'hi_potion':
+            this.drawBottle(g, 0xff2244, 0xffe07a);
+            this.drawSparkle(g, 24, 8);
+            break;
+          case 'hi_tonic':
+            this.drawBottle(g, 0x1a5adf, 0x9ad8ff);
+            this.drawSparkle(g, 24, 8);
+            break;
+          case 'purifying_draught':
+            this.drawBottle(g, 0x6cf0c2, 0xe8fff4);
+            g.lineStyle(2, 0xffffff, 0.9).lineBetween(16, 12, 16, 20).lineBetween(12, 16, 20, 16);
+            break;
+          case 'phoenix_down':
+            g.fillStyle(0xff8a3c, 1).fillTriangle(16, 6, 10, 24, 22, 24);
+            g.fillStyle(0xffe07a, 1).fillTriangle(16, 11, 13, 22, 19, 22);
+            g.lineStyle(2, 0xff5a1a, 0.7).strokeTriangle(16, 6, 10, 24, 22, 24);
+            break;
           case 'tide_pearl':
             g.fillStyle(0xdff6ff, 1).fillCircle(16, 16, 8);
             g.fillStyle(0x78b6d8, 0.7).fillCircle(19, 14, 3);
             g.lineStyle(2, 0x9ad8ff, 0.8).strokeCircle(16, 16, 9);
+            break;
+          case 'wolf_pelt':
+            g.fillStyle(0x5a4a3a, 1).fillTriangle(16, 7, 8, 23, 24, 23);
+            g.fillStyle(0xdfe4f5, 0.8).fillTriangle(16, 11, 12, 21, 20, 21);
+            g.lineStyle(2, 0x2a2018, 0.7).strokeTriangle(16, 7, 8, 23, 24, 23);
+            break;
+          case 'cinder_shard':
+            g.fillStyle(0xff8a5a, 1).fillTriangle(16, 6, 11, 26, 21, 26);
+            g.fillStyle(0xffd36c, 0.85).fillTriangle(16, 10, 14, 22, 18, 22);
+            g.lineStyle(2, 0xaa3311, 0.8).strokeTriangle(16, 6, 11, 26, 21, 26);
+            break;
+          case 'prism_shard':
+            g.fillStyle(0xc78aff, 1).fillTriangle(16, 6, 11, 26, 21, 26);
+            g.fillStyle(0xdfe4f5, 0.85).fillTriangle(16, 10, 14, 22, 18, 22);
+            g.lineStyle(2, 0x6a3ac0, 0.8).strokeTriangle(16, 6, 11, 26, 21, 26);
             break;
           case 'warden_sigils':
             g.fillStyle(0x7d89a8, 1).fillRoundedRect(8, 6, 16, 20, 3);
@@ -134,6 +166,15 @@ export class BootScene extends Phaser.Scene {
     g.fillStyle(liquid, 1).fillRoundedRect(9, 10, 14, 16, 4);
     g.fillStyle(shine, 0.85).fillRoundedRect(12, 12, 4, 9, 2);
     g.lineStyle(2, 0x07060e, 0.45).strokeRoundedRect(9, 10, 14, 16, 4);
+  }
+
+  /** Small four-point sparkle, used to mark "greater" tiers of a base item. */
+  private drawSparkle(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    g.fillStyle(0xfff4b8, 0.95);
+    g.fillTriangle(x, y - 4, x - 1.5, y, x + 1.5, y);
+    g.fillTriangle(x, y + 4, x - 1.5, y, x + 1.5, y);
+    g.fillTriangle(x - 4, y, x, y - 1.5, x, y + 1.5);
+    g.fillTriangle(x + 4, y, x, y - 1.5, x, y + 1.5);
   }
 
   private drawArmor(g: Phaser.GameObjects.Graphics, base: number, accent: number) {

@@ -68,7 +68,7 @@ const KEY_MAP: Record<string, Btn> = {
   z: 'confirm', Z: 'confirm', Enter: 'confirm', ' ': 'confirm',
   x: 'cancel', X: 'cancel', Backspace: 'cancel', Escape: 'cancel',
   // Note: removed `m`/`M` here so `m` only toggles sound and does not open the menu.
-  Tab: 'menu',
+  Tab: 'menu', c: 'menu', C: 'menu',
 };
 
 let keyboardBound = false;
