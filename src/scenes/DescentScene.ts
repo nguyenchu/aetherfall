@@ -14,6 +14,10 @@ const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
 const RANDOM_BATTLE_MIN_STEPS = 3;
+// Bad-luck protection: independent per-step rolls can still produce long dry
+// spells even at a reasonable average rate, which reads as "broken" rather
+// than "unlucky". Force an encounter if one hasn't landed by this many steps.
+const RANDOM_BATTLE_MAX_STEPS = 14;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 interface PartyHudRow {
@@ -352,8 +356,15 @@ export class DescentScene extends Phaser.Scene {
     this.px = nx;
     this.py = ny;
     this.facing = this.facingFromDir(d.x, d.y);
-    this.walkPlayerTo(this.tileCenter(this.px), this.tileCenter(this.py), () => this.resolveTile());
+    // walkPlayerTo is purely cosmetic (STEP_MS ≈ moveLockedUntil apart, so a
+    // held direction reliably kills the previous step's tween just before it
+    // completes). Game logic used to hang off that tween's onComplete, which
+    // meant most tiles crossed while holding a direction never actually got
+    // resolved — chests, springs, and random encounters all silently skipped.
+    // Resolve the tile immediately instead, decoupled from the animation.
+    this.walkPlayerTo(this.tileCenter(this.px), this.tileCenter(this.py));
     this.moveLockedUntil = time + 110;
+    this.resolveTile();
     // Dark Drain modifier
     const drain = getRun().modifier.hpDrainPerStep;
     if (drain) {
@@ -460,7 +471,8 @@ export class DescentScene extends Phaser.Scene {
 
     const depth = getRun().depth;
     const chance = Math.min(0.22, 0.11 + depth * 0.01);
-    if (Math.random() >= chance) return;
+    const forced = this.randomBattleSteps >= RANDOM_BATTLE_MAX_STEPS;
+    if (!forced && Math.random() >= chance) return;
 
     const area = getArea(depth);
     const groups = Array.from(new Set(Object.values(area.encounters).filter((group) => group !== 'boss' && group !== 'elite' && !group.endsWith('_boss'))));
@@ -551,14 +563,14 @@ export class DescentScene extends Phaser.Scene {
 
   private tileCenter(n: number): number { return n * GAME.tile + GAME.tile / 2; }
 
-  private walkPlayerTo(x: number, y: number, onArrive?: () => void) {
+  private walkPlayerTo(x: number, y: number) {
     this.walkFrame = 1 - this.walkFrame;
     this.applyFacing(true);
     this.tweens.killTweensOf(this.player);
     this.tweens.killTweensOf(this.playerShadow);
     this.tweens.add({
       targets: this.player, x, y, duration: STEP_MS, ease: 'Linear',
-      onComplete: () => { this.applyFacing(false); onArrive?.(); },
+      onComplete: () => { this.applyFacing(false); },
     });
     this.tweens.add({ targets: this.playerShadow, x, y: y + 8, duration: STEP_MS, ease: 'Linear' });
   }

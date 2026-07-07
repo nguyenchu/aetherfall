@@ -433,6 +433,7 @@ export function equipNext(memberId: string, slot: EquipSlot): boolean {
   const idx = choices.findIndex((e) => e.id === current);
   const next = choices[(idx + 1) % choices.length];
   const before = currentEquipmentBonus(memberId);
+  unequipFromOthers(next.id, memberId);
   save.equipped[memberId] = { ...equippedFor(memberId), [slot]: next.id };
   const after = currentEquipmentBonus(memberId);
   applyStatDelta(member, before, -1);
@@ -453,6 +454,7 @@ export function equipItem(memberId: string, slot: EquipSlot, itemId?: string): b
   const current = equippedFor(memberId)[slot];
   if (current === itemId) return false;
   const before = currentEquipmentBonus(memberId);
+  if (itemId) unequipFromOthers(itemId, memberId);
   save.equipped[memberId] = { ...equippedFor(memberId), [slot]: itemId };
   if (!itemId) delete save.equipped[memberId][slot];
   const after = currentEquipmentBonus(memberId);
@@ -577,6 +579,24 @@ const STARTER_LOCKED = new Set(STARTING_EQUIPMENT);
 
 function isEquipped(itemId: string): boolean {
   return Object.values(save.equipped).some((slots) => Object.values(slots).includes(itemId));
+}
+
+/** Each owned copy of gear can only be worn by one party member at a time —
+ * equipping it elsewhere pulls it off whoever currently has it on. */
+function unequipFromOthers(itemId: string, exceptMemberId: string): void {
+  for (const other of state.party) {
+    if (other.id === exceptMemberId) continue;
+    const slots = equippedFor(other.id);
+    const slot = (Object.keys(slots) as EquipSlot[]).find((s) => slots[s] === itemId);
+    if (!slot) continue;
+    const before = currentEquipmentBonus(other.id);
+    delete save.equipped[other.id][slot];
+    const after = currentEquipmentBonus(other.id);
+    applyStatDelta(other, before, -1);
+    applyStatDelta(other, after, 1);
+    clampVitals(other);
+    refreshGearEffects(other);
+  }
 }
 
 function grantRewards(rewards: typeof QUESTS[number]['rewards']): void {

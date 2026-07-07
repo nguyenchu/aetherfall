@@ -2,11 +2,17 @@
 // without touching scene code. DialogueScene plays each script with typewriter text.
 // Controlled by keyboard or tap for mobile.
 
+/** Small vignettes DialogueScene can draw above the textbox, built from the
+ *  same pixel-sprite textures used in the field. Add a case in DialogueScene's
+ *  renderVisual() for any new id. */
+export type DialogueVisual = 'heroes_meet';
+
 export interface DialogueLine {
   speaker?: string; // name shown in the name box; omitted for narration
   text: string;
   color?: number; // accent or portrait color when no sprite is provided
   portrait?: string; // optional texture key, e.g. 'c_kael'
+  visual?: DialogueVisual; // optional vignette shown above the textbox for this line
 }
 
 export type Script = DialogueLine[];
@@ -19,8 +25,11 @@ export const SCRIPTS: Record<string, Script> = {
     { text: 'Aether, the light that bears the world, has fallen.', color: NARRATOR },
     { text: 'The forests around Sanctuary have gone dark. Something is consuming what little Aether remains.', color: NARRATOR },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Ashenveil Forest is close. If the corruption started anywhere, it started there.' },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I can feel Aether traces inside. Something is drawing it out — deliberately.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The old grove at the heart of the forest had a crystal anchor. If it still stands...' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'My old watch-line ran through that gate. Eight of us. I never heard word of the other seven.', visual: 'heroes_meet' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I\'ve stood where an anchor already failed. I came here to make sure I never watch that happen twice.', visual: 'heroes_meet' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I can feel Aether traces inside the forest. Something is drawing it out — deliberately.', visual: 'heroes_meet' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens have kept this anchor since before Sanctuary had walls. I don\'t intend to be the one who loses it.', visual: 'heroes_meet' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The old grove at the heart of the forest holds the crystal. If it still stands...', visual: 'heroes_meet' },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we find it. And whoever is doing this.' },
     { text: 'Speak with the people of Sanctuary. Then enter the forest through the eastern gate.', color: NARRATOR },
   ],

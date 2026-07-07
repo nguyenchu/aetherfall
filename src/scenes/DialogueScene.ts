@@ -3,7 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { SCRIPTS } from '../game/dialogue';
 import { input } from '../game/input';
 import { sharpText, FONT } from '../ui/text';
-import type { DialogueLine, Script } from '../game/dialogue';
+import type { DialogueLine, DialogueVisual, Script } from '../game/dialogue';
 
 const TYPE_MS = 15; // milliseconds per character in the typewriter effect
 
@@ -30,11 +30,15 @@ export class DialogueScene extends Phaser.Scene {
   private nameText!: Phaser.GameObjects.Text;
   private bodyText!: Phaser.GameObjects.Text;
   private nameBox!: Phaser.GameObjects.Rectangle;
+  private box!: Phaser.GameObjects.Rectangle;
   private portrait!: Phaser.GameObjects.Rectangle;
   private portraitImg?: Phaser.GameObjects.Image;
   private portraitY = 0;
   private indicator!: Phaser.GameObjects.Text;
+  private boxY = 0;
   private unsubs: (() => void)[] = [];
+  private visualContainer?: Phaser.GameObjects.Container;
+  private visualId?: DialogueVisual;
 
   constructor() {
     super('Dialogue');
@@ -49,18 +53,21 @@ export class DialogueScene extends Phaser.Scene {
     this.typing = false;
     this.typeEvent = undefined;
     this.unsubs = [];
+    this.visualContainer = undefined;
+    this.visualId = undefined;
 
     // Dimmed backdrop over the scene below.
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg, 0.82).setOrigin(0, 0).setDepth(0);
 
     const boxY = GAME.height - 112;
+    this.boxY = boxY;
     const nameY = boxY - 15;
     this.portraitY = boxY + 29;
 
     // Portrait box on the left and dialogue box across the rest.
     this.portrait = this.add.rectangle(14, boxY, 58, 58, 0x0d1024).setOrigin(0, 0).setDepth(1).setStrokeStyle(1, COLORS.wall);
-    const box = this.add.rectangle(80, boxY, GAME.width - 94, 98, 0x0d1024, 0.98).setOrigin(0, 0).setDepth(1);
-    box.setStrokeStyle(1, COLORS.wall);
+    this.box = this.add.rectangle(80, boxY, GAME.width - 94, 98, 0x0d1024, 0.98).setOrigin(0, 0).setDepth(1);
+    this.box.setStrokeStyle(1, COLORS.wall);
 
     this.nameBox = this.add.rectangle(80, nameY, 8, 18, 0x141a30).setOrigin(0, 0).setDepth(2).setStrokeStyle(1, COLORS.wall).setVisible(false);
     this.nameText = this.add.text(87, nameY + 3, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c' })).setDepth(3);
@@ -108,18 +115,28 @@ export class DialogueScene extends Phaser.Scene {
       this.nameBox.setVisible(false);
     }
 
-    // Portrait: sprite if provided, otherwise color swatch or empty.
+    // Portrait: sprite if provided, otherwise color swatch or empty. Pure
+    // narration (no speaker) shows no one and no box at all — just the text,
+    // dead center on the screen, like IntroScene's captions.
     this.portraitImg?.destroy();
     this.portraitImg = undefined;
-    if (line.portrait && this.textures.exists(line.portrait)) {
+    const narration = !line.speaker;
+    this.box.setVisible(!narration);
+    if (!narration && line.portrait && this.textures.exists(line.portrait)) {
       this.portraitImg = this.add.image(43, this.portraitY, line.portrait).setDepth(2).setDisplaySize(52, 52);
       this.portrait.setVisible(true);
-    } else if (line.color != null) {
+    } else if (!narration && line.color != null) {
       this.portrait.setVisible(true).setFillStyle(0x0d1024);
       this.portraitImg = this.add.image(43, this.portraitY, this.dotTexture(line.color)).setDepth(2);
     } else {
       this.portrait.setVisible(false);
     }
+    this.bodyText.setWordWrapWidth(narration ? 520 : GAME.width - 110);
+    this.bodyText.setAlign(narration ? 'center' : 'left');
+    this.bodyText.setOrigin(narration ? 0.5 : 0, narration ? 0.5 : 0);
+    this.bodyText.setPosition(narration ? GAME.width / 2 : 90, narration ? GAME.height / 2 : this.boxY + 13);
+
+    this.renderVisual(line.visual);
 
     // Typewriter.
     this.full = line.text;
@@ -161,6 +178,65 @@ export class DialogueScene extends Phaser.Scene {
     this.typeEvent?.remove();
     this.scene.stop();
     this.onDone?.();
+  }
+
+  /** Vignette shown above the textbox for lines that carry one. Reused
+   *  unchanged across consecutive lines with the same id, so a run of lines
+   *  sharing a scene reads as one continuous moment instead of re-flickering. */
+  private renderVisual(id?: DialogueVisual) {
+    if (id === this.visualId) return;
+    this.visualId = id;
+    this.visualContainer?.destroy();
+    this.visualContainer = undefined;
+    if (!id) return;
+    const c = this.add.container(320, 130).setDepth(1);
+    this.visualContainer = c;
+    if (id === 'heroes_meet') this.buildHeroesMeet(c);
+    c.setAlpha(0);
+    this.tweens.add({ targets: c, alpha: 1, duration: 500, ease: 'Sine.easeOut' });
+  }
+
+  // The three heroes walking in and converging on the same spot, drawn from
+  // the same sprites used in the field — one continuous scene for the whole
+  // "how we got here" beat. Kael and Mira stride in from either side
+  // (already Sanctuary's own); Lyra drops in from above (the outsider,
+  // arriving from elsewhere). Each has a small hop-bob while moving so it
+  // reads as footsteps rather than a glide.
+  private buildHeroesMeet(c: Phaser.GameObjects.Container) {
+    const ground = this.add.rectangle(0, 24, 150, 1, 0x2f3658, 0.6);
+    c.add(ground);
+
+    const heroes: Array<{ key: string; x: number; glow: number; fromX: number; fromY: number }> = [
+      { key: 'c_kael', x: -42, glow: 0x6cf0c2, fromX: -95, fromY: 0 },
+      { key: 'c_lyra', x: 0, glow: 0x8a6cf0, fromX: 0, fromY: -46 },
+      { key: 'c_mira', x: 42, glow: 0xf0d36c, fromX: 95, fromY: 0 },
+    ];
+    heroes.forEach((h, i) => {
+      // The walker carries the walk-in translation; the image bobs inside it
+      // independently, so the "footsteps" wobble never fights the glide for
+      // the same property.
+      const walker = this.add.container(h.x + h.fromX, 6 + h.fromY).setAlpha(0);
+      c.add(walker);
+      const halo = this.add.circle(0, 0, 16, h.glow, 0.16);
+      const img = this.add.image(0, 0, h.key).setDisplaySize(34, 34);
+      walker.add([halo, img]);
+
+      const delay = 150 + i * 220;
+      const travelMs = 780;
+      this.tweens.add({ targets: walker, x: h.x, y: 6, alpha: 1, duration: travelMs, delay, ease: 'Sine.easeInOut' });
+      const bob = this.tweens.add({
+        targets: img, y: -3, duration: 130, delay, yoyo: true,
+        repeat: Math.round(travelMs / 260), ease: 'Sine.easeInOut',
+      });
+      this.time.delayedCall(delay + travelMs, () => {
+        bob.stop();
+        img.y = 0;
+        this.tweens.add({
+          targets: walker, y: '+=2', duration: 1500 + i * 200,
+          yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+        });
+      });
+    });
   }
 
   /** Creates one small round portrait dot texture per color. */
