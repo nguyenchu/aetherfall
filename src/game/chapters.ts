@@ -368,7 +368,7 @@ function emberHound(id: string): Combatant {
   return armed({
     id, name: 'Ember Hound', side: 'enemy',
     spriteKey: 'e_ember', color: 0xcc4411, size: 22,
-    spells: ['fire'], goldReward: 18, xpReward: 24,
+    spells: ['fire'], goldReward: 22, xpReward: 24,
     attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
     stats: s(70, 17, 16, 8, 10, 16),
   }, ['ice'], 1);
@@ -378,7 +378,7 @@ function cinderWraith(id: string): Combatant {
   return armed({
     id, name: 'Cinder Wraith', side: 'enemy',
     spriteKey: 'e_cinder', color: 0x774422, size: 20,
-    spells: ['fire', 'frost'], goldReward: 20, xpReward: 26,
+    spells: ['fire', 'frost'], goldReward: 25, xpReward: 26,
     stats: s(48, 8, 18, 4, 19, 28),
   }, ['ice', 'holy'], 1);
 }
@@ -387,7 +387,7 @@ function magmaGolem(id: string): Combatant {
   return armed({
     id, name: 'Magma Golem', side: 'enemy',
     spriteKey: 'e_warden', color: 0xaa3311, size: 30,
-    spells: [], goldReward: 16, xpReward: 22,
+    spells: [], goldReward: 20, xpReward: 22,
     stats: s(130, 19, 4, 20, 2),
   }, ['ice'], 3);
 }
@@ -396,7 +396,7 @@ function pyreColossus(): Combatant {
   return armed({
     id: 'elite0', name: 'Pyre Colossus', side: 'enemy',
     spriteKey: 'e_warden', color: 0x771100, size: 36,
-    spells: ['fire'], goldReward: 70, xpReward: 100, isElite: true,
+    spells: ['fire'], goldReward: 85, xpReward: 100, isElite: true,
     stats: s(240, 23, 5, 22, 10, 20),
   }, ['ice'], 4);
 }
@@ -405,7 +405,7 @@ function ashbrand(): Combatant {
   return armed({
     id: 'ashbrand', name: 'Ashbrand', side: 'enemy',
     spriteKey: 'e_leviathan', color: 0x881100, size: 42,
-    spells: ['fire', 'smite'], goldReward: 100, xpReward: 180,
+    spells: ['fire', 'smite'], goldReward: 125, xpReward: 180,
     isBoss: true,
     attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
     stats: s(540, 24, 12, 18, 26, 80),
@@ -507,7 +507,7 @@ const AREA_5: AreaDef = {
   },
   scripts: {},
   chests: {
-    '22,12': { gold: 60, equipment: 'sunbrand' },
+    '22,12': { gold: 70, equipment: 'sunbrand' },
   },
   map: [
     '##############################',

@@ -1,6 +1,49 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-07.
+> Paste this into a new session to continue the work. Last updated: 2026-07-09.
+
+## 2026-07-09 (b): Chapter 3 Gold Rebalance
+
+Ch3 was the one link in the reward curve moving the wrong direction: a full
+clear (all 7 area encounters, the elite, the chest, the boss) paid out 488
+gold — less than Ch2's 526, despite Ch3 gear/enemies being a tier harder
+(383 -> 526 -> 488 -> 652 across chapters, computed the same way as the
+Ch1/Ch2 audits: every fight + chest + boss). XP didn't have the same dip
+(283 -> 396 -> 622 -> 776), so this was gold-only. Ember Hound / Cinder
+Wraith / Magma Golem trash gold, the Pyre Colossus elite, the Ashbrand boss,
+and the Area 5 chest are all up ~20-25%, bringing a full clear to 599 gold —
+restores the increasing curve (383 -> 526 -> 599 -> 652).
+
+Also audited (no changes needed): Ch3/Ch4 enemy weaknesses are element-only,
+matching the Ch1 fix's standard (2026-07-07 (b)) — no repeat of that bug.
+Ch4's full clear (652 gold) already comfortably affords all three
+`ch4_complete` shop items (620 total), so no boss-HP or gold change was
+needed there. The apparent "Ch3 has no shop-gated gear" gap turned out not
+to be a bug: the shop previews next-tier gear one chapter early
+(`winter_staff`/`dawnstar`/`emberweave_robe` unlock at `ch2_complete`;
+`stormcaller_rod` at `ch1_complete`) so players can gear up before the
+harder chapter ahead — Ch4-tier gear is the one exception (gated
+`ch4_complete`, not `ch3_complete`) because Ch4 is the last chapter and
+there's no next chapter to prep for. Every Ch1-4 equipment id is reachable
+through some combination of chest / shop / quest reward / random battle
+drop; none are orphaned.
+
+Not verified in a live playthrough — this is a same-shape numeric edit to
+already-exercised fields (`goldReward`, chest `gold`), checked by
+hand-summing the encounter tables (cross-checked against the exact totals
+the prior Ch1/Ch2 commits reported, which matched current file values
+exactly, confirming the summing method). `tsc` clean.
+
+## 2026-07-09 (a): Removed SideScrollScene (Dead Code)
+
+Deleted `src/scenes/SideScrollScene.ts` and its `main.ts` registration. It was
+an early side-view walking-corridor prototype (hardcoded "SUNKEN CITY - SIDE
+PASSAGE" label) from before the current fixed hand-authored map system
+(`chapters.ts`) existed; nothing ever launched it — no door/tile referenced
+the `'SideScroll'` scene key. Confirmed unrelated to `IntroScene` (pure
+graphics/tweens cinematic) and the newer Sanctuary intro vignette (built into
+`DialogueScene.ts`), which were the two candidates it could have been mistaken
+for. `tsc` clean after removal.
 
 ## 2026-07-07 (k): Equipment Sharing Fix, Movement-Key Crash, Intro Vignette
 
@@ -500,8 +543,6 @@ src/scenes/BoonScene.ts        post-victory boon pick (1 of 3, elite rolls weigh
 src/scenes/DialogueScene.ts    dialogue: typewriter, name box, portrait, key/tap
 src/scenes/GameMenuScene.ts    stats / items / magic / equip / quests / system tabs
 src/scenes/RunSummaryScene.ts  wipe/retreat summary (depth, gold, boons, party levels)
-src/scenes/SideScrollScene.ts  side-view walk scene; registered in main.ts but not
-                                currently launched from anywhere (dead code as of this writing)
 src/game/types.ts              pure data types (level/xp/growth/weakness/guard/ailments)
 src/game/chapters.ts            all 4 chapters' maps, enemies, and per-chapter encounter factories
 src/game/content.ts             spells, base items, party definitions
@@ -602,7 +643,7 @@ eastern portal to descend.
 4. In progress: **Content** - 4 chapters (Ashenveil Forest/Ancient Grove ->
    Sunken City/Flooded Keep -> Ashen Foothills/Summit Shrine -> Crystal
    Depths/Radiant Sanctum), each with its own enemies, boss, gear, and quests;
-   ongoing balancing pass chapter by chapter (Ch1/Ch2 done, see 2026-07-07 (b)/(c))
+   gold economy now audited across all 4 chapters (2026-07-07 (b)/(c), 2026-07-09 (b))
 5. Mostly done: **Mobile playability** - touch controls decluttered across battle/
    menu/run-summary, orientation locked native-side with a browser rotate prompt;
    still needs real device testing (so far verified via headless Chrome/Playwright)
@@ -611,14 +652,9 @@ eastern portal to descend.
 
 ## Suggested Next Steps
 
-- **Chapter balance pass:** Ch3/Ch4 haven't had the gold/weakness/boss-HP audit
-  Ch1 and Ch2 got (2026-07-07 (b)/(c)) — same shortfall pattern is likely there.
 - **Real device testing:** landscape lock + touch declutter work is only
   verified via automated headless browser so far, not a physical phone/tablet.
 - **More story:** NPC follow-up lines and optional dialogue as the player goes
   deeper — Ch4 added `_after4` follow-ups; earlier chapters could use another
   pass now that the vignette/intro system (2026-07-07 (k)) exists.
-- **SideScrollScene:** registered in `main.ts` but nothing launches it —
-  either wire it up (it looks built for a walk-in cutscene/transition) or
-  remove it as dead code.
 - **Validation/Monetization:** still not started (roadmap items 6-7).

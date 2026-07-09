@@ -4,7 +4,6 @@ import { bindKeyboard } from './game/input';
 import { BootScene } from './scenes/BootScene';
 import { SanctuaryScene } from './scenes/SanctuaryScene';
 import { DescentScene } from './scenes/DescentScene';
-import { SideScrollScene } from './scenes/SideScrollScene';
 import { BattleScene } from './scenes/BattleScene';
 import { BoonScene } from './scenes/BoonScene';
 import { DialogueScene } from './scenes/DialogueScene';
@@ -36,7 +35,7 @@ const game = new Phaser.Game({
     width: GAME.width * 2,
     height: GAME.height * 2,
   },
-  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, SideScrollScene, BattleScene, BoonScene, DialogueScene, GameMenuScene, RunSummaryScene],
+  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, BattleScene, BoonScene, DialogueScene, GameMenuScene, RunSummaryScene],
 });
 
 // Exposed for dev tooling and automated smoke tests.
