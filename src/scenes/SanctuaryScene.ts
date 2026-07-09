@@ -115,7 +115,7 @@ function npcs(): Record<string, Npc> {
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
-      scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch1Done ? 'npc_child_after1' : 'npc_child',
+      scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
       questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip',
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },

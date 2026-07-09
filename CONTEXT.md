@@ -2,6 +2,32 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-09.
 
+## 2026-07-09 (c): Stranger Anchor-Count Fix + Child's Missing Ch2 Follow-Up
+
+Audited every NPC's chapter-gated dialogue chain in `SanctuaryScene.ts`'s
+`npcs()` selector against the actual text in `dialogue.ts`:
+
+- Warden Eda and Scholar Voss have a complete 5-tier chain (base, after,
+  after2, after3, after4) — no gaps.
+- The Stranger's numbers didn't match when they actually fire: `npc_stranger`
+  triggers right after Ch1 (1 anchor restored) but said "You've only restored
+  three"; `npc_stranger_after2` triggers after Ch2 (2 restored, 10 remain)
+  but said "Five anchors remain." Ch3/Ch4's Stranger lines already did this
+  math correctly (9 remain at 3 restored, 8 remain at 4 restored) — only
+  these two were wrong. Fixed both to the correct counts; second line of each
+  unchanged.
+- Child had no distinct Ch2 tier — the selector fell through
+  `ch1Done ? 'npc_child_after1' : ...` all the way to `ch3Done`, so Child
+  repeated the Ch1 "Pip came back" line through the entire Ch2 window. Added
+  `npc_child_after2` (Pip avoiding the well now that the Sunken City's water
+  has calmed) and wired `ch2Done ? 'npc_child_after2'` into the ternary.
+
+Verified via a save-injected session (`ch1_complete`/`ch2_complete` flags,
+localStorage): reached Sanctuary, directly invoked `openDialogue()` for all
+three touched script ids on the live scene (bypasses walking to exact NPC
+tiles), confirmed each renders the corrected/new text with no console errors.
+`tsc` clean.
+
 ## 2026-07-09 (b): Chapter 3 Gold Rebalance
 
 Ch3 was the one link in the reward curve moving the wrong direction: a full
@@ -654,7 +680,8 @@ eastern portal to descend.
 
 - **Real device testing:** landscape lock + touch declutter work is only
   verified via automated headless browser so far, not a physical phone/tablet.
-- **More story:** NPC follow-up lines and optional dialogue as the player goes
-  deeper — Ch4 added `_after4` follow-ups; earlier chapters could use another
-  pass now that the vignette/intro system (2026-07-07 (k)) exists.
+- **More story:** all 4 NPCs now have a gap-free chapter-gated dialogue chain
+  (2026-07-09 (c)); further depth would mean genuinely new content (optional
+  side dialogue, more of the vignette/intro system from 2026-07-07 (k)), not
+  filling existing holes.
 - **Validation/Monetization:** still not started (roadmap items 6-7).

@@ -157,11 +157,11 @@ export const SCRIPTS: Record<string, Script> = {
   ],
   // The Stranger — appears after Ch1, hints at a deeper threat
   npc_stranger: [
-    { speaker: '???', color: 0x8a93b8, text: 'You\'ve only restored three. The drain isn\'t stopping — it\'s slowing.' },
+    { speaker: '???', color: 0x8a93b8, text: 'One anchor restored. The drain isn\'t stopping — it\'s slowing.' },
     { speaker: '???', color: 0x8a93b8, text: 'Someone is collecting the fallen Aether. The anchors aren\'t failing on their own.' },
   ],
   npc_stranger_after2: [
-    { speaker: '???', color: 0x8a93b8, text: 'Five anchors remain. The one who\'s draining them will feel each restoration like a thorn.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Ten anchors remain. But the one who\'s draining them will feel each restoration like a thorn.' },
     { speaker: '???', color: 0x8a93b8, text: 'They\'ll send something worse soon. Be ready.' },
   ],
   npc_stranger_after3: [
@@ -171,6 +171,10 @@ export const SCRIPTS: Record<string, Script> = {
   npc_child_after1: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'The wolves are gone from Ashenveil. Pip came back last night.' },
     { speaker: 'Child', color: 0x6cf0c2, text: 'He smells like pine and wet stone. I think he was waiting in the grove.' },
+  ],
+  npc_child_after2: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Pip won\'t go near the well anymore. He used to love it.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum says the water\'s calmer since you fixed the city under the waves. Maybe he can tell.' },
   ],
   npc_child_after3: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'I can see three stars now that were missing before. Mum says those are the anchors you fixed.' },
