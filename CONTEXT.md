@@ -2,6 +2,31 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-09.
 
+## 2026-07-09 (d): Quest/Item/Boon/Modifier Balance Audit
+
+Extended the content-audit pattern (2026-07-09 (b)/(c)) to the remaining
+economy systems: quest rewards, item/equipment pricing, `boons.ts`, and
+`modifiers.ts`.
+
+- **Found and fixed**: the boss-quest gold reward chain dipped at the very
+  end — `clear_ch1`(50) -> `clear_ch2`(90) -> `defeat_ashbrand`(150) ->
+  `defeat_prism_sovereign`(140), the same shape as the enemy-gold bug fixed
+  in 2026-07-09 (b). Weaker case than that one though: the Ch4 quest's
+  equipment reward (`radiant_mace`, priced 260) already outvalues Ch3's
+  (`oracle_lantern`, 150), so total reward value was still increasing even
+  with the gold dip. Bumped `defeat_prism_sovereign` gold 140 -> 175 anyway
+  per user call, restoring a strictly increasing gold curve too.
+- **Checked, no issues**: item buy/sell pricing curves (potion/tonic tiers,
+  per-chapter junk sell value), equipment prices tier-to-tier, boon rarity
+  distribution (20 total: 9 common/7 rare/4 epic, matches what's already
+  documented), and run modifiers (asymmetric pure-buff/pure-curse design
+  reads as intentional roguelite variance, not a bug).
+
+`tsc` clean. Not re-verified live in-browser — this is a single-field numeric
+edit in an already-exercised reward path (`questRewardText()` just reads
+`q.rewards.gold` dynamically, no hardcoded text elsewhere references the
+old number).
+
 ## 2026-07-09 (c): Stranger Anchor-Count Fix + Child's Missing Ch2 Follow-Up
 
 Audited every NPC's chapter-gated dialogue chain in `SanctuaryScene.ts`'s

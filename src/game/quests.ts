@@ -68,7 +68,7 @@ export const QUESTS: QuestDef[] = [
     title: 'Crack the Prism Sovereign',
     text: 'Defeat the crystal guardian bound to the Radiant Anchor in the Crystal Depths.',
     unlockFlag: 'ch3_complete',
-    rewards: { gold: 140, equipment: ['radiant_mace'], items: { warden_sigils: 2 } },
+    rewards: { gold: 175, equipment: ['radiant_mace'], items: { warden_sigils: 2 } },
   },
 ];
 
