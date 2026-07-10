@@ -1,6 +1,180 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-06.
+> Paste this into a new session to continue the work. Last updated: 2026-07-10.
+
+## 2026-07-10: Warn Before Equipping Gear Worn by Another Party Member
+
+Equip's item list already auto-steals a single owned copy of gear from
+whoever has it on (one-copy-per-item rule, fixed 2026-07-07 below) — but did
+it silently. Rows now tag the item **WORN** + "Worn by \<name\>" instead of
+"Fits" when someone else has it equipped, and the preview panel spells out
+that confirming will pull it off them, so the steal is visible before you
+commit to it. Also fixed a fresh-save default that had Scout Vest equipped on
+*both* Kael and Mira at once — violating the same one-copy rule from turn one.
+
+## 2026-07-07 (e): Equipment Sharing Fix, Held-Key Trigger Bug, Intro Vignette
+
+Three unrelated fixes/features landed in one session:
+
+- **Equipment sharing bug**: a single owned copy of gear could be equipped on
+  multiple party members simultaneously (e.g. one Scout Vest worn by both
+  Kael and Mira). Equipping now pulls the item off whoever had it on first —
+  the one-copy rule the 2026-07-10 warning above builds on.
+- **Held-key trigger bug**: random encounters, chests, springs, and story
+  triggers on a tile could get silently skipped while a movement key was
+  held. Tile resolution hung off the walk animation's `onComplete`, which a
+  held direction usually killed just before it fired. Now resolves
+  immediately on the logical step instead of waiting on the animation.
+- **Intro vignette**: Kael, Lyra, and Mira now walk in and gather on-screen
+  using their field sprites during the Sanctuary intro dialogue, giving each
+  a personal line instead of generic narration. Pure-narration lines render
+  centered and boxless instead of sitting next to an empty portrait slot.
+
+## 2026-07-07 (d): Per-Chapter Music + Title-Screen Audio/Input Fixes
+
+- **Per-chapter themes** (`music.ts`): each chapter now has its own
+  explore/battle theme (forest/sunken/ashen/crystal, keyed off the area's
+  `AreaThemeId`) instead of all descents reusing Sanctuary's hub music, plus
+  a distinct title-screen theme. `play(name, theme)` now takes the theme id.
+- **Audio fix**: `AudioContext` could stay suspended after the enabling
+  keypress — `resume()` is now called immediately on context creation
+  instead of only from a listener that couldn't catch the very event that
+  triggered its own creation.
+- **Title-screen input fix**: a keypress landing inside the 400ms grace
+  window was consumed by a `once()` listener and rejected, leaving keyboard
+  input dead until the player clicked; the ready flag is now also reset on
+  scene re-entry.
+
+## 2026-07-07 (c): Random Encounters Reworked, Quest Gating, New Items
+
+- **Random encounters**: fixed trash-mob tiles replaced by the existing
+  step-based random-battle roll (retuned rate); fixed a bug where the
+  progress-to-next-encounter counter reset on *every* menu/dialogue resume
+  instead of only on a battle resume.
+- **Quest gating**: quests now stay hidden until their chapter flag unlocks
+  them, instead of showing "active" (and instantly completing) from the
+  start of the game.
+- **New items** (`content.ts`): Greater Elixir (65 HP) / Aether Concentrate
+  (24 MP) as stronger heal/mp potions, Purifying Draught (cures burn/chill/
+  venom, battle only), Phoenix Down (revives a fallen ally at 40% HP),
+  per-chapter junk/sell loot (Wolf Pelt, Cinder Shard, Prism Shard, ...), and
+  a new Chapter 1 charm to round out its gear pool.
+- **Input**: `C` added as an alias for `Tab` to open the menu.
+
+## 2026-07-07 (b): Chapter 4 — Crystal Depths
+
+New fourth chapter continuing the anchor-restoration arc hinted at in the
+post-Chapter-3 dialogue (Warden Eda / Scholar Voss / Stranger / Child all
+foreshadow "the Hollow" and more anchors to come).
+
+- **Two new areas** (Crystal Depths → Radiant Sanctum), violet/crystal theme,
+  following the established map/encounter authoring pattern.
+- **Five new enemies**: Crystal Wisp, Cave Stalker, Prism Sprite, Geode
+  Warden (elite), and the **Prism Sovereign** boss (700 HP, a shatter-shell
+  phase transition at 50% HP mirroring the other three bosses).
+- **Six new equipment pieces** across chest find, boss quest reward, shop
+  unlock, and random battle drops — priced one tier above Chapter 3's gear.
+- New Sanctuary portal (gated on `ch3_complete`), shop stock, and a
+  `defeat_prism_sovereign` quest with its own reward text.
+- New dialogue: a pre-boss story beat, a win script, an updated "ending"
+  epilogue (now four anchors instead of three), and `_after4` follow-ups for
+  all four recurring NPCs.
+- `BattleScene`'s chapter-branching logic (flags, quest ids, win script,
+  ending trigger) extended from 3-way to 4-way.
+- **Bug fix** (`quests.ts`): quest reward item names were resolved through a
+  hardcoded if/else chain that silently mislabeled any item outside
+  `{potion, tonic, tide_pearl}` as "Warden Sigils" — replaced with a proper
+  `ITEMS[id].name` lookup.
+- Verified end-to-end with a save-injected Playwright playthrough: portal →
+  themed area → Chapter 4 encounters with correct weaknesses → boss fight
+  with weakness/phase/victory → quest completion with correct reward text →
+  `ch4_complete`-gated NPC dialogue → shop stock. No console errors.
+
+## 2026-07-07: Boss-Room Crash, Touch Decluttering, Balance Pass, Mobile Lock
+
+A cluster of smaller fixes and tuning passes, same session as Chapter 4:
+
+- **Crash fix**: boss rooms only register their boss's own encounter group
+  (e.g. `ch4_boss`), so the random-encounter picker's group list came up
+  empty there and fell back to a hardcoded `'wolves'` group that only exists
+  in Chapter 1 — landing on a plain floor tile in *any* later chapter's boss
+  room while the random roll fired crashed the game. Now skips the roll when
+  nothing valid is available to draw from.
+- **GameMenu/RunSummary touch declutter**: `GameMenuScene`'s three panels
+  fill nearly the whole screen, so the usual bottom d-pad+OK cluster covered
+  real stat text (GUARD, RESIST, HP/MP bars). Every row is already tappable,
+  so the d-pad/OK were removed, keeping only Back/Menu in a thin strip below
+  the panels. `RunSummaryScene` already treats the whole screen as one tap
+  target, so its on-screen buttons were removed entirely (dead weight, risk
+  of overlap).
+- **Mobile landscape lock**: Aetherfall is a fixed 640×360 (16:9) landscape
+  game; Phaser's FIT scaling shrinks the whole canvas (and every touch
+  button) to a sliver in portrait. Native apps now lock orientation (iOS
+  `LandscapeLeft/Right`; Android `sensorLandscape` — locks out portrait but
+  still follows the accelerometer between left/right so the game doesn't
+  render upside down). A browser tab can't be force-rotated, so `index.html`
+  adds a CSS-only "rotate your device" overlay via
+  `(orientation: portrait) and (pointer: coarse)`, leaving desktop windows
+  unaffected.
+- **Retreat shortcut removed**: `X` means "back one step" everywhere else in
+  the game, but in a dungeon it instantly started the retreat-to-Sanctuary
+  flow with no confirmation — a stray habitual press could yank the player
+  out of a run they didn't mean to leave. Only the `<` portal tile leads
+  home now.
+- **Battle touch declutter**: the Prev/Next d-pad pair did nothing while a
+  menu was open (menu rows are already tap-first) and only duplicated
+  tap-to-target otherwise, while visually sitting on enemy HP bars; also
+  moved OK/Back/Menu into a tight strip hugging the top edge — at their old
+  position they overlapped Kael's home sprite slot, so a tap meant to heal
+  Kael could be swallowed by the Menu button sitting on top of him.
+- **Chapter 1/2 gold rebalance**: every Chapter 1 trash enemy was weak to
+  `phys` on top of its element, so Kael's plain attack one-shot a 30 HP
+  Shadow Wolf at level 1 with no need for Lyra/Mira — weakness is now
+  element-only, matching later chapters. A full Chapter 1 clear paid out 264
+  gold against 460 gold of shop gear (couldn't afford its own chapter's
+  equipment even on a perfect run) — Ch1 rewards up ~40–50% (→ ~383g full
+  clear), Ch2 rewards up ~40–45% (→ ~526g full clear). Boss HP down ~13%
+  across all three bosses (300→260, 460→400, 620→540): the round-count math
+  looked fine, but Lyra/Mira run out of MP partway through and fall back on
+  weak physical hits, so real fights ran longer than the numbers suggested.
+
+## 2026-07-06 (g): Sanctuary Re-Entry Crash Fix
+
+`hintText` (and `shopBox`) are class fields that outlive scene restarts, but
+`create()` never reset them. Phaser destroys the previous instance's
+GameObjects on shutdown, so the second time Sanctuary loaded, `update()`
+called `.setText()` on an already-destroyed `Text` object and crashed.
+Reproduced via: descend, retreat, return, descend again.
+
+## 2026-07-06 (f): Side Quests, Completion Toasts, Quest Markers
+
+Wires three new side quests (`learn_of_anchors`, `find_pip`,
+`heed_the_stranger`) onto story beats that already existed in dialogue but
+were never tracked. Quest completion now shows a toast/log line with the
+reward; NPCs/portals get a bouncing marker pointing at the next open
+objective. The Quest tab in the menu groups active vs. completed and shows a
+progress count.
+
+## 2026-07-06 (e): Menu Polish + Character Identity
+
+- **Class identity**: Lyra is now the **Hexweaver** (Ember Hex, Rime Hex,
+  Hexstorm, Winter Sigil), Mira the **Dawnkeeper** (Dawnstrike, Dawnmend,
+  Sunward), Kael the **Aetherblade** (Guardbreak, Arc Sweep) — renamed from
+  the generic black-mage/cleric/vanguard labels and their spells (was
+  Ember/Rime/Emberstorm/Blizzard/Lightstrike/Mend/Radiance/Crush/Cleave).
+  Battle's magic-menu label is now per-member (`battleArtLabel()`: "Aether
+  Arts" / "Hexes" / "Prayers") instead of a flat Skills/Magic split. Portrait
+  art (`src/assets/portraits/*.png`) updated to match.
+- **New `RunSummaryScene`**: a dedicated full-screen scene shown after a
+  party wipe ("THE CRYSTAL PULLS YOU HOME") or a deliberate retreat
+  ("RETURNED TO SANCTUARY") — depth reached, gold carried/lost, run-boon
+  count, party levels, then Z/tap wakes in Sanctuary. Replaces the old
+  behavior of `BattleScene`/`DescentScene` calling `returnToTown()` and
+  jumping straight back to `Sanctuary` with no beat in between.
+- **Title-screen save summary** (`save.ts` `loadSaveSummary()`): Continue
+  now reads "Continue — Lv N, Stratum M, Xg" with a second line (party
+  levels, gear/potion/quest counts) instead of a bare "Continue" label.
+- **SFX**: `sfx.play('confirm'/'cancel')` on title-menu navigation.
 
 ## 2026-07-06 (d): Items + Magic Tabs — Same Polish as Equip/Stats
 
@@ -246,7 +420,6 @@ The core loop was redesigned around meaningful decisions:
 ## What This Is
 
 **Aetherfall** is a story-driven **roguelite JRPG** inspired by Final Fantasy 1.
-It lives at `/Volumes/512gbSSD/dev/aetherfall`.
 
 **Goal:** serious revenue attempt. Web first for validation, mobile later for
 monetization.
@@ -274,9 +447,9 @@ descend again to reach the bottom and restore Aether.
 
 - **Fixed frame:** Sanctuary hub, NPCs, story, upgrades, a named protagonist,
   a goal, and a real ending.
-- **Strata:** handmade worlds (Stratum I - The Sunken City -> Ashen Deep ->
-  Crystal Core and beyond), each with its own mood and boss. Room layout inside
-  each stratum is generated.
+- **Strata:** handmade worlds (Ashenveil Forest -> Sunken City -> Ashen
+  Foothills -> Crystal Depths, and beyond), each with its own mood and boss.
+  Room layout inside each stratum is generated.
 - **Narrative permadeath:** the crystal brings you home, explaining the
   roguelite loop in fiction.
 
@@ -288,103 +461,128 @@ descend again to reach the bottom and restore Aether.
 - Later: Capacitor iOS/Android, `@capacitor-community/admob`, and own
   Postgres backend.
 
-## Status: Phase 3 In Progress - City Hub, Run Loop, Save, Touch, Boss
+## Status: Four Chapters Playable, Menus Polished, Balancing Ongoing
 
-Build has been verified with `tsc` and `vite build`; modules transpile in the
-dev server.
+Build is verified with `tsc` and `vite build`; modules transpile in the dev
+server.
 
-**Current flow:** Boot -> **Sanctuary** -> talk/shop -> descend through the
-eastern portal -> Descent depth 1 to 3 -> battle -> boss at the bottom -> return
-home. Death returns you home while keeping level and gold. B/X recalls you home
-from the dungeon.
+**Current flow:** Boot -> **Title** (Continue/New Game, save summary) ->
+**Intro** vignette (first save only) -> **Sanctuary** -> talk/shop -> descend
+through the chapter portal -> procedural rooms with random encounters,
+chests, springs, quest triggers -> boss at the bottom -> **RunSummary**
+(wipe or retreat) -> back to Sanctuary. Progress (levels, gold, gear, quests,
+story flags) persists across sessions via `localStorage`.
 
 ```text
-src/main.ts                 Phaser setup with 5 scenes + bindKeyboard()
-src/config.ts               resolution + color palette
-src/scenes/BootScene.ts     generates tiles + character sprites, starts Sanctuary
-src/scenes/SanctuaryScene.ts city hub: handmade map, NPCs, merchant, portal, story
-src/scenes/DescentScene.ts  procedural rooms + depth + stairs + boss portal + recall
-src/scenes/BattleScene.ts   battle: menu via input bus + touch, animated round, XP, boss return
-src/scenes/DialogueScene.ts dialogue: typewriter, name box, portrait, key/tap
-src/game/types.ts           pure data types with level/xp/growth/xpReward/isBoss
-src/game/content.ts         spells, items, party, enemies, Sunken Warden, Leviathan boss
-src/game/battle.ts          turn-based battle engine with AGI, spells, AI, rewards
-src/game/progression.ts     XP curve, levelUp, restoreLevel, grantXp
-src/game/run.ts             orchestrator: party, gold, inventory, depth, save, economy
-src/game/save.ts            localStorage meta save: gold, levels, flags, depth, upgrades
-src/game/input.ts           shared input bus: keyboard + touch controls
-src/game/dialogue.ts        data-driven scripts: intro, NPCs, stratum victory
-src/audio/music.ts          procedural chiptune: explore, battle, victory, defeat
-src/art/sprites.ts          original pixel art for hero, party, enemies, boss
-src/ui/text.ts              shared sharper text style helper
-capacitor.config.ts + android/ ios/   native wrappers for one shared web codebase
+src/main.ts                   Phaser setup: 11 scenes + bindKeyboard()
+src/config.ts                 resolution + color palette
+src/scenes/BootScene.ts       generates tiles + character sprites, starts Title/Intro
+src/scenes/TitleScene.ts      Continue (save summary)/New Game, confirm-to-erase
+src/scenes/IntroScene.ts      Sanctuary backstory vignette (first save only)
+src/scenes/SanctuaryScene.ts  city hub: handmade map, NPCs, merchant, chapter portals, quest markers
+src/scenes/DescentScene.ts    procedural rooms, depth, encounters/chests/springs, boss portal, recall
+src/scenes/SideScrollScene.ts side-scrolling traversal segments
+src/scenes/BattleScene.ts     battle: menu via input bus + touch, weakness/break, intents, XP, boss phases
+src/scenes/BoonScene.ts       post-victory run-boon pick (1 of 3)
+src/scenes/RunSummaryScene.ts post-run recap (wipe/retreat) before returning to Sanctuary
+src/scenes/DialogueScene.ts   dialogue: typewriter, name box, portrait/vignette, key/tap
+src/scenes/GameMenuScene.ts   Stats/Items/Magic/Equip/Quests/System tabs
+src/game/types.ts             pure data types (level/xp/growth/xpReward/isBoss/Ailment/GearEffects)
+src/game/content.ts           spells, items, party (Kael/Lyra/Mira), learnsets
+src/game/chapters.ts          four chapters' areas, encounters, chests, scripts, bosses
+src/game/equipment.ts         weapon/armor/charm defs, passive effects, one-copy ownership
+src/game/boons.ts             run-scoped blessing pool
+src/game/quests.ts            quest defs, gating flags, reward text
+src/game/modifiers.ts         roguelite descent modifiers
+src/game/battle.ts            turn-based battle engine: AGI, weakness/break, ailments, AI, rewards
+src/game/progression.ts       XP curve, levelUp, restoreLevel, grantXp
+src/game/run.ts               orchestrator: party, gold, inventory, equipment, quests, depth, save, economy
+src/game/save.ts              localStorage save + loadSaveSummary() for the title screen
+src/game/input.ts             shared input bus: keyboard + touch controls
+src/game/dialogue.ts          data-driven scripts: intro, NPCs, chapter win/ending
+src/audio/music.ts            procedural chiptune: per-chapter explore/battle themes + title/sanctuary
+src/art/sprites.ts + spriteData.ts  original pixel art for hero, party, enemies, bosses
+src/art/tiles.ts              seeded pixel-art tile painters (floor/wall variants per theme)
+src/assets/portraits/         painted portrait art (Kael/Lyra/Mira) for dialogue and menus
+src/ui/text.ts                shared sharper text style helper
+src/ui/questToast.ts          quest-completion toast/log line
+capacitor.config.ts + android/ ios/   native wrappers, landscape-locked, for one shared web codebase
 ```
 
-**City hub:** handmade map, NPCs you talk to by bumping into them, merchant
-items (Crystal Blessing = permanent +HP, Elixir), and the descent portal in the
-east. Story arrives here: `intro` on first arrival, `stratum1_win` after the
-boss.
+**Story so far:** four chapters — Ashenveil Forest (Ancient Grove), Sunken
+City (Flooded Keep), Ashen Foothills (Summit Shrine), Crystal Depths
+(Radiant Sanctum) — each with its own theme, enemies, an elite guardian, and
+a boss with a mid-fight phase transition. Post-Ch3 dialogue foreshadows more
+anchors ("the Hollow") beyond Chapter 4, so the story is not yet concluded.
+Side quests (`quests.ts`) unlock as chapter flags advance and show
+completion toasts + map markers.
 
-**Run loop + progression:** Descent has depths 1-3; stairs lead deeper, and the
-bottom is the **Leviathan boss**. Battles grant XP, level-ups with class growth,
-and gold. Enemies scale by depth. Death is not total: the Crystal draws you home,
-and you keep levels and gold. Boss victory sets a flag and triggers victory
-story in town.
+**Party & classes:** Kael the **Aetherblade** (physical pressure, guard
+break), Lyra the **Hexweaver** (elemental damage + ailments), Mira the
+**Dawnkeeper** (holy damage + healing). Battle actions: Attack / magic
+(per-class label: Aether Arts / Hexes / Prayers) / Item / Defend / Flee,
+resolved in AGI order with weakness/break, intents, and ailments (burn/
+chill/venom).
 
 **Save:** `src/game/save.ts` stores localStorage data under
-`aetherfall.save.v1`: gold, levels, story flags, deepest stratum, and purchased
-upgrades. `run.ts` loads it at startup and writes through `saveProgress()`.
-`hardReset()` wipes all progress.
+`aetherfall.save.v1`: gold, levels, inventory, equipment (owned + equipped
+per member, one copy shared), quests, story flags, deepest stratum.
+`run.ts` loads it at startup and writes through `saveProgress()`.
+`hardReset()` wipes all progress. `loadSaveSummary()` powers the title
+screen's Continue line.
 
 **Input:** `src/game/input.ts` provides one logical input bus. Keyboard
-(arrows/WASD, Z/Enter/Space=confirm, X/Backspace=cancel, M=mute) and on-screen
-d-pad + A/B buttons feed the same bus. All scenes use it. Dialogue can also be
-tapped. Battle touch controls currently sit near the top because the bottom is
-used by panels.
+(arrows/WASD, Z/Enter/Space=confirm, X/Backspace=cancel, Tab/C=menu, M=mute)
+and on-screen d-pad + A/B buttons feed the same bus; touch layouts are
+per-scene and decluttered to avoid overlapping tappable content (battle,
+GameMenu, RunSummary). Dialogue can also be tapped.
 
-**Mobile:** shared codebase. `pnpm sync` runs build + Capacitor sync.
-`pnpm android` and `pnpm ios` build/sync/open native projects. AdMob can be
-plugged in later for monetization.
+**Mobile:** shared codebase, orientation-locked to landscape natively (iOS
+`LandscapeLeft/Right`, Android `sensorLandscape`); the browser shows a
+CSS-only rotate prompt in portrait on coarse-pointer devices. `pnpm sync`
+runs build + Capacitor sync; `pnpm android`/`pnpm ios` build/sync/open
+native projects. AdMob can be plugged in later for monetization.
 
-**Music:** original procedural Web Audio music, no audio files. Explore uses a
-calm Am-F-C-G loop, battle uses a driving Dm riff. Music switches automatically
-between encounter and return. M toggles mute. Audio starts on first input due to
-browser autoplay policy. One-shot fanfares play for victory and defeat. The API
-is stable so recorded tracks can replace the module later.
-
-**Battle design:** FF1-inspired turn-based combat. Each living party member
-chooses an action (Attack / Magic / Item / Defend / Flee), then the round
-resolves in AGI order. Party: Kael (warrior), Lyra (mage: Ember/Rime), Bram
-(cleric: Mend/Lightstrike).
+**Music:** original procedural Web Audio, no audio files — a distinct
+explore/battle theme per chapter (forest/sunken/ashen/crystal) plus
+dedicated title and Sanctuary themes. M toggles mute. Audio starts on first
+input due to browser autoplay policy; `AudioContext.resume()` fires
+immediately on creation so the very first keypress isn't swallowed.
+One-shot fanfares play for victory and defeat.
 
 Run:
 
 ```bash
-pnpm -C /Volumes/512gbSSD/dev/aetherfall dev
+pnpm dev
 ```
 
-Open http://localhost:5173. Start in Sanctuary, walk into NPCs to talk, use the
-eastern portal to descend.
+Open http://localhost:5173. Title screen -> Sanctuary -> walk into NPCs to
+talk, use a chapter portal to descend.
 
 ## Roadmap
 
 1. Done: **Skeleton** - procedural descent + movement
-2. Done: **Battle** - turn-based FF1-style combat
-3. Done: **Run loop** - city hub, depth, XP/levels, gold economy, save, death return
-4. In progress: **Content** - has 4 enemies + 1 boss + story NPCs; needs more strata, enemies, classes, and balancing
-5. In progress: **Mobile playability** - touch d-pad/A-B works in all scenes; battle touch needs polish and device testing
+2. Done: **Battle** - turn-based combat with weakness/break, intents, ailments, boons
+3. Done: **Run loop** - city hub, depth, XP/levels, gold economy, save, death/retreat return
+4. In progress: **Content** - four chapters (Forest/Sunken/Ashen/Crystal) with side quests done;
+   more chapters planned per the story's "more anchors to come" foreshadowing; ongoing balancing
+5. In progress: **Mobile playability** - landscape lock + rotate prompt done; touch controls
+   decluttered per-scene; still needs real-device testing pass
 6. Todo: **Validation** - deploy to nguyenchu.com and measure retention/feedback
 7. Todo: **Monetization** - AdMob rewarded ads + IAP
 
 ## Suggested Next Steps
 
-- **Stratum II:** add a new theme/map/enemies under Stratum I; the depth system
-  is ready for more strata.
-- **Balancing:** tune XP curve, enemy stats, boss HP, and economy through a full
-  playthrough.
-- **Battle touch polish:** tap enemies/menu choices directly instead of relying
-  on the d-pad.
-- **Hub music:** add a calmer dedicated Sanctuary track.
-- **More story:** add NPC follow-up lines and optional dialogue as the player
-  goes deeper.
-- **Commit/push:** this phase is still uncommitted.
+- **Chapter 5:** the story explicitly foreshadows more anchors/"the Hollow"
+  beyond Crystal Depths; the chapter-authoring pattern (area pair, encounter
+  factories, elite + boss with phase transition, dialogue, shop unlock,
+  quest) is now well-established across four chapters.
+- **Balancing:** Chapters 1-2 got a gold/HP pass on 2026-07-07; Chapters 3-4
+  haven't had the same scrutiny yet — worth a full playthrough check.
+- **Real-device mobile testing:** landscape lock, rotate prompt, and touch
+  decluttering are done but only verified via CDP/emulation, not a physical
+  phone.
+- **More story:** add NPC follow-up lines and optional dialogue as the
+  player goes deeper, following the `_after4`-style per-chapter pattern.
+- **Validation & monetization:** still todo per the Roadmap — deploy for
+  feedback, then AdMob rewarded ads + IAP.
