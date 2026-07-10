@@ -581,6 +581,16 @@ function isEquipped(itemId: string): boolean {
   return Object.values(save.equipped).some((slots) => Object.values(slots).includes(itemId));
 }
 
+/** memberId of whoever else currently wears this item, if any — lets the UI
+ * warn before an equip silently pulls it off them. */
+export function equippedByOther(itemId: string, exceptMemberId: string): string | undefined {
+  for (const [memberId, slots] of Object.entries(save.equipped)) {
+    if (memberId === exceptMemberId) continue;
+    if (Object.values(slots).includes(itemId)) return memberId;
+  }
+  return undefined;
+}
+
 /** Each owned copy of gear can only be worn by one party member at a time —
  * equipping it elsewhere pulls it off whoever currently has it on. */
 function unequipFromOthers(itemId: string, exceptMemberId: string): void {
