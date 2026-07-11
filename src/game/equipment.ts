@@ -367,7 +367,7 @@ export const STARTING_EQUIPMENT = ['slender_blade', 'ember_staff', 'dawn_mace', 
 export const DEFAULT_EQUIPPED: Record<string, Partial<Record<EquipSlot, string>>> = {
   kael: { weapon: 'slender_blade', armor: 'scout_vest', charm: 'sun_charm' },
   lyra: { weapon: 'ember_staff', armor: 'aether_robe' },
-  mira: { weapon: 'dawn_mace', armor: 'scout_vest' },
+  mira: { weapon: 'dawn_mace' },
 };
 
 export function equipmentBonus(ids: Array<string | undefined>): Partial<Stats> {
