@@ -491,7 +491,8 @@ export class GameMenuScene extends Phaser.Scene {
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a58cff', strokeThickness: 2 })));
     box.add(this.add.text(456, 78, '↑↓: preview  ·  Z: equip  ·  X: back', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
 
-    const choices = ownedEquipment().filter((item) => item.slot === this.equipSlot && item.users.includes(member.id));
+    const choices = ownedEquipment().filter((item) => item.slot === this.equipSlot && item.users.includes(member.id)
+      && (item.id === current || !equippedByOther(item.id, member.id)));
     const allChoices: Array<{ id?: string; name: string }> = [
       { id: undefined, name: '(Nothing)' },
       ...choices.map((item) => ({ id: item.id, name: item.name })),
@@ -509,8 +510,6 @@ export class GameMenuScene extends Phaser.Scene {
       const y = listTop + vi * 28;
       const equipped = item.id === current || (!item.id && !current);
       const previewed = (this.equipPreviewItemId === undefined ? (current ?? null) : this.equipPreviewItemId) === (item.id ?? null);
-      const wornById = item.id ? equippedByOther(item.id, member.id) : undefined;
-      const wornByName = wornById ? this.memberName(wornById) : undefined;
       const rect = this.add.rectangle(42, y, 414, 26, previewed ? 0x1c2d4a : 0x141a30, 0.96)
         .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
         .setInteractive({ useHandCursor: true });
@@ -522,10 +521,7 @@ export class GameMenuScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2 })).setDepth(3));
       const eqItem = item.id ? EQUIPMENT[item.id] : undefined;
       const fx = eqItem ? equipmentEffectText(eqItem) : [];
-      if (wornByName) {
-        box.add(this.add.text(228, y + 15, `⚠ Worn by ${wornByName}`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff9a5a', strokeThickness: 2, wordWrap: { width: 168 } })).setDepth(3));
-      } else if (eqItem) {
+      if (eqItem) {
         box.add(this.add.text(228, y + 15, `Fits: ${this.userNames(eqItem.users)}`,
           sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7a84a8', strokeThickness: 2, wordWrap: { width: 168 } })).setDepth(3));
       }
@@ -536,9 +532,6 @@ export class GameMenuScene extends Phaser.Scene {
       if (equipped) {
         box.add(this.add.text(452, y + 3, 'ON',
           sharpText({ fontFamily: FONT, fontSize: '7px', color: '#f0d36c', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
-      } else if (wornByName) {
-        box.add(this.add.text(452, y + 3, 'WORN',
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff9a5a', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
       } else if (previewed) {
         box.add(this.add.text(452, y + 3, 'VIEW',
           sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
@@ -602,12 +595,7 @@ export class GameMenuScene extends Phaser.Scene {
       sharpText({ fontFamily: FONT, fontSize: '8px', color: isCurrent ? '#f0d36c' : '#6cf0c2', strokeThickness: 2 })).setDepth(3));
     box.add(this.add.text(72, 288, previewItem?.description ?? 'No equipment in this slot.',
       sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, lineSpacing: 2, wordWrap: { width: 200 } })).setDepth(3));
-    const wornById = previewId ? equippedByOther(previewId, member.id) : undefined;
-    const wornByName = wornById ? this.memberName(wornById) : undefined;
-    if (wornByName) {
-      box.add(this.add.text(72, 312, `⚠ Worn by ${wornByName} — equipping takes it from them`,
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff9a5a', strokeThickness: 2 })).setDepth(3));
-    } else if (previewItem) {
+    if (previewItem) {
       box.add(this.add.text(72, 312, `Fits: ${this.userNames(previewItem.users)}`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7a84a8', strokeThickness: 2 })).setDepth(3));
     }
@@ -696,10 +684,6 @@ export class GameMenuScene extends Phaser.Scene {
   private userNames(ids: string[]): string {
     const names: Record<string, string> = { kael: 'Kael', lyra: 'Lyra', mira: 'Mira', bram: 'Mira' };
     return ids.map((id) => names[id] ?? id).join(', ');
-  }
-
-  private memberName(memberId: string): string {
-    return getRun().party.find((c) => c.id === memberId)?.name ?? memberId;
   }
 
   private renderSystem(box: Phaser.GameObjects.Container) {

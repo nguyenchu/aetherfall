@@ -1,6 +1,29 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-11.
+> Paste this into a new session to continue the work. Last updated: 2026-07-11 (later).
+
+## 2026-07-11: Equip Lists Hide Gear Worn by Another Party Member
+
+Supersedes the 2026-07-10 warning below: instead of showing an item another
+member has on (tagged WORN, with a confirm-to-steal warning), the equip list
+now just filters it out of `choices` entirely — `item.id === current ||
+!equippedByOther(item.id, member.id)`. The one exception is a member's own
+currently-equipped item, which still always shows (tagged ON) even in the
+unlikely case it's also worn by someone else due to stale save data. To move
+a single-copy item between party members, unequip it from the current
+wearer first ("(Nothing)" is always a choice), then it becomes selectable
+for others. Removed the now-dead WORN-tag/"Worn by" UI in both the item list
+and the compare panel, and the now-unused `memberName()` helper;
+`equippedByOther()` (`run.ts`) stays, now used only for the filter check.
+`unequipFromOthers()` (`run.ts`) is unchanged — still a defensive cleanup for
+any leftover-duplicate save data, just no longer reachable through normal
+play since the list no longer offers an already-worn-elsewhere item to pick.
+
+Verified via a save-injected session (Kael wearing Scout Vest, Mira/Lyra also
+eligible to use it): Mira's armor list shows only "(Nothing)" — Scout Vest
+correctly hidden — while Kael's own armor list still shows Scout Vest tagged
+ON with its normal "Fits: Kael, Lyra, Mira" line. No console errors. `tsc`
+clean.
 
 ## 2026-07-10: Warn Before Equipping Gear Worn by Another Party Member
 
