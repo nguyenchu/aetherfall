@@ -1,6 +1,40 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-11 (dashboard + party-audit).
+> Paste this into a new session to continue the work. Last updated: 2026-07-11 (analytics 3 / ingest verification).
+
+## 2026-07-11 (analytics 3): Ingest Pipeline Verified E2E — Feedback Double-Decode Crash Fixed
+
+Went to actually wire up the telemetry ingest (roadmap step 6: the nginx `/e`
+endpoint had been documented but never exercised against the analyzer). No live
+server access from here and no local nginx/docker, so I built a **faithful Node
+emulator of `ops/analytics/nginx.conf.snippet`** — logs `$time_iso8601\t$args`
+(raw, *undecoded* query string) and returns 204, for both the GET pixel and the
+POST `sendBeacon` paths — and drove it with URLs shaped exactly like
+`analytics.ts` `track()` builds them.
+
+That surfaced a **showstopper bug in `analyze.mjs`**: `parseLine` already
+URL-decodes every field via `URLSearchParams`, but the `feedback` case then
+called `decodeURIComponent(ev.msg)` a *second* time. The first `%` a real player
+types in feedback (e.g. "got 50% through") makes `decodeURIComponent` throw
+`URIError: URI malformed` — and it's unwrapped, so **the whole report crashes**;
+`"%NN"`-looking text (e.g. "100%20off") silently corrupts instead. Not caught
+by the earlier synthetic-log checks because none of that fixture feedback
+contained a `%`. Fix: drop the redundant decode (`msg: ev.msg ?? ''`).
+
+Verified end-to-end on a 10-event session (GET+POST mix) with feedback text
+containing `%`, `&`, `<touch>`, and unicode: text report exits 0 and renders the
+message intact; `--html` exits 0 with correct escaping (`&amp;`, `&lt;touch&gt;`,
+`café` preserved) and **zero** unescaped `<touch>` leaks; the snippet's log
+format matches the parser exactly. Also confirmed `escape=none` is not a
+log-injection vector — nginx never decodes `$args`, so a `%0A` stays literal and
+one physical line still holds one event.
+
+Not run against real nginx (none vendored) — the emulator reproduces the exact
+snippet log line, which is the only nginx behavior the parser depends on.
+**Still pending (needs server access):** apply the snippet, reload nginx,
+redeploy, then smoke-test with `?analytics=on` per `ops/analytics/README.md`.
+Retention/D1 still can't be exercised locally (it keys off the nginx receive
+date, which the single-run emulator collapses to one day).
 
 ## 2026-07-11 (dashboard + party-audit): HTML Analytics Dashboard + Party Survivability Audit
 

@@ -72,7 +72,10 @@ function analyze(events) {
       case 'chapter_clear': inc(chapterClear, ev.ch ?? '?'); break;
       case 'run_end': inc(runEnd, `${ev.ch ?? '?'}|${ev.reason ?? '?'}`); break;
       case 'game_complete': gameComplete += 1; break;
-      case 'feedback': feedback.push({ time: ev.time, ctx: ev.ctx ?? '?', msg: decodeURIComponent(ev.msg ?? '') }); break;
+      // ev.msg is already URL-decoded by URLSearchParams above; decoding again
+      // would throw on a literal '%' in feedback text (URIError) or silently
+      // corrupt "%NN"-looking sequences.
+      case 'feedback': feedback.push({ time: ev.time, ctx: ev.ctx ?? '?', msg: ev.msg ?? '' }); break;
     }
   }
 
