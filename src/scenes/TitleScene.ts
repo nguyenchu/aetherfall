@@ -5,6 +5,8 @@ import { input } from '../game/input';
 import { loadSaveSummary } from '../game/save';
 import { hardReset } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
+import { track } from '../game/analytics';
+import { openFeedback } from '../ui/feedback';
 
 interface TitleOption {
   text: Phaser.GameObjects.Text;
@@ -83,6 +85,15 @@ export class TitleScene extends Phaser.Scene {
     this.add.text(GAME.width / 2, 344, 'v0.1  —  aetherfall.nguyenchu.com', sharpText({
       fontFamily: FONT, fontSize: '7px', color: '#3a4060',
     })).setOrigin(0.5);
+
+    // Always-available feedback link (top-right). Its own pointerdown opens the
+    // overlay; the scene-level "tap to begin" handler still runs harmlessly.
+    const feedback = this.add.text(GAME.width - 8, 8, '✉ Feedback', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: '#6cf0c2',
+    })).setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true });
+    feedback.on('pointerover', () => feedback.setColor('#a8ffe6'));
+    feedback.on('pointerout', () => feedback.setColor('#6cf0c2'));
+    feedback.on('pointerdown', () => openFeedback('title'));
 
     music.play('title');
 
@@ -192,6 +203,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private begin(reset: boolean) {
+    track(reset ? 'new_game' : 'continue');
     if (reset) hardReset();
     this.unsubs.forEach((u) => u());
     this.unsubs = [];

@@ -1,6 +1,175 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-11 (later).
+> Paste this into a new session to continue the work. Last updated: 2026-07-11 (dashboard + party-audit).
+
+## 2026-07-11 (dashboard + party-audit): HTML Analytics Dashboard + Party Survivability Audit
+
+- **`analyze.mjs` gained an HTML dashboard.** Refactored so aggregation
+  (`analyze(events) -> summary`) is separate from rendering; added
+  `renderHtml(summary)` alongside the existing text renderer. `--html` emits a
+  self-contained dark "aether console" (inline CSS, no JS, no external requests
+  — CSP-clean, mailable, opens locally); `--html-fragment` emits body-only for
+  embedding. Design grounded in the game's own palette (config.ts: near-black
+  ground, teal `#6cf0c2`, aether-violet `#8a6cf0`, gold `#f0d36c`), deliberately
+  single-theme (the game is dark). Data marks use a **validated** teal ordinal
+  ramp for the funnel + status green/red for outcomes — checked with the dataviz
+  skill's `validate_palette.js` against the dark surface (ordinal: all pass;
+  status trio: worst adjacent CVD ΔE 12.4, above the ≥12 target), and every mark
+  is direct-labelled with counts + %. Untrusted feedback text is HTML-escaped
+  (verified `<touch>` renders inert). README updated with the `--html` usage.
+  Verified on a 249-line synthetic log (16 players, 3 days, 4-chapter funnel,
+  5 feedback msgs, 1 completion, a malformed line): text report unchanged and
+  correct, HTML valid (doctype/charset/closed tags, no `undefined`/`NaN` leaks),
+  escaping confirmed. A preview artifact was published from the demo data.
+  Not pixel-inspected in a browser (no vendored driver) — validated structurally
+  + palette-validated + CSS reviewed.
+- **Whole-party survivability audit** (after the Lyra fix below). Recomputed the
+  actual `battle.ts` formulas for all three members with default gear against
+  every chapter's hardest normal/elite attacker and boss-phase AoE. Finding:
+  **no member is one-shot from full at reasonable levels** anymore, including the
+  boss phase transitions (which I confirmed apply *flat* damage via `applyDamage`,
+  bypassing VIT and defend — 25/34/47/46 across ch1–4). Lyra stays clearly the
+  squishiest but survivable. Two notes, neither warranting a change: Mira has no
+  default armor (fine on HP; the single shared `scout_vest` is on Kael), and boss
+  phase AoEs are the intended "heal-or-die" burst. No balance edits made.
+
+## 2026-07-11 (lyra-survivability): Lyra Was One-Shottable — Root-Cause Rebalance
+
+## 2026-07-11 (lyra-survivability): Lyra Was One-Shottable — Root-Cause Rebalance
+
+Playtest complaint: Lyra dies in a single hit. Confirmed and traced to three
+compounding causes (not just "mage = low HP"):
+
+1. **Her VIT never grew.** Growth block was `{maxHp:5,maxMp:4,int:2,agi:1,str:1}`
+   — no `vit`, unlike Kael (+2) and Mira (+1). Physical mitigation
+   (`target.vit * 0.6` in `battle.ts` strike) was therefore frozen at ~3 for the
+   entire game while enemy STR climbs (11 ch1 → 20 ch2 elite → higher).
+2. **Her default armor gave zero survivability.** `aether_robe` was
+   `{maxMp:6,int:1}` (pure offense), vs Kael's `scout_vest` `{maxHp:8,vit:1}`.
+   She was the only member whose starting armor did nothing defensive.
+3. Lowest base HP (32) and slowest HP growth (+5) on top.
+
+Enemies can't crit (crit/weakness/break only apply when `actor.side==='party'`
+in `computeHit`), so a hit maxes at ~`base×1.12`. Even so, ch2 Keep Sentinel
+(STR 20) hits for up to 32 and the ch1 Forest Shade's frost/fire (base ≈30) up
+to ~34 — both one-shot a low-level 32–37 HP Lyra.
+
+**Fix (conservative — keeps her the glass cannon, removes the one-shot-from-full):**
+- `content.ts`: Lyra base `maxHp 32 → 36`; growth gains `vit: 1` (the real
+  root-cause fix — mitigation now scales with the game).
+- `equipment.ts`: `aether_robe` bonus `{maxMp:6,int:1}` → `{maxHp:6,maxMp:6,int:1}`
+  (a light defensive floor; also helps Mira, who can wear it). Flavor text
+  updated from "Trades heavy protection" to "Light protection".
+
+Net: +10 effective HP at every level (base +4, robe +6) and VIT now 5→14 by L10
+instead of frozen at 5. Party HP ordering preserved — at L5 (with default gear)
+Kael 108 > Mira 72 > **Lyra 62**, still clearly squishiest. Verified by
+recomputing the actual `battle.ts` formulas against ch1/ch2 attackers: every
+prior one-shot-from-full case (Forest Shade spell, Drowned Soldier, Keep
+Sentinel elite) now survives. `restoreLevel` rebuilds from base+growth, so
+existing saves pick this up on next load — no migration. `tsc` clean.
+
+Not verified in a live battle (no vendored browser driver) — same-shape numeric
+edit to already-exercised stat/growth/bonus fields, checked against the formulas
+(mirrors the 2026-07-09 (b) gold-rebalance verification approach). Easily
+tunable if she now feels *too* durable: drop the robe `maxHp`, or the base bump,
+or the `vit` growth — the `vit` growth is the load-bearing one for late game.
+
+## 2026-07-11 (analytics 2): Contextual Feedback + Mid-Run Funnel + chapter_start Fix
+
+## 2026-07-11 (analytics 2): Contextual Feedback + Mid-Run Funnel + chapter_start Fix
+
+Sharpened the telemetry from the entry below so its data is actually usable.
+
+- **Fixed a double-count bug in the just-added `chapter_start`.** `advanceArea()`
+  advances to the next stratum with `getRun().depth++; this.scene.restart()`,
+  which re-runs `DescentScene.create()` — so `chapter_start` was firing *twice
+  per chapter* (once per stratum), inflating the funnel's denominator. Now
+  `create(data?: { deeper?: boolean })` branches: a fresh descent from Sanctuary
+  (`scene.start`, no data) fires `chapter_start`; the in-run advance
+  (`scene.restart({ deeper: true })`) fires the new **`descent_progress`** event
+  instead. Verified against Phaser source that `restart(data)` → `settings.data`
+  → `create(settings.data)` (dist/phaser.js:201389, :198302).
+- **`descent_progress`** (`ch`,`d`) closes the mid-run blind spot: it fires on
+  reaching a chapter's 2nd (boss) stratum, so a player who starts a chapter and
+  quits (tab close) in the first stratum now shows as start-without-progress
+  rather than being invisible. `analyze.mjs`'s funnel gained a "reached S2 N
+  (p%)" column between start and clear.
+- **Contextual feedback prompts** replace reliance on the passive Title link
+  (which in practice gets almost no clicks). RunSummary now shows a
+  "✉ How was that run?" link (context `run_wipe`/`run_retreat`) — a natural
+  pause right after an outcome. The **ending** auto-opens the feedback panel once
+  ("You reached the bottom / How was the journey?", context `ending`) — the
+  single highest-signal moment — then continues home when it closes. The Title
+  link stays as an always-available fallback.
+- **`openFeedback(context, opts)`** gained `{ onClose, title, sub }`: `onClose`
+  lets the ending resume the walk home whether the player sends or cancels;
+  `title`/`sub` tailor the copy per moment. If called while already open it
+  invokes `onClose` immediately so a waiting caller is never stranded.
+- **RunSummary tap handling** was reworked so the feedback link doesn't also
+  trigger "continue": the full-screen background is now an interactive object
+  (not a scene-level `pointerdown`), and with Phaser's default `input.topOnly`
+  the link on top swallows its own taps. Added a `leaving` re-entry guard to
+  `continue()`.
+
+Verified: `tsc` clean; `pnpm build` succeeds. `analyze.mjs` re-exercised on a
+synthetic log where one player bounces in stratum 1 — funnel correctly shows
+"reached S2 67%" (not 100%), i.e. the drop-off is now visible. **Not** verified
+in a live browser (no vendored driver): the RunSummary/ending prompt UI and the
+`descent_progress` firing from real play were not driven end-to-end, though the
+Phaser data-flow the fix depends on was confirmed from source.
+
+## 2026-07-11 (analytics): First-Party Validation Telemetry + In-Game Feedback
+
+Roadmap step 5 (Validation) was "deployed, but measuring retention/feedback is
+still todo" — the game had been live since 2026-07-09 with zero instrumentation,
+so there was no way to know whether it's fun or retains. Added a lightweight,
+privacy-first, first-party telemetry + feedback system. No third-party SDK, no
+cookies, no PII.
+
+- **`src/game/analytics.ts`** (new): `track(event, props)` sends each event as a
+  query string to a **same-origin** `/e` endpoint via `navigator.sendBeacon`
+  (Image-GET fallback). An anonymous random `cid` in localStorage powers
+  unique-player/retention counts; a per-load `sid` groups a session. Fails
+  silent, never blocks gameplay. Honors Do Not Track / Global Privacy Control
+  and a persistent opt-out; `?analytics=off`/`on` override. On a non-production
+  host it `console.debug`s events instead of beaconing (visible in dev, nothing
+  sent). `chapterOfDepth(d)` maps descent depth → chapter (2 strata/chapter).
+- **Funnel events**, wired at the existing choke points: `session_start`
+  (`main.ts`), `new_game`/`continue` (`TitleScene.begin`), `chapter_start`
+  (`DescentScene.create` — the one place a fresh descent starts; battle returns
+  via RESUME, not create), `chapter_clear` + `game_complete` (`BattleScene`
+  boss-victory branch), `run_end{reason:wipe|retreat,g}` (`RunSummaryScene.create`
+  — the single choke point both outcomes funnel through). Deliberately did *not*
+  add a separate `party_wipe`: `run_end` with `reason` is the canonical outcome.
+- **`src/ui/feedback.ts`** (new): a DOM overlay (real `<textarea>`, not Phaser)
+  for freeform feedback, sent as a `feedback` event through the same channel.
+  Includes an analytics opt-out checkbox. Reached via a small "✉ Feedback" link
+  on the Title screen (top-right, always tappable). Typing must not drive the
+  game, so `input.ts` gained `setInputSuspended()` — the overlay suspends the
+  shared keyboard bus while open (early-returns in the window keydown/keyup
+  handlers, releases held buttons).
+- **`ops/analytics/`** (new, not shipped in the build): `nginx.conf.snippet`
+  (a `log_format` + `location = /e` that logs `$args` and returns 204 — no
+  systemd service, matches the static-only deploy; IP deliberately not logged),
+  `analyze.mjs` (dependency-free report: reach, D1 retention by cohort,
+  per-chapter start→clear% funnel with wipe/retreat, completions, modifiers,
+  feedback messages; reads plain/`.gz`/stdin, skips malformed lines), and a
+  `README.md` documenting the pipeline + privacy stance.
+
+**Server-side is not yet applied** — the nginx `location = /e` must be added to
+the aetherfall server block and nginx reloaded before events are captured (until
+then beacons 404 harmlessly). Redeploy the built client afterward.
+
+Verified: `tsc --noEmit` clean; `pnpm build` (prod) succeeds. `analyze.mjs`
+exercised against a synthetic 35-line log (3 players, 2 days, wipes/retreats,
+a completion, feedback, one malformed line) — report correct, bad line skipped.
+`analytics.ts` transpiled and run against stubbed browser globals: 20/20
+assertions (prod beaconing + URL shape, cid persistence across reloads,
+dev-console-only, `?analytics=on` force, DNT + GPC disable, opt-out persist +
+resume, 500-char field cap, depth→chapter). **Not** verified in a live browser
+playthrough (no vendored browser driver): the feedback overlay UI and events
+firing from real play were not exercised end-to-end.
 
 ## 2026-07-11: Equip Lists Hide Gear Worn by Another Party Member
 
@@ -702,8 +871,9 @@ talk, use a chapter portal to descend.
    now audited/balanced across all four chapters (2026-07-07, 2026-07-09 (b)/(d))
 5. In progress: **Mobile playability** - landscape lock + rotate prompt done; touch controls
    decluttered per-scene; still needs real-device testing pass
-6. Done: **Validation** - deployed to https://aetherfall.nguyenchu.com (2026-07-09); retention/
-   feedback measurement itself is still todo
+6. In progress: **Validation** - deployed to https://aetherfall.nguyenchu.com (2026-07-09);
+   first-party telemetry + in-game feedback built (2026-07-11 (analytics)); pending the nginx
+   `/e` endpoint on the server + reading the `ops/analytics/analyze.mjs` reports
 7. Todo: **Monetization** - AdMob rewarded ads + IAP
 
 ## Suggested Next Steps
@@ -719,8 +889,11 @@ talk, use a chapter portal to descend.
   (c)), but there's room for more NPC follow-up lines and optional dialogue
   as the player goes deeper, following the `_after4`-style per-chapter
   pattern.
-- **Retention/feedback measurement:** the game is deployed and reachable;
-  actually gathering playtester feedback is still todo.
+- **Retention/feedback measurement:** client-side telemetry + an in-game
+  feedback panel are now built (2026-07-11 (analytics)). Remaining: add the
+  nginx `location = /e` on the server, redeploy, and start reading
+  `ops/analytics/analyze.mjs` reports. Later, the planned Postgres backend
+  could replace the log-file ingestion for richer querying.
 - **Monetization:** still todo per the Roadmap — AdMob rewarded ads + IAP.
 - **JS bundle size:** Vite flags the production bundle at ~1.7MB
   (minified, ~400KB gzipped) as larger than its default chunk-size warning —

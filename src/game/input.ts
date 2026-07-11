@@ -72,12 +72,22 @@ const KEY_MAP: Record<string, Btn> = {
 };
 
 let keyboardBound = false;
+let suspended = false;
+
+/** Suspends keyboard handling while a DOM overlay (e.g. the feedback textarea)
+ * owns input, so typing does not drive the game. Held buttons are released so
+ * nothing is stuck down when input resumes. */
+export function setInputSuspended(value: boolean): void {
+  suspended = value;
+  input.releaseAll();
+}
 
 export function bindKeyboard(): void {
   if (keyboardBound) return;
   keyboardBound = true;
   let wasEnabledBeforeBlur = false;
   window.addEventListener('keydown', (e) => {
+    if (suspended) return;
     // M should toggle mute immediately and not open the menu
     if (e.key && e.key.toLowerCase() === 'm') {
       music.toggle();
@@ -92,6 +102,7 @@ export function bindKeyboard(): void {
     input.press(b);
   });
   window.addEventListener('keyup', (e) => {
+    if (suspended) return;
     const b = KEY_MAP[e.key];
     if (b) input.release(b);
   });

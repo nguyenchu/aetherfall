@@ -4,6 +4,8 @@ import { input } from '../game/input';
 import { getRun, returnToTown } from '../game/run';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
+import { track, chapterOfDepth } from '../game/analytics';
+import { openFeedback } from '../ui/feedback';
 
 interface RunSummaryData {
   reason: 'wipe' | 'retreat';
@@ -14,6 +16,7 @@ interface RunSummaryData {
 export class RunSummaryScene extends Phaser.Scene {
   private unsubs: (() => void)[] = [];
   private ready = false;
+  private leaving = false;
 
   constructor() {
     super('RunSummary');
@@ -23,16 +26,27 @@ export class RunSummaryScene extends Phaser.Scene {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.cameras.main.fadeIn(320, 7, 6, 14);
     this.unsubs = [];
+    this.leaving = false;
     input.releaseAll();
 
     const run = getRun();
     const depth = data.depth ?? run.depth;
+    // Both outcomes (a party wipe and a voluntary retreat) funnel through here,
+    // so this is the single canonical "run ended" signal.
+    track('run_end', { reason: data.reason, ch: chapterOfDepth(depth), d: depth, g: run.gold });
     const title = data.reason === 'wipe' ? 'THE CRYSTAL PULLS YOU HOME' : 'RETURNED TO SANCTUARY';
     const subtitle = data.reason === 'wipe'
       ? 'The descent ends, but your growth remains.'
       : 'You leave the dark before it can take more.';
 
-    this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0);
+    // The whole background is the "continue" tap target. Making it an
+    // interactive object (rather than a scene-level pointerdown) lets the
+    // feedback link sit on top and, with input.topOnly (Phaser default),
+    // swallow its own taps so they don't also trigger continue().
+    const bg = this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg)
+      .setOrigin(0, 0)
+      .setInteractive();
+    bg.on('pointerdown', () => this.continue());
     this.add.rectangle(32, 34, 448, 270, 0x07153a, 0.98)
       .setOrigin(0, 0)
       .setStrokeStyle(2, 0xdfe4f5, 0.86);
@@ -58,7 +72,17 @@ export class RunSummaryScene extends Phaser.Scene {
     this.add.text(70, 270, 'Z / tap  ·  wake in Sanctuary',
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0c2', strokeThickness: 2 }));
 
-    this.input.once('pointerdown', () => this.continue());
+    // Contextual feedback prompt: this is a natural pause right after an
+    // outcome, a far better capture moment than a passive Title-screen link.
+    const fb = this.add.text(GAME.width - 8, 8, '✉ How was that run?', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: '#6cf0c2', strokeThickness: 2,
+    })).setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true });
+    fb.on('pointerover', () => fb.setColor('#a8ffe6'));
+    fb.on('pointerout', () => fb.setColor('#6cf0c2'));
+    fb.on('pointerdown', () => openFeedback(`run_${data.reason}`, {
+      sub: 'What made this run end? Anything feel unfair or unclear? Anonymous.',
+    }));
+
     this.time.delayedCall(250, () => {
       this.ready = true;
       this.unsubs.push(input.on('confirm', () => this.continue()));
@@ -70,7 +94,8 @@ export class RunSummaryScene extends Phaser.Scene {
   }
 
   private continue() {
-    if (!this.ready) return;
+    if (!this.ready || this.leaving) return;
+    this.leaving = true;
     sfx.play('confirm');
     returnToTown();
     music.play('sanctuary');

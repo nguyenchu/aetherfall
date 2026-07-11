@@ -1,0 +1,40 @@
+# Aetherfall analytics ingestion — no backend service, nginx-only.
+#
+# The game sends every event as a query string to a same-origin GET/POST at
+# `/e`. nginx logs the query string to a dedicated file and returns 204. There
+# is nothing to run and nothing to keep alive — it fits the existing
+# static-file deployment on the home server.
+#
+# Privacy: the IP address is deliberately NOT logged. Uniqueness/retention is
+# handled by the anonymous `cid` the client generates, so no personal data is
+# stored here.
+
+# ── 1. In the http { } block (log_format is http-scoped) ─────────────────────
+#
+#   log_format aetherfall_events escape=none '$time_iso8601\t$args';
+#
+# `escape=none` keeps the URL-encoded query string intact for the parser.
+
+# ── 2. Inside the existing `server { }` for aetherfall.nguyenchu.com ──────────
+
+location = /e {
+    access_log /var/log/nginx/aetherfall_events.log aetherfall_events;
+    add_header Cache-Control "no-store" always;
+    # Both the sendBeacon (POST) and the Image() fallback (GET) put their data
+    # in the query string, so a single handler covers both.
+    return 204;
+}
+
+# ── 3. (Optional) light abuse protection ─────────────────────────────────────
+# In http { }:
+#   limit_req_zone $binary_remote_addr zone=aetherfall_e:1m rate=30r/s;
+# then inside `location = /e`:
+#   limit_req zone=aetherfall_e burst=60 nodelay;
+
+# ── 4. Reload ────────────────────────────────────────────────────────────────
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Make the log readable/rotatable (add to /etc/logrotate.d/nginx if not covered
+# by the default glob):
+#   touch /var/log/nginx/aetherfall_events.log
+#   chown www-data:adm /var/log/nginx/aetherfall_events.log

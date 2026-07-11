@@ -7,6 +7,8 @@ import { getArea } from '../game/chapters';
 import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
+import { track, chapterOfDepth } from '../game/analytics';
+import { openFeedback } from '../ui/feedback';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
 import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -834,6 +836,7 @@ export class BattleScene extends Phaser.Scene {
         : flag === 'ch3_complete' ? 'defeat_ashbrand' : 'defeat_prism_sovereign';
       const completedQuest = completeQuest(questId);
       if (completedQuest) this.pushLog(`Quest complete: ${completedQuest.title} — ${questRewardText(completedQuest)}`);
+      track('chapter_clear', { ch: chapterOfDepth(depth), d: depth });
     }
     saveProgress();
     music.fanfare('victory');
@@ -842,9 +845,19 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       this.time.delayedCall(1000, () => {
         const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : depth <= 6 ? 'ch3_win' : 'ch4_win';
-        const afterWin = depth > 6
-          ? () => this.scene.launch('Dialogue', { scriptId: 'ending', onDone: () => this.toTown() })
-          : () => this.toTown();
+        if (depth > 6) track('game_complete', { d: depth });
+        // After the ending plays, prompt for feedback once — beating the game
+        // is the single highest-signal moment to ask "how was the journey?".
+        // The overlay's onClose resumes the flow home whether they send or not.
+        const endingThenFeedback = () => this.scene.launch('Dialogue', {
+          scriptId: 'ending',
+          onDone: () => openFeedback('ending', {
+            title: 'You reached the bottom',
+            sub: 'Aether is restored. How was the journey? Anonymous — no account needed.',
+            onClose: () => this.toTown(),
+          }),
+        });
+        const afterWin = depth > 6 ? endingThenFeedback : () => this.toTown();
         this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
       });
       return;

@@ -7,6 +7,7 @@ import { input, attachTouchControls } from '../game/input';
 import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { markSeen } from '../game/dialogue';
+import { track, chapterOfDepth } from '../game/analytics';
 import { paintPixelGrid } from '../art/sprites';
 import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 
@@ -58,7 +59,7 @@ export class DescentScene extends Phaser.Scene {
     super('Descent');
   }
 
-  create() {
+  create(data?: { deeper?: boolean }) {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
@@ -73,8 +74,21 @@ export class DescentScene extends Phaser.Scene {
     this.partyHud = [];
     this.hudSignature = '';
 
-    const area = getArea(getRun().depth);
+    const run = getRun();
+    const area = getArea(run.depth);
     this.map = area.map;
+
+    // create() runs both on a fresh descent from Sanctuary (scene.start, no data)
+    // and on advancing to the next stratum within a run (advanceArea's
+    // scene.restart({ deeper: true })). Battle returns via RESUME, not create.
+    // So a fresh entry is the one per-chapter "started" signal, while a deeper
+    // entry marks reaching the next stratum — the mid-run progress the funnel
+    // was otherwise blind to.
+    if (data?.deeper) {
+      track('descent_progress', { ch: chapterOfDepth(run.depth), d: run.depth });
+    } else {
+      track('chapter_start', { ch: chapterOfDepth(run.depth), d: run.depth, mod: run.modifier.id });
+    }
 
     applyDescentModifier();
     this.currentThemeId = area.theme.id;
@@ -511,7 +525,7 @@ export class DescentScene extends Phaser.Scene {
     this.busy = true;
     getRun().depth++;
     saveProgress();
-    this.scene.restart();
+    this.scene.restart({ deeper: true });
   }
 
   /** Only the '<' portal tile leads home; there is no global retreat key. */

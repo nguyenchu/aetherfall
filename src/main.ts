@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, setRenderScale } from './config';
-import { bindKeyboard } from './game/input';
+import { bindKeyboard, isTouchDevice } from './game/input';
+import { initAnalytics, track } from './game/analytics';
 import { BootScene } from './scenes/BootScene';
 import { SanctuaryScene } from './scenes/SanctuaryScene';
 import { DescentScene } from './scenes/DescentScene';
@@ -16,6 +17,9 @@ import { RunSummaryScene } from './scenes/RunSummaryScene';
 setRenderScale(2);
 
 bindKeyboard();
+
+initAnalytics();
+track('session_start', { mob: isTouchDevice() });
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
