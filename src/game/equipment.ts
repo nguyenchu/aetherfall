@@ -89,9 +89,9 @@ export const EQUIPMENT: Record<string, Equipment> = {
     name: 'Aether Robe',
     slot: 'armor',
     users: ['lyra', 'mira'],
-    bonus: { maxMp: 6, int: 1 },
+    bonus: { maxHp: 6, maxMp: 6, int: 1 },
     trait: 'Caster robe',
-    description: 'Arcane weave. Trades heavy protection for spell endurance.',
+    description: 'Arcane weave. Light protection, built for spell endurance.',
     icon: { kind: 'robe', base: 0x5d3b9a, accent: 0xa58cff },
   },
   sun_charm: {

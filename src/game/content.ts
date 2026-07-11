@@ -193,8 +193,8 @@ export function makeParty(): Combatant[] {
     {
       id: 'lyra', name: 'Lyra', side: 'party', spriteKey: 'c_lyra',
       color: C.mage, size: 20, spells: ['fire', 'frost'], level: 1, xp: 0,
-      stats: stats({ maxHp: 32, maxMp: 18, str: 6, agi: 11, vit: 5, int: 14 }),
-      growth: { maxHp: 5, maxMp: 4, int: 2, agi: 1, str: 1 },
+      stats: stats({ maxHp: 36, maxMp: 18, str: 6, agi: 11, vit: 5, int: 14 }),
+      growth: { maxHp: 5, maxMp: 4, int: 2, agi: 1, str: 1, vit: 1 },
       learnset: { 4: ['firewave'], 7: ['blizzard'] },
     },
     {
