@@ -1,6 +1,26 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-11 (analytics 3 / ingest verification).
+> Paste this into a new session to continue the work. Last updated: 2026-07-12 (encounter-rate).
+
+## 2026-07-12 (encounter-rate): Random Battles Too Frequent — Rebalanced
+
+Playtest note: random battles fire too often during descent. The encounter
+roll in `DescentScene.maybeTriggerRandomEncounter` runs one probability check
+per walked tile once past a floor of guaranteed-quiet steps, with a hard
+"bad-luck" ceiling that forces a fight. Old values gave a mean gap of only
+~8 steps and just 2 quiet steps after a fight, which reads as "constant".
+
+Tuning (all in `DescentScene.ts`, no logic change):
+- `RANDOM_BATTLE_MIN_STEPS` 3 → 5 (longer guaranteed-quiet window after a fight).
+- per-step `chance` `min(0.22, 0.11 + depth*0.01)` → `min(0.16, 0.08 + depth*0.008)`
+  (lower base + slope + ceiling; still scales gently with depth).
+- `RANDOM_BATTLE_MAX_STEPS` 14 → 20 (raise the forced-encounter ceiling).
+
+Net: mean gap ~8 → ~13-14 steps at low depth (~40% fewer trash fights), with a
+5-step guaranteed lull. `tsc` clean. Pure numeric tuning of an already-exercised
+code path (mirrors the prior gold/Lyra rebalances); not driven in a live descent
+(no vendored browser driver). Easily nudged further if it now feels too empty —
+lower `MIN`/raise `chance`.
 
 ## 2026-07-11 (analytics 3): Ingest Pipeline Verified E2E — Feedback Double-Decode Crash Fixed
 

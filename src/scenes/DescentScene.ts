@@ -14,11 +14,11 @@ import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
-const RANDOM_BATTLE_MIN_STEPS = 3;
+const RANDOM_BATTLE_MIN_STEPS = 5;
 // Bad-luck protection: independent per-step rolls can still produce long dry
 // spells even at a reasonable average rate, which reads as "broken" rather
 // than "unlucky". Force an encounter if one hasn't landed by this many steps.
-const RANDOM_BATTLE_MAX_STEPS = 14;
+const RANDOM_BATTLE_MAX_STEPS = 20;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 interface PartyHudRow {
@@ -484,7 +484,7 @@ export class DescentScene extends Phaser.Scene {
     if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
 
     const depth = getRun().depth;
-    const chance = Math.min(0.22, 0.11 + depth * 0.01);
+    const chance = Math.min(0.16, 0.08 + depth * 0.008);
     const forced = this.randomBattleSteps >= RANDOM_BATTLE_MAX_STEPS;
     if (!forced && Math.random() >= chance) return;
 
