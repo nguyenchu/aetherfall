@@ -1,6 +1,31 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-13 (items-menu).
+> Paste this into a new session to continue the work. Last updated: 2026-07-13 (validation-live).
+
+## 2026-07-13 (validation-live): Telemetry Ingest Deployed — Validation Loop Live E2E
+
+The roadmap's Validation step is no longer blocked: the analytics loop now runs
+in production, verified with a real browser client (not just curl).
+
+Done on the home server (over SSH from the dev Mac):
+- Applied `ops/analytics/nginx.conf.snippet`: `log_format aetherfall_events`
+  (`escape=none '$time_iso8601\t$args'`) in the `http {}` block, and
+  `location = /e` (logs `$args`, returns 204) in the aetherfall `server {}`
+  block. `sudo nginx -t` clean, reloaded. Created
+  `/var/log/nginx/aetherfall_events.log` (www-data:adm).
+- Redeployed the game. The live build was stale — Jul 9, pre-analytics
+  (`index-DVPZCaPA.js`, no `sendBeacon`); rsynced a fresh `dist/` into
+  `/var/www/aetherfall` (`index-DrVD4OfP.js`), which also ships this session's
+  random-battle + items-menu fixes. Backup at `~/aetherfall.bak-<ts>` on the box.
+- Proof: loaded the live site in headless Chrome → a real `session_start`
+  (anonymous `cid`, `mob=0`) landed in the log and `analyze.mjs` parsed it.
+  Then truncated the log so real validation data starts from zero.
+
+Ops notes for next time: web root `/var/www/aetherfall` is `nguyen`-owned (no
+sudo needed to deploy); the site is static-file + nginx (no systemd app service);
+the dev Mac now has an authorized SSH key (`nguyen@aetherfall.nguyenchu.com`), so
+server ops can be driven directly. Redeploy = `pnpm build` then
+`rsync -av --delete dist/ nguyen@aetherfall.nguyenchu.com:/var/www/aetherfall/`.
 
 ## 2026-07-13 (items-menu): Items Tab — Scrollable List + Target-Selection Drill-Down
 
@@ -956,9 +981,12 @@ talk, use a chapter portal to descend.
    now audited/balanced across all four chapters (2026-07-07, 2026-07-09 (b)/(d))
 5. In progress: **Mobile playability** - landscape lock + rotate prompt done; touch controls
    decluttered per-scene; still needs real-device testing pass
-6. In progress: **Validation** - deployed to https://aetherfall.nguyenchu.com (2026-07-09);
-   first-party telemetry + in-game feedback built (2026-07-11 (analytics)); pending the nginx
-   `/e` endpoint on the server + reading the `ops/analytics/analyze.mjs` reports
+6. Live: **Validation** - deployed to https://aetherfall.nguyenchu.com; first-party
+   telemetry + in-game feedback shipped; the nginx `/e` ingest endpoint is deployed
+   and logging, verified end-to-end with a real browser client (2026-07-13). Read
+   reports with `ops/analytics/analyze.mjs` against
+   `/var/log/nginx/aetherfall_events.log`. Remaining: read the reports as real data
+   accrues; optional Postgres backend later for richer querying.
 7. Todo: **Monetization** - AdMob rewarded ads + IAP
 
 ## Suggested Next Steps
@@ -974,11 +1002,11 @@ talk, use a chapter portal to descend.
   (c)), but there's room for more NPC follow-up lines and optional dialogue
   as the player goes deeper, following the `_after4`-style per-chapter
   pattern.
-- **Retention/feedback measurement:** client-side telemetry + an in-game
-  feedback panel are now built (2026-07-11 (analytics)). Remaining: add the
-  nginx `location = /e` on the server, redeploy, and start reading
-  `ops/analytics/analyze.mjs` reports. Later, the planned Postgres backend
-  could replace the log-file ingestion for richer querying.
+- **Retention/feedback measurement:** now **live** — telemetry, feedback panel,
+  and the nginx `/e` ingest are all deployed and verified end-to-end
+  (2026-07-13 (validation-live)). Just read `ops/analytics/analyze.mjs` reports
+  as data accrues. Later, the planned Postgres backend could replace log-file
+  ingestion for richer querying.
 - **Monetization:** still todo per the Roadmap — AdMob rewarded ads + IAP.
 - **JS bundle size:** Vite flags the production bundle at ~1.7MB
   (minified, ~400KB gzipped) as larger than its default chunk-size warning —
