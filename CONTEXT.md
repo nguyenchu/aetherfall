@@ -1,6 +1,39 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-13 (validation-live).
+> Paste this into a new session to continue the work. Last updated: 2026-07-13 (merchant).
+
+## 2026-07-13 (merchant): Merchant Overhaul — Icons, Slot Clarity, Scroll Nav, Compare
+
+Playtest note: the merchant was hard to read (what is this item? what slot is
+this gear?) and had a latent bug. Rebuilt the shop in `SanctuaryScene`.
+
+Legibility (the core ask):
+- **Icon on every row** — reuses the `icon_<id>` textures BootScene already
+  generates for all gear + items (the shop wasn't using them).
+- **Gear rows show a slot badge + who-fits** (`WPN · Kael`, `ARM · Kael/Mira`).
+- **Detail panel** at the bottom, live per highlighted row: gear shows slot,
+  trait, full stats, ✦ effects, description, and a **"Now equipped" compare**
+  line (what each eligible member currently has in that slot); items show
+  description + buy/sell price; blessing explains stacking + next cost.
+
+Nav + the bug:
+- **Overflow fixed.** The old shop drew all rows at fixed offsets; late-game the
+  BUY column (3 base + up to 4 consumables + up to 11 gear ≈ 18 rows) ran off
+  the box. Now each column is a **scroll window** (`SHOP_ROWS = 8`, `▲/▼`).
+- **Two-column nav**: `←→` switches BUY/SELL (was a single flat index snaking
+  through both columns), `↑↓` within, guarded against an empty column.
+- **Cursor keeps its place after a purchase** — buy/sell calls `refreshShop`
+  (rebuild stock, clamp selection) instead of `openShop` (which reset to top).
+- BUY items sorted; **"Sell all junk"** shortcut atop SELL dumps all resale-only
+  loot at once.
+
+State went from a flat `shopIndex`/`shopOptions` to `shopColumn` + per-column
+`shopSel`/`shopScroll` + `buys`/`sells: ShopOption[]`. Panel enlarged to
+600×316 for icons + detail. `tsc` clean, `pnpm build` OK; layout + nav edges
+traced (no overlap; column switch, scroll clamp, keep-place, sell-all, last-item
+→ fall back to BUY). **Not** pixel-verified in a live browser (no vendored
+driver; reaching the merchant needs in-game navigation) — same bar as the
+items-menu drill-down.
 
 ## 2026-07-13 (validation-live): Telemetry Ingest Deployed — Validation Loop Live E2E
 
