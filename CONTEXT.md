@@ -1,6 +1,37 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-12 (encounter-rate).
+> Paste this into a new session to continue the work. Last updated: 2026-07-13 (items-menu).
+
+## 2026-07-13 (items-menu): Items Tab — Scrollable List + Target-Selection Drill-Down
+
+Playtest note: with a full bag you couldn't *see* or reach all your items. Root
+cause: the Items tab (`renderItems`) drew every entry at `y = 100 + i*50` with
+**no scroll window** — unlike the Equip tab, which already scrolls. Only ~4-5
+rows fit the panel, so with up to 11 held item types (2 heal, 2 mp, 1 cure, 1
+revive, 5 sellable junk) the lower rows rendered off-panel and were unreachable
+by cursor or touch.
+
+Rebuilt the tab to mirror Equip's proven two-step drill-down (keeps items and
+equipment on separate tabs, per the 2026-07-13 discussion):
+- **Step 1 — scrollable list** (`renderItemList`): compact 34px rows (icon,
+  name ×count, description, right-aligned tag), `ITEMS_LIST_ROWS = 6` visible
+  with `▲/▼` counts. Sorted **usable-first** (heal/mp/revive), then cure, then
+  sellable junk — so the items you act on are always in view without scrolling.
+- **Step 2 — target screen** (`renderItemUse`): Z on a usable item opens a
+  one-row-per-member picker (name + HP/MP + `USE ›`/`full`/`KO`); X steps back.
+  Non-usable items don't drill — Z explains instead (cure = battle only, sell =
+  "sell at the Sanctuary merchant (Ng)").
+- **Nav** reuses the equip pattern: new `moveItemsVertical` walks the full id
+  list (`itemRowIds`) and scrolls the window when the next row is hidden; wheel
+  scroll now covers items too; `back`/`setTab` reset the drill state
+  (`itemSelId`, `itemsScroll`). Added `Selectable.itemId` to anchor scroll nav.
+
+Field-usable = kind ∈ {heal, mp, revive}; cure (battle-only) and sell (junk)
+stay list-only, same as before but now reachable. `tsc` clean, `pnpm build` OK.
+Traced the nav edges (window-edge scroll, top/bottom clamp, drill in/out,
+last-item-consumed → back to list, empty bag, right → command column). **Not**
+driven in a live browser (no vendored driver) — same bar as prior menu work;
+reaching a full-bag state needs real play.
 
 ## 2026-07-12 (encounter-rate): Random Battles Too Frequent — Rebalanced
 

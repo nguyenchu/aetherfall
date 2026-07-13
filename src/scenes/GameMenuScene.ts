@@ -33,6 +33,8 @@ interface Selectable {
   equipKind?: EquipSelectableKind;
   equipSlot?: EquipSlot;
   equipItemId?: string | null;
+  /** Inventory id this row/target belongs to (items tab), for scroll nav. */
+  itemId?: string;
 }
 
 export class GameMenuScene extends Phaser.Scene {
@@ -55,6 +57,11 @@ export class GameMenuScene extends Phaser.Scene {
   private equipPreviewItemId?: string | null;
   private resetArmed = false;
   private magicSpellId?: string;
+  private itemsScroll = 0;
+  /** Item drilled into for target-selection; undefined = showing the list. */
+  private itemSelId?: string;
+  /** Full sorted id list of held items — the logical list scroll nav walks. */
+  private itemRowIds: string[] = [];
   private menuNotice = '';
   private selectionAnchor?: { x: number; y: number };
   private unsubs: (() => void)[] = [];
@@ -91,7 +98,7 @@ export class GameMenuScene extends Phaser.Scene {
     this.renderContent();
     this.bindMenuInput();
     this.input.on('wheel', (_p: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
-      if (this.tab === 'equip' && this.focus === 'content' && dy !== 0) this.moveSelection(dy > 0 ? 1 : -1);
+      if ((this.tab === 'equip' || this.tab === 'items') && this.focus === 'content' && dy !== 0) this.moveSelection(dy > 0 ? 1 : -1);
     });
     attachTouchControls(this, 'bottom', 'menu');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
@@ -247,58 +254,186 @@ export class GameMenuScene extends Phaser.Scene {
     ];
   }
 
+  // Items mirror the equip tab's drill-down: a compact, scrollable list of
+  // everything held (Z opens it), then a target screen to pick who uses it.
+  // One screen at a time keeps every item reachable no matter how full the bag.
   private renderItems(box: Phaser.GameObjects.Container) {
     const run = getRun();
-    const entries = Object.entries(run.inventory).filter(([, n]) => n > 0);
-    if (entries.length === 0) {
+    const held = Object.entries(run.inventory).filter(([, n]) => n > 0) as Array<[string, number]>;
+    if (held.length === 0) {
+      this.itemRowIds = [];
+      this.itemSelId = undefined;
       box.add(this.add.text(46, 112, 'No items.', sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
       return;
     }
-    entries.forEach(([id, count], i) => {
+    if (this.itemSelId && (run.inventory[this.itemSelId] ?? 0) > 0 && fieldUsable(this.itemSelId)) {
+      this.renderItemUse(box, this.itemSelId);
+    } else {
+      this.itemSelId = undefined;
+      this.renderItemList(box, held);
+    }
+  }
+
+  /** Scrollable list: usable items first, then cure, then sellable junk last. */
+  private renderItemList(box: Phaser.GameObjects.Container, held: Array<[string, number]>) {
+    const rank = (id: string) => (fieldUsable(id) ? 0 : ITEMS[id]?.kind === 'cure' ? 1 : 2);
+    const sorted = held.slice().sort((a, b) => rank(a[0]) - rank(b[0]));
+    this.itemRowIds = sorted.map(([id]) => id);
+    this.itemsScroll = Phaser.Math.Clamp(this.itemsScroll, 0, Math.max(0, sorted.length - ITEMS_LIST_ROWS));
+
+    box.add(this.add.text(456, 78, 'Z: use  ·  ↑↓: item', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
+
+    const listTop = 96;
+    sorted.slice(this.itemsScroll, this.itemsScroll + ITEMS_LIST_ROWS).forEach(([id, count], vi) => {
       const item = ITEMS[id];
-      const y = 100 + i * 50;
-      const row = this.add.rectangle(42, y - 4, 414, 46, i % 2 === 0 ? 0x101d3f : 0x0c1836, 0.88)
-        .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x5067b0, 0.5);
-      box.add(row);
-      this.addIcon(box, id, 50, y, 26);
-      box.add(this.add.text(84, y, `${item?.name ?? id} x${count}`,
-        sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c', strokeThickness: 2 })));
-      box.add(this.add.text(84, y + 13, item?.description ?? '',
-        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 350 } })));
-      if (item?.kind === 'cure') {
-        box.add(this.add.text(84, y + 27, 'Cures ailments — only useful mid-battle.',
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
-      } else if (item?.kind === 'revive') {
-        run.party.forEach((member, memberIndex) => {
-          const usable = member.stats.hp <= 0;
-          const b = this.button(84 + memberIndex * 108, y + 26, 100, `${member.name}  ${usable ? 'KO' : 'OK'}`, () => {
-            this.menuNotice = useItemOn(id, member.id)
-              ? `${member.name} returns to the fight.`
-              : `${member.name} can't use this right now.`;
-            this.renderContent();
-          }, box, '7px');
-          b.disabled = !usable;
-        });
-      } else if (item?.target === 'ally') {
-        run.party.forEach((member, memberIndex) => {
-          const vital = item.kind === 'heal'
-            ? { cur: member.stats.hp, max: member.stats.maxHp }
-            : { cur: member.stats.mp, max: member.stats.maxMp };
-          const usable = member.stats.hp > 0 && vital.cur < vital.max;
-          const b = this.button(84 + memberIndex * 108, y + 26, 100, `${member.name}  ${vital.cur}/${vital.max}`, () => {
-            this.menuNotice = useItemOn(id, member.id)
-              ? `${member.name} uses ${item.name}.`
-              : `${member.name} can't use this right now.`;
-            this.renderContent();
-          }, box, '7px');
-          b.disabled = !usable;
-        });
-      } else if (item?.kind === 'sell') {
-        box.add(this.add.text(84, y + 27, 'Sell to the merchant in Sanctuary — no use in the field.',
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
-      }
+      const y = listTop + vi * 34;
+      const rect = this.add.rectangle(42, y, 414, 30, 0x141a30, 0.96)
+        .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
+        .setInteractive({ useHandCursor: true });
+      box.add(rect);
+      this.addIcon(box, id, 46, y + 4, 22);
+      const label = this.add.text(76, y + 4, `${item?.name ?? id}  x${count}`,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#f0d36c', strokeThickness: 2 })).setDepth(3);
+      box.add(this.add.text(76, y + 16, item?.description ?? '',
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, wordWrap: { width: 300 } })).setDepth(3));
+      box.add(this.add.text(452, y + 6, itemTag(id),
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: fieldUsable(id) ? '#6cf0c2' : '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
+      const selectable: Selectable = { rect, label, itemId: id, action: () => this.openItem(id) };
+      this.selectables.push(selectable);
+      rect.on('pointerdown', () => {
+        sfx.play('confirm');
+        this.selected = this.selectables.indexOf(selectable);
+        this.focus = 'content';
+        this.updateSelection();
+        selectable.action();
+      });
+      box.add(label);
     });
+
+    if (this.itemsScroll > 0) {
+      box.add(this.add.text(474, listTop + 4, `▲${this.itemsScroll}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
+    }
+    const hiddenBelow = sorted.length - this.itemsScroll - ITEMS_LIST_ROWS;
+    if (hiddenBelow > 0) {
+      box.add(this.add.text(474, listTop + (ITEMS_LIST_ROWS - 1) * 34 + 4, `▼${hiddenBelow}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
+    }
+  }
+
+  /** Target screen for a usable item: one row per party member. */
+  private renderItemUse(box: Phaser.GameObjects.Container, id: string) {
+    const run = getRun();
+    const item = ITEMS[id]!;
+    box.add(this.add.text(46, 74, '‹ ITEMS', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2 })));
+    box.add(this.add.text(150, 78, `${item.name}  x${run.inventory[id] ?? 0}`,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a58cff', strokeThickness: 2 })));
+    box.add(this.add.text(456, 78, 'Z: use  ·  X: back', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
+
+    this.addIcon(box, id, 46, 98, 26);
+    box.add(this.add.text(80, 100, item.description ?? '',
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 360 } })));
+    box.add(this.add.text(46, 132, 'USE ON', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+
+    run.party.forEach((member, i) => {
+      const y = 150 + i * 40;
+      const v = this.itemVital(id, member);
+      const rect = this.add.rectangle(42, y, 414, 34, 0x141a30, 0.96)
+        .setOrigin(0, 0).setStrokeStyle(1, COLORS.wall).setDepth(2)
+        .setInteractive({ useHandCursor: true });
+      box.add(rect);
+      const label = this.add.text(56, y + 5, member.name,
+        sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(3);
+      box.add(this.add.text(56, y + 18, v.text,
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: v.color, strokeThickness: 2 })).setDepth(3));
+      box.add(this.add.text(452, y + 11, v.can ? 'USE ›' : v.note,
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: v.can ? '#6cf0c2' : '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(3));
+      const selectable: Selectable = { rect, label, itemId: id, action: () => this.useItemOnMember(id, member.id, v.can) };
+      this.selectables.push(selectable);
+      rect.on('pointerdown', () => {
+        sfx.play('confirm');
+        this.selected = this.selectables.indexOf(selectable);
+        this.focus = 'content';
+        this.updateSelection();
+        selectable.action();
+      });
+      box.add(label);
+    });
+  }
+
+  /** Which vital a usable item touches for a member, and whether it applies now. */
+  private itemVital(id: string, member: Combatant): { text: string; color: string; can: boolean; note: string } {
+    const s = member.stats;
+    const kind = ITEMS[id]?.kind;
+    if (kind === 'revive') {
+      return { text: `HP ${s.hp}/${s.maxHp}`, color: s.hp <= 0 ? '#7df0a0' : '#8a93b8', can: s.hp <= 0, note: 'OK' };
+    }
+    if (kind === 'mp') {
+      return { text: `MP ${s.mp}/${s.maxMp}`, color: '#8a6cf0', can: s.hp > 0 && s.mp < s.maxMp, note: s.hp <= 0 ? 'KO' : 'full' };
+    }
+    return { text: `HP ${s.hp}/${s.maxHp}`, color: '#6cf0c2', can: s.hp > 0 && s.hp < s.maxHp, note: s.hp <= 0 ? 'KO' : 'full' };
+  }
+
+  /** Z on a list row: usable items drill into the target screen; others explain. */
+  private openItem(id: string) {
+    const item = ITEMS[id];
+    if (!item) return;
+    if (!fieldUsable(id)) {
+      this.menuNotice = item.kind === 'sell'
+        ? `Sell ${item.name} at the Sanctuary merchant (${item.sellPrice ?? 0}g).`
+        : `${item.name} — use it in battle to cure ailments.`;
+      this.selectionAnchor = this.centerOf(this.selectables[this.selected]);
+      this.renderContent();
+      return;
+    }
+    this.itemSelId = id;
+    this.selectionAnchor = undefined;
+    this.renderContent();
+    const target = this.contentSelectables()[0];
+    if (target) {
+      this.selected = this.selectables.indexOf(target);
+      this.focus = 'content';
+      this.updateSelection();
+    }
+  }
+
+  private useItemOnMember(id: string, memberId: string, can: boolean) {
+    const run = getRun();
+    const member = run.party.find((m) => m.id === memberId);
+    const item = ITEMS[id];
+    if (!member || !item) return;
+    if (!can || !useItemOn(id, memberId)) {
+      this.menuNotice = `${member.name} can't use ${item.name} right now.`;
+    } else {
+      this.menuNotice = item.kind === 'revive'
+        ? `${member.name} returns to the fight.`
+        : `${member.name} uses ${item.name}.`;
+    }
+    // Out of that item now -> drop back to the list.
+    if ((run.inventory[id] ?? 0) <= 0) this.itemSelId = undefined;
+    this.selectionAnchor = this.centerOf(this.selectables[this.selected]);
+    this.renderContent();
+  }
+
+  /** Vertical nav for the items list: walks the full id list, scrolling the
+   * window when the next row is hidden (mirrors the equip item list). Returns
+   * false in the target screen so spatial nav handles the member rows. */
+  private moveItemsVertical(dir: number): boolean {
+    if (this.itemSelId) return false;
+    const cur = this.selectables[this.selected];
+    if (cur?.itemId == null) return false;
+    const idx = this.itemRowIds.indexOf(cur.itemId);
+    if (idx < 0) return false;
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= this.itemRowIds.length) return true; // clamp at ends
+    const nextId = this.itemRowIds[nextIdx];
+    if (nextIdx < this.itemsScroll || nextIdx >= this.itemsScroll + ITEMS_LIST_ROWS) {
+      this.itemsScroll = dir > 0 ? nextIdx - ITEMS_LIST_ROWS + 1 : nextIdx;
+      this.renderContent();
+    }
+    const target = this.contentSelectables().find((s) => s.itemId === nextId);
+    if (target) this.selectSelectable(target, false);
+    return true;
   }
 
   private renderMagic(box: Phaser.GameObjects.Container) {
@@ -917,6 +1052,8 @@ export class GameMenuScene extends Phaser.Scene {
       this.equipColumn = 'slot';
       this.equipScroll = 0;
     }
+    this.itemSelId = undefined;
+    if (tab === 'items') this.itemsScroll = 0;
     if (tab !== 'system') this.resetArmed = false;
     if (tab === 'magic') this.ensureMagicMember();
     this.renderContent();
@@ -942,6 +1079,7 @@ export class GameMenuScene extends Phaser.Scene {
       return;
     }
     if (this.tab === 'equip' && this.moveEquipVertical(dir)) return;
+    if (this.tab === 'items' && this.moveItemsVertical(dir)) return;
     this.moveSpatial(0, dir);
   }
 
@@ -1088,6 +1226,21 @@ export class GameMenuScene extends Phaser.Scene {
       // Equip drills down member -> slot -> item; cancel steps back up one level.
       if (this.tab === 'equip' && this.selectables[this.selected]?.equipKind === 'item') {
         this.focusEquipColumn('slot');
+        return;
+      }
+      // Items drills list -> target screen; cancel steps back to the list, on
+      // the row we came from.
+      if (this.tab === 'items' && this.itemSelId) {
+        const backId = this.itemSelId;
+        this.itemSelId = undefined;
+        this.selectionAnchor = undefined;
+        this.renderContent();
+        const target = this.contentSelectables().find((s) => s.itemId === backId) ?? this.contentSelectables()[0];
+        if (target) {
+          this.selected = this.selectables.indexOf(target);
+          this.focus = 'content';
+          this.updateSelection();
+        }
         return;
       }
       this.focus = 'command';
@@ -1259,3 +1412,28 @@ const ELEMENT_COLOR: Record<string, string> = {
 
 /** Rows visible at once in the equip item list; more scrolls (▲/▼ markers). */
 const EQUIP_LIST_ROWS = 5;
+
+/** Rows visible at once in the items list; more scrolls (▲/▼ markers). */
+const ITEMS_LIST_ROWS = 6;
+
+/** Items with a party-target action available outside battle. Cure is
+ * battle-only and sell-junk has no field use, so both stay list-only. */
+const FIELD_USABLE_KINDS = new Set(['heal', 'mp', 'revive']);
+function fieldUsable(id: string): boolean {
+  const kind = ITEMS[id]?.kind;
+  return kind != null && FIELD_USABLE_KINDS.has(kind);
+}
+
+/** Compact right-aligned tag summarizing an item on a list row. */
+function itemTag(id: string): string {
+  const item = ITEMS[id];
+  if (!item) return '';
+  switch (item.kind) {
+    case 'heal': return `Heal ${item.power}`;
+    case 'mp': return `+${item.power} MP`;
+    case 'revive': return 'Revive';
+    case 'cure': return 'Battle only';
+    case 'sell': return `Sells ${item.sellPrice ?? 0}g`;
+    default: return '';
+  }
+}
