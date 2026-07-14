@@ -187,21 +187,22 @@ const BATTLE_CRYSTAL: TrackDef = {
   bassVol: 0.18,
 };
 
-// --- Sanctuary: warm C major hub theme. Triangle waves, slow pulse.
-//     C - Am - F - G: rising arpeggio melody over held bass notes.
+// --- Sanctuary: warm hub theme, F - Dm - Bb - C — a different loop from the
+//     original C - Am - F - G both in key and bass timbre (rounder sine
+//     instead of double-triangle) while keeping the same gentle register.
 const SANCTUARY: TrackDef = {
-  bpm: 66,
+  bpm: 63,
   melody: flat([
-    q(76), q(79), q(81), q(79), // C:  E5 G5 A5 G5
-    q(69), q(72), q(76), q(72), // Am: A4 C5 E5 C5
-    q(65), q(69), q(72), q(69), // F:  F4 A4 C5 A4
-    q(67), q(71), q(74), q(71), // G:  G4 B4 D5 B4
+    q(72), q(76), q(77), q(76), // F:  C5 E5 F5 E5
+    q(69), q(72), q(77), q(72), // Dm: A4 C5 F5 C5
+    q(70), q(74), q(77), q(74), // Bb: Bb4 D5 F5 D5
+    q(72), q(76), q(79), q(76), // C:  C5 E5 G5 E5
   ]),
-  bass: flat([bar(48), bar(45), bar(41), bar(43)]), // C3 A2 F2 G2
+  bass: flat([bar(41), bar(38), bar(46), bar(48)]), // F2 D2 Bb2 C3
   melodyWave: 'triangle',
-  bassWave: 'triangle',
-  melodyVol: 0.14,
-  bassVol: 0.18,
+  bassWave: 'sine',
+  melodyVol: 0.13,
+  bassVol: 0.19,
 };
 
 // --- Title: a distinct call-and-response theme so the title screen has its

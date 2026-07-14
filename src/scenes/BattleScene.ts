@@ -315,30 +315,47 @@ export class BattleScene extends Phaser.Scene {
   // --- Turn Order & Intents ---------------------------------------------------
 
   /** Vertical CTB queue on the right edge: active actor + upcoming turns,
-   * live-updated after every single action (not once per round). */
+   * live-updated after every single action (not once per round). Shows each
+   * combatant's own portrait/battle sprite rather than a name-letter chip. */
   private renderQueue() {
     for (const chip of this.turnChips) chip.destroy();
     this.turnChips = [];
     const upcoming = [this.activeActor, ...this.battle.previewQueue(7)];
-    const x = GAME.width - 18;
-    const y0 = 10;
-    const slotH = 17;
-    const label = this.add.text(x, y0 - 8, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5, 0).setDepth(30);
+    const x = GAME.width - 26;
+    const ACTIVE_SIZE = 42;
+    const REST_SIZE = 18;
+    const label = this.add.text(x, 4, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5, 0).setDepth(30);
     this.turnChips.push(label);
+    let cursorY = 16;
     upcoming.forEach((c, i) => {
-      const y = y0 + 8 + i * slotH;
       const isParty = c.side === 'party';
       const active = i === 0;
-      // Active slot gets a solid gold fill — unambiguous regardless of the
-      // acting combatant's own color (e.g. Mira's is also gold-ish).
-      const bg = this.add.rectangle(x, y, active ? 24 : 22, active ? 16 : 15, active ? 0xf0d36c : (isParty ? 0x11241c : 0x241114), active ? 1 : 0.7)
+      const size = active ? ACTIVE_SIZE : REST_SIZE;
+      const y = cursorY + size / 2;
+      cursorY = y + size / 2 + (active ? 5 : 2);
+      // Active slot is much larger, with a solid gold frame — the whole
+      // point is that whoever's turn it is jumps out at a glance.
+      const bg = this.add.rectangle(x, y, size, size, active ? 0xf0d36c : (isParty ? 0x11241c : 0x241114), active ? 1 : 0.75)
         .setDepth(30)
         .setStrokeStyle(active ? 0 : 1, c.broken ? 0x5a6080 : isParty ? c.color : 0xaa3344, 0.95);
-      const letter = this.add.text(x, y, c.broken ? '✖' : c.name[0], sharpText({
-        fontFamily: FONT, fontSize: active ? '10px' : '8px', strokeThickness: 2,
-        color: active ? '#141a30' : c.broken ? '#5a6080' : isParty ? '#' + c.color.toString(16).padStart(6, '0') : '#ff8a8a',
-      })).setOrigin(0.5).setDepth(31);
-      this.turnChips.push(bg, letter);
+      this.turnChips.push(bg);
+      const portraitKey = isParty ? `portrait_${c.id}` : c.spriteKey;
+      if (c.broken) {
+        const mark = this.add.text(x, y, '✖', sharpText({
+          fontFamily: FONT, fontSize: active ? '20px' : '10px', strokeThickness: 2, color: '#5a6080',
+        })).setOrigin(0.5).setDepth(31);
+        this.turnChips.push(mark);
+      } else if (this.textures.exists(portraitKey)) {
+        const inset = active ? 6 : 3;
+        const img = this.add.image(x, y, portraitKey).setDisplaySize(size - inset, size - inset).setDepth(31);
+        this.turnChips.push(img);
+      } else {
+        const letter = this.add.text(x, y, c.name[0], sharpText({
+          fontFamily: FONT, fontSize: active ? '18px' : '8px', strokeThickness: 2,
+          color: active ? '#141a30' : isParty ? '#' + c.color.toString(16).padStart(6, '0') : '#ff8a8a',
+        })).setOrigin(0.5).setDepth(31);
+        this.turnChips.push(letter);
+      }
     });
   }
 
@@ -1291,7 +1308,16 @@ export class BattleScene extends Phaser.Scene {
       const ex = this.enemyExtras.get(e.id);
       if (!ex) continue;
       const dead = hp <= 0;
-      ex.weakBadges.forEach((b) => b.setVisible(!dead));
+      // Badge slots were built from the weakness list at battle start, but a
+      // boss can mutate its own weakness mid-fight (Forest Shade's Umbral
+      // Flicker) — re-read it live each refresh instead of trusting the
+      // original slot count/letters.
+      const weakness = e.weakness ?? [];
+      ex.weakBadges.forEach((b, i) => {
+        const el = weakness[i];
+        b.setVisible(!dead && el != null);
+        if (el != null) b.setText(ELEMENT_LETTER[el] ?? '?').setColor(ELEMENT_COLOR[el] ?? '#dfe4f5');
+      });
       for (const a of AILMENT_ORDER) {
         ex.ailmentBadges[a].setVisible(!dead && (e.ailments?.[a] ?? 0) > 0);
       }

@@ -139,6 +139,8 @@ export class Battle {
 
     actor.defending = false;
     this.tickOwnStatuses(actor, events);
+    if (actor.isBoss && actor.phaseTriggered) this.bossTick(actor);
+    if (actor.enrageOnOwnTurn && actor.stats.hp > 0) this.enrageTick(actor);
 
     if (this.checkEnd(events) || actor.stats.hp <= 0) {
       return { actor, events, needsCommand: false };
@@ -366,8 +368,17 @@ export class Battle {
       actorId: actor.id, targetId: target.id, amount: hit.dmg, element, crit: hit.crit, weak: hit.weak,
     });
     // Venomous bites, chilling blades: attacks can carry an ailment
-    // (enemy nature or a party weapon like the Tidecleaver).
-    if (actor.attackInflict) this.applyAilment(target, actor.attackInflict, events);
+    // (enemy nature or a party weapon like the Tidecleaver). Ashbrand's
+    // "Scorched Ground": a defending target gets no benefit of the doubt —
+    // the burn always catches.
+    if (actor.attackInflict) {
+      const sureBurn = actor.id === 'ashbrand' && actor.phaseTriggered === true && target.defending === true;
+      this.applyAilment(target, actor.attackInflict, events, sureBurn);
+    }
+    // Tide Warden's "Undertow": drags the target back in the CTB queue.
+    if (actor.attackSpeedDebuff) {
+      this.applySpeedStatus(target, 'slow', actor.attackSpeedDebuff.mult, actor.attackSpeedDebuff.turns, events);
+    }
     // Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang.
     const lifesteal = (actor.side === 'party' ? this.bn.lifesteal : 0) + (actor.gear?.lifesteal ?? 0);
     if (lifesteal > 0) {
@@ -386,7 +397,20 @@ export class Battle {
         this.maybeKo(actor, events);
       }
     }
+    this.applyReflect(actor, target, hit, events);
     this.maybeKo(target, events);
+  }
+
+  /** Prism Sprite's reflect: a non-weakness hit bounces part of its damage
+   * back at the attacker. Hitting the actual weakness bypasses it entirely,
+   * rewarding correct play. */
+  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[]): void {
+    if (!target.reflectFrac || hit.weak || actor.stats.hp <= 0) return;
+    const reflect = Math.round(hit.dmg * target.reflectFrac);
+    if (reflect <= 0) return;
+    this.applyDamage(actor, reflect);
+    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect });
+    this.maybeKo(actor, events);
   }
 
   private castDamage(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
@@ -405,6 +429,7 @@ export class Battle {
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
+      this.applyReflect(actor, target, hit, events);
       this.maybeKo(target, events);
       return;
     }
@@ -428,6 +453,7 @@ export class Battle {
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
+      this.applyReflect(actor, target, hit, events);
       this.maybeKo(target, events);
     }
   }
@@ -451,6 +477,28 @@ export class Battle {
 
   // --- Boss Phase Transitions -----------------------------------------------
 
+  /** Post-phase-2 per-own-turn boss specialness: currently just Forest
+   * Shade's alternating weakness. Silent (no log spam) — visible instead
+   * via the live weak-badge. */
+  private bossTick(actor: Combatant): void {
+    switch (actor.id) {
+      case 'forest_shade': {
+        actor.weakness = actor.weakness?.[0] === 'fire' ? ['holy'] : ['fire'];
+        break;
+      }
+    }
+  }
+
+  /** Generic escalating self-haste for any enemy with enrageOnOwnTurn set
+   * (Prism Sovereign's Overcharge, Ashen's Ember Hound) — gets faster every
+   * one of its own turns, capped so it can't spiral unboundedly. */
+  private enrageTick(actor: Combatant): void {
+    const inc = actor.enrageOnOwnTurn ?? 0;
+    if (inc <= 0) return;
+    const cur = actor.speedStatuses?.haste?.mult ?? 1;
+    actor.speedStatuses = { ...actor.speedStatuses, haste: { mult: Math.min(2.5, cur + inc), turns: 999 } };
+  }
+
   private executeBossPhase(boss: Combatant): BattleEvent[] {
     const events: BattleEvent[] = [];
 
@@ -466,6 +514,10 @@ export class Battle {
         }
         boss.stats.int = Math.round(boss.stats.int * 1.3);
         events.push({ kind: 'info', text: 'The Shade\'s power surges — it grows more dangerous!' });
+        // Umbral Flicker: narrows to one weakness at a time, alternating
+        // every one of its own turns from here on (see bossTick()).
+        boss.weakness = ['fire'];
+        events.push({ kind: 'info', text: 'The Shade splits its essence — its weakness now flickers between fire and holy light.' });
         break;
       }
       case 'tide_warden': {
@@ -480,6 +532,10 @@ export class Battle {
         const heal = Math.round(boss.stats.maxHp * 0.12);
         boss.stats.hp = Math.min(boss.stats.maxHp, boss.stats.hp + heal);
         events.push({ kind: 'info', text: `The Warden draws the tide back into itself — +${heal} HP!` });
+        // Undertow: every strike from here on drags the target back in the
+        // turn queue (see strike()'s attackSpeedDebuff hook).
+        boss.attackSpeedDebuff = { mult: 0.55, turns: 3 };
+        events.push({ kind: 'info', text: 'The undertow answers the Warden\'s call — its strikes now drag victims under.' });
         break;
       }
       case 'ashbrand': {
@@ -494,6 +550,9 @@ export class Battle {
         boss.stats.str = Math.round(boss.stats.str * 1.25);
         boss.stats.int = Math.round(boss.stats.int * 1.25);
         events.push({ kind: 'info', text: 'Ashbrand burns with primal fury — all power amplified!' });
+        // Scorched Ground: from here on it hunts whoever is bracing and
+        // burns them for certain (see enemyAi()'s targeting + strike()).
+        events.push({ kind: 'info', text: 'Ashbrand\'s flames now hunt stillness — anyone who braces will burn for certain.' });
         break;
       }
       case 'prism_sovereign': {
@@ -508,6 +567,11 @@ export class Battle {
         const heal = Math.round(boss.stats.maxHp * 0.12);
         boss.stats.hp = Math.min(boss.stats.maxHp, boss.stats.hp + heal);
         events.push({ kind: 'info', text: `The crystal knits itself back together — +${heal} HP!` });
+        // Overcharge: gets faster every one of its own turns from here on
+        // (see enrageTick()), a compounding enrage for the final boss.
+        boss.speedStatuses = { ...boss.speedStatuses, haste: { mult: 1.15, turns: 999 } };
+        boss.enrageOnOwnTurn = 0.15;
+        events.push({ kind: 'info', text: 'The crystal overcharges — the Sovereign begins to move faster with every passing moment.' });
         break;
       }
       default:
@@ -587,6 +651,18 @@ export class Battle {
     }
   }
 
+  /** Haste/Slow application — mirrors applyAilment() for the CTB speed
+   * stack (see effectiveSpeed()). Overwrites any existing status from the
+   * same source rather than stacking. */
+  private applySpeedStatus(target: Combatant, source: SpeedSource, mult: number, turns: number, events: BattleEvent[]): void {
+    if (target.stats.hp <= 0) return;
+    target.speedStatuses = target.speedStatuses ?? {};
+    target.speedStatuses[source] = { mult, turns };
+    if (source === 'slow') {
+      events.push({ kind: 'info', text: `${target.name} is dragged under — its next turns slip away!`, targetId: target.id });
+    }
+  }
+
   /** Battle-scoped statuses do not follow the party out of the fight. */
   private clearPartyAilments(): void {
     for (const c of this.party) c.ailments = undefined;
@@ -614,6 +690,13 @@ export class Battle {
     if (e.isBoss && !e.phaseTriggered && e.stats.hp <= e.stats.maxHp / 2) {
       e.phaseTriggered = true;
       return { type: 'phase' };
+    }
+
+    // Ashbrand's Scorched Ground: past phase 2 it hunts anyone bracing —
+    // strike() then guarantees the burn against them (no hiding in the fire).
+    if (e.id === 'ashbrand' && e.phaseTriggered) {
+      const defender = targets.find((t) => t.defending);
+      if (defender) return { type: 'attack', targetId: defender.id };
     }
 
     // Prefer the weakest living hero, but not relentlessly — pure focus fire

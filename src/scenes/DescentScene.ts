@@ -217,6 +217,27 @@ export class DescentScene extends Phaser.Scene {
           this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
             .setOrigin(0, 0).setTint(0x8a6cf0).setAlpha(0.85).setDepth(2);
         }
+        // Field mechanic tiles — always tinted so the player can see and
+        // anticipate them, never an invisible trap.
+        if (ch === 'V') {
+          this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0x2a6a2a).setAlpha(0.5).setDepth(1);
+        }
+        if (ch === '~') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0x2a7ac0).setAlpha(0.45).setDepth(1);
+          this.tweens.add({ targets: img, alpha: { from: 0.3, to: 0.6 }, duration: 700, yoyo: true, repeat: -1 });
+        }
+        if (ch === '^') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0xff5522).setAlpha(0.55).setDepth(1);
+          this.tweens.add({ targets: img, alpha: { from: 0.35, to: 0.75 }, duration: 500, yoyo: true, repeat: -1 });
+        }
+        if (ch === '*') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0xc78aff).setAlpha(0.8).setDepth(2);
+          this.tweens.add({ targets: img, alpha: { from: 0.5, to: 0.95 }, duration: 550, yoyo: true, repeat: -1 });
+        }
       }
     }
   }
@@ -371,6 +392,16 @@ export class DescentScene extends Phaser.Scene {
     this.px = nx;
     this.py = ny;
     this.facing = this.facingFromDir(d.x, d.y);
+    // Sunken's Current: standing on a '~' tile sweeps you further in the
+    // same direction until you reach dry floor or a wall.
+    while (this.map[this.py]?.[this.px] === '~') {
+      const sx = this.px + d.x;
+      const sy = this.py + d.y;
+      const sch = this.map[sy]?.[sx];
+      if (!sch || sch === '#') break;
+      this.px = sx;
+      this.py = sy;
+    }
     // walkPlayerTo is purely cosmetic (STEP_MS ≈ moveLockedUntil apart, so a
     // held direction reliably kills the previous step's tween just before it
     // completes). Game logic used to hang off that tween's onComplete, which
@@ -411,6 +442,25 @@ export class DescentScene extends Phaser.Scene {
     }
     if (ch === 'S' && !hasFlag(`story_${depth}_${tileKey}`)) {
       this.triggerStory(tileKey);
+      return;
+    }
+    if (ch === '^') {
+      for (const c of getRun().party) c.stats.hp = Math.max(1, c.stats.hp - 4);
+      this.floatText('The embers scorch you!', '#ff8a5a', 0);
+      return;
+    }
+    if (ch === '*') {
+      const dest = getArea(depth).teleports?.[tileKey];
+      if (dest) {
+        const [dx, dy] = dest.split(',').map(Number);
+        this.px = dx;
+        this.py = dy;
+        this.tweens.killTweensOf(this.player);
+        this.tweens.killTweensOf(this.playerShadow);
+        this.player.setPosition(this.tileCenter(this.px), this.tileCenter(this.py));
+        this.playerShadow.setPosition(this.tileCenter(this.px), this.tileCenter(this.py) + 8);
+        this.floatText('The prism light bends around you...', '#c78aff', 0);
+      }
       return;
     }
 
@@ -480,12 +530,14 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private maybeTriggerRandomEncounter(tile: string) {
-    if (tile !== '.' && tile !== 'P') return;
+    // Forest's Thicket: dense undergrowth ambushes far more readily than
+    // open floor, but still respects the same step-count floor/ceiling.
+    if (tile !== '.' && tile !== 'P' && tile !== 'V') return;
     this.randomBattleSteps++;
     if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
 
     const depth = getRun().depth;
-    const chance = Math.min(0.16, 0.08 + depth * 0.008);
+    const chance = tile === 'V' ? Math.min(0.5, (0.08 + depth * 0.008) * 3) : Math.min(0.16, 0.08 + depth * 0.008);
     const forced = this.randomBattleSteps >= RANDOM_BATTLE_MAX_STEPS;
     if (!forced && Math.random() >= chance) return;
 

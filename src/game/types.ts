@@ -101,8 +101,17 @@ export interface Combatant {
   ailments?: Partial<Record<Ailment, number>>;
   // Basic attacks may inflict an ailment (enemy nature or party weapon).
   attackInflict?: Inflict;
+  // Basic attacks may also drag the target's turn-order speed down (e.g.
+  // Tide Warden's Undertow, Sunken's Tomb Crawler) — mirrors attackInflict.
+  attackSpeedDebuff?: { mult: number; turns: number };
   // Basic attacks strike as this element (party: from weapon). Default phys.
   attackElement?: Element;
+  // Enemy-only: escalates its own speedStatuses.haste by this much every one
+  // of its own turns (Prism Sovereign's Overcharge, Ashen's Ember Hound).
+  enrageOnOwnTurn?: number;
+  // Enemy-only: reflects this fraction of a non-weakness hit's damage back
+  // at the attacker (Crystal's Prism Sprite).
+  reflectFrac?: number;
   // Passive effects from equipped gear (party only).
   gear?: GearEffects;
   // Progression (party only):
