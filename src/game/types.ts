@@ -4,10 +4,11 @@
 export type Side = 'party' | 'enemy';
 export type Element = 'phys' | 'fire' | 'ice' | 'holy' | 'none';
 
-// Status ailments. All tick down at the end of each round:
-//   burn  - fire DoT (6% of max HP per round)
+// Status ailments. All tick down at the start of the afflicted combatant's
+// own next turn (CTB — see battle.ts):
+//   burn  - fire DoT (6% of max HP per tick)
 //   chill - initiative halved and -25% damage dealt
-//   venom - poison DoT (5% of max HP per round)
+//   venom - poison DoT (5% of max HP per tick)
 export type Ailment = 'burn' | 'chill' | 'venom';
 
 /** Chance-based ailment application, used by spells and enemy attacks. */
@@ -15,6 +16,14 @@ export interface Inflict {
   ailment: Ailment;
   chance: number; // 0..1
   rounds: number;
+}
+
+/** Haste/Slow-style turn-order modifiers (CTB queue). Mechanism only for now
+ * — nothing grants these yet; see battle.ts effectiveSpeed(). */
+export type SpeedSource = 'haste' | 'slow';
+export interface SpeedStatus {
+  mult: number; // multiplies effective speed
+  turns: number; // remaining turns of the bearer's own
 }
 
 /** Aggregated passive effects from equipped gear (party members). */
@@ -25,6 +34,7 @@ export interface GearEffects {
   guardChipBonus: number; // extra guard pips removed on weakness hits
   healBonus: number; // flat bonus to healing spells cast
   resist: Ailment[]; // ailments this member is immune to
+  speedMult?: number; // permanent turn-order speed multiplier (unused so far)
 }
 
 export interface Stats {
@@ -84,11 +94,10 @@ export interface Combatant {
   weakness?: Element[]; // elements that deal +50% and chip guard
   maxGuard?: number; // guard pips before breaking
   guard?: number; // current guard pips
-  broken?: boolean; // staggered: loses its actions, takes +50% damage
-  brokenRound?: number; // battle round the break happened; recovers end of next round
+  broken?: boolean; // staggered: loses its actions, takes +50% damage; recovers on its own next turn
   // Telegraphed intent for the coming round (enemies):
   intent?: Command;
-  // Status ailments: rounds remaining per ailment. Cleared out of battle.
+  // Status ailments: own-turns remaining per ailment. Cleared out of battle.
   ailments?: Partial<Record<Ailment, number>>;
   // Basic attacks may inflict an ailment (enemy nature or party weapon).
   attackInflict?: Inflict;
@@ -103,6 +112,9 @@ export interface Combatant {
   learnset?: Record<number, string[]>; // level -> spell ids learned
   // Runtime battle state:
   defending?: boolean;
+  // CTB turn queue (battle.ts): count-time readiness and Haste/Slow stack.
+  readiness?: number;
+  speedStatuses?: Partial<Record<SpeedSource, SpeedStatus>>;
 }
 
 export type Command =
@@ -141,4 +153,4 @@ export interface BattleEvent {
   ailment?: Ailment; // for 'ailment'/'dot' events: which status is involved
 }
 
-export type BattlePhase = 'input' | 'resolving' | 'won' | 'lost' | 'fled';
+export type BattlePhase = 'input' | 'won' | 'lost' | 'fled';

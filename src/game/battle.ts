@@ -1,14 +1,19 @@
-// Turn-based battle engine, the heart of the game. FF1-inspired rounds with
-// three twists that make decisions matter:
-//   - Enemy intents: enemies telegraph their next action during the input phase.
+// Turn-based battle engine, the heart of the game. A Final Fantasy X-style
+// Conditional Turn-Based (CTB) queue with three twists that make decisions matter:
+//   - Enemy intents: telegraphed the moment they're decided, cached on the
+//     combatant and shown to the player ahead of time.
 //   - Weakness & break: hitting a weakness chips guard pips; at zero the enemy
-//     is BROKEN — loses its action and takes +50% damage until it recovers.
+//     is BROKEN — loses its action and takes +50% damage until its own next
+//     turn, which it spends recovering instead of acting.
 //   - Boons: run-scoped blessings (boons.ts) hook into the damage formulas.
 //
-// Round flow:
-//   1. prepareRound(): enemies pick intents, initiative is rolled for everyone.
-//   2. Input phase: each living party member chooses an action.
-//   3. resolveRound(): all actors execute in initiative order.
+// Turn flow (no "rounds" — see the CTB Queue section below):
+//   1. start(): zero every combatant's readiness, telegraph all enemies.
+//   2. startTurn(): advance the queue to the next actor; tick their own
+//      ailments/Haste/Slow, MP regen, or broken-recovery — deciding whether
+//      they still need to act (needsCommand).
+//   3. executeTurn(actor, cmd): run exactly one actor's action; enemies
+//      re-telegraph their next plan immediately afterward.
 //
 // The engine is pure game logic with no Phaser dependency. It mutates Combatant
 // stats and returns BattleEvents for the scene to play with text and animation.
@@ -16,7 +21,7 @@
 import { boonTotals, type BoonTotals } from './boons';
 import { ITEMS, SPELLS } from './content';
 import { getRun } from './run';
-import type { Ailment, BattleEvent, BattlePhase, Combatant, Command, Element, Inflict, Spell } from './types';
+import type { Ailment, BattleEvent, BattlePhase, Combatant, Command, Element, Inflict, Spell, SpeedSource, SpeedStatus } from './types';
 
 function rnd(min: number, max: number): number {
   return Math.random() * (max - min) + min;
@@ -32,6 +37,41 @@ const CHILL_AGI_MULT = 0.55;
 const CHILL_DMG_MULT = 0.75;
 const BURN_FRAC = 0.06; // of max HP per tick, min 3
 const VENOM_FRAC = 0.05; // of max HP per tick, min 2
+
+// --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
+// Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
+// The next actor is whoever needs the fewest ticks to cross the threshold at
+// their effective speed; everyone's readiness advances by that many ticks,
+// and the winner rolls over (keeps overflow speed) rather than resetting to
+// zero. Deterministic — no RNG — so the queue can be previewed exactly.
+const READY_THRESHOLD = 1000;
+
+interface ReadinessEntry {
+  id: string;
+  readiness: number;
+  speed: number;
+}
+
+/** Advances every entry to the next ready actor and returns its id. Mutates
+ * `entries` in place (readiness advanced for all, rolled over for the
+ * winner) — callers decide whether that's real state or a preview clone. */
+function advanceQueue(entries: ReadinessEntry[]): string {
+  let bestIdx = 0;
+  let bestTicks = Infinity;
+  entries.forEach((e, i) => {
+    const remaining = READY_THRESHOLD - e.readiness;
+    const ticks = e.speed > 0 ? Math.max(0, Math.ceil(remaining / e.speed)) : Infinity;
+    // Ties resolve to the fastest, then to whoever came first (stable).
+    if (ticks < bestTicks || (ticks === bestTicks && e.speed > entries[bestIdx].speed)) {
+      bestTicks = ticks;
+      bestIdx = i;
+    }
+  });
+  const advance = bestTicks === Infinity ? 0 : bestTicks;
+  for (const e of entries) e.readiness += advance * e.speed;
+  entries[bestIdx].readiness -= READY_THRESHOLD;
+  return entries[bestIdx].id;
+}
 
 const AILMENT_APPLY_TEXT: Record<Ailment, (name: string) => string> = {
   burn: (n) => `${n} is set ablaze!`,
@@ -51,11 +91,8 @@ export class Battle {
   goldWon = 0;
   xpWon = 0;
 
-  private commands = new Map<string, Command>();
-  private speedRoll = new Map<string, number>();
   private bn: BoonTotals;
   private reviveUsed = false;
-  private round = 0;
 
   /** Shared inventory (item id -> count), mutated when items are used. */
   constructor(party: Combatant[], enemies: Combatant[], private inventory: Record<string, number>) {
@@ -77,119 +114,163 @@ export class Battle {
     return list.filter((c) => c.stats.hp > 0);
   }
 
-  // --- Input Phase ----------------------------------------------------------
-
-  /**
-   * Starts a round: enemies telegraph their intents (visible to the player)
-   * and initiative is rolled for everyone, so the turn order can be shown.
-   */
-  prepareRound(): void {
-    this.speedRoll.clear();
-    for (const c of this.all()) {
-      if (c.stats.hp <= 0) continue;
-      const agi = c.stats.agi * (c.ailments?.chill ? CHILL_AGI_MULT : 1);
-      this.speedRoll.set(c.id, agi + rnd(0, 3));
-    }
-    for (const e of this.living('enemy')) {
-      e.intent = e.broken ? undefined : this.enemyAi(e);
-    }
-  }
-
-  /** Living combatants in this round's initiative order, fastest first. */
-  roundOrder(): Combatant[] {
-    return this.all()
-      .filter((c) => c.stats.hp > 0)
-      .sort((a, b) => (this.speedRoll.get(b.id) ?? b.stats.agi) - (this.speedRoll.get(a.id) ?? a.stats.agi));
-  }
-
-  setCommand(id: string, cmd: Command): void {
-    this.commands.set(id, cmd);
-  }
-
-  clearCommands(): void {
-    this.commands.clear();
-  }
-
   /** Item validity and living target counts are handled in the scene. */
   itemCount(itemId: string): number {
     return this.inventory[itemId] ?? 0;
   }
 
-  // --- Resolution Phase -----------------------------------------------------
+  // --- CTB Queue --------------------------------------------------------------
+
+  /** Call once at battle start: zeroes the queue and telegraphs every enemy. */
+  start(): void {
+    for (const c of this.all()) c.readiness = 0;
+    for (const e of this.living('enemy')) this.refreshIntent(e);
+  }
 
   /**
-   * Executes the round using party commands and telegraphed enemy intents.
-   * Returns the full event log for the round.
+   * Advances the queue to the next actor and runs their "start of turn"
+   * pipeline (ailment/DoT tick, MP regen, broken recovery). Returns the
+   * events from that pipeline plus whether the actor still needs a command
+   * this turn (false if they just recovered from broken, or died to DoT).
    */
-  resolveRound(): BattleEvent[] {
-    this.phase = 'resolving';
-    this.round++;
+  startTurn(): { actor: Combatant; events: BattleEvent[]; needsCommand: boolean } {
     const events: BattleEvent[] = [];
+    const actor = this.byId(this.nextReadyId())!;
 
-    // Reset defending from the previous round before locking new actions.
-    for (const c of this.all()) c.defending = false;
+    actor.defending = false;
+    this.tickOwnStatuses(actor, events);
 
-    for (const e of this.living('enemy')) {
-      if (!e.broken) this.commands.set(e.id, e.intent ?? this.enemyAi(e));
+    if (this.checkEnd(events) || actor.stats.hp <= 0) {
+      return { actor, events, needsCommand: false };
     }
 
-    // Fleeing resolves before everything else.
-    const fleeing = [...this.commands.entries()].find(
-      ([id, cmd]) => cmd.type === 'flee' && this.byId(id)?.side === 'party',
-    );
-    if (fleeing) {
-      const partyAgi = avg(this.living('party').map((c) => c.stats.agi));
-      const enemyAgi = avg(this.living('enemy').map((c) => c.stats.agi));
-      const chance = Math.min(0.9, Math.max(0.25, 0.5 + (partyAgi - enemyAgi) * 0.05));
-      if (Math.random() < chance) {
-        events.push({ kind: 'flee-ok', text: 'The party fled!' });
-        this.phase = 'fled';
-        this.clearPartyAilments();
-        this.commands.clear();
-        return events;
-      }
-      events.push({ kind: 'flee-fail', text: 'Could not flee!' });
+    if (actor.side === 'enemy' && actor.broken) {
+      actor.broken = false;
+      actor.guard = actor.maxGuard ?? 0;
+      events.push({ kind: 'recover', text: `${actor.name} steadies itself — guard restored.`, actorId: actor.id });
+      this.refreshIntent(actor);
+      return { actor, events, needsCommand: false };
     }
 
-    // Turn order: initiative rolled in prepareRound, highest first.
-    const order = this.roundOrder().filter((c) => this.commands.has(c.id) || c.broken);
-
-    for (const actor of order) {
-      if (actor.stats.hp <= 0) continue; // may have fallen earlier in the round
-      if (actor.side === 'enemy' && actor.broken) {
-        events.push({ kind: 'info', text: `${actor.name} is staggered and cannot act!`, actorId: actor.id });
-        continue;
-      }
-      const cmd = this.commands.get(actor.id);
-      if (!cmd) continue;
-      this.execute(actor, cmd, events);
-      if (this.checkEnd(events)) break;
+    if (actor.side === 'party') {
+      const regen = this.bn.mpRegen + (actor.gear?.mpRegen ?? 0);
+      if (regen > 0) actor.stats.mp = Math.min(actor.stats.maxMp, actor.stats.mp + regen);
     }
 
-    this.commands.clear();
+    return { actor, events, needsCommand: true };
+  }
 
-    if (this.phase === 'resolving') {
-      // Burn/venom tick and durations count down — this can decide the fight.
-      this.tickAilments(events);
-      if (!this.checkEnd(events)) {
-        // Break lasts through the round after it happened, then guard restores.
-        for (const e of this.living('enemy')) {
-          if (e.broken && (e.brokenRound ?? 0) < this.round) {
-            e.broken = false;
-            e.guard = e.maxGuard ?? 0;
-            events.push({ kind: 'recover', text: `${e.name} steadies itself — guard restored.`, actorId: e.id });
-          }
-        }
-        // MP regeneration: the Aether Flow boon and gear like the Aether Loop.
-        for (const c of this.living('party')) {
-          const regen = this.bn.mpRegen + (c.gear?.mpRegen ?? 0);
-          if (regen > 0) c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + regen);
-        }
-        this.phase = 'input';
-      }
+  /** Runs a single actor's chosen command and returns its events. */
+  executeTurn(actor: Combatant, cmd: Command): BattleEvent[] {
+    const events: BattleEvent[] = [];
+    if (cmd.type === 'flee') {
+      this.attemptFlee(events);
+      return events;
+    }
+    this.execute(actor, cmd, events);
+    if (!this.checkEnd(events) && actor.side === 'enemy' && actor.stats.hp > 0 && !actor.broken) {
+      this.refreshIntent(actor);
     }
     return events;
   }
+
+  /** Non-mutating: the next `steps` actors in queue order, for UI preview. */
+  previewQueue(steps: number): Combatant[] {
+    const entries: ReadinessEntry[] = this.living('party').concat(this.living('enemy')).map((c) => ({
+      id: c.id,
+      readiness: c.readiness ?? 0,
+      speed: this.effectiveSpeed(c),
+    }));
+    const order: Combatant[] = [];
+    for (let i = 0; i < steps && entries.length > 0; i++) {
+      const c = this.byId(advanceQueue(entries));
+      if (c) order.push(c);
+    }
+    return order;
+  }
+
+  /** Advances the real queue and returns the id of whoever is up next. */
+  private nextReadyId(): string {
+    const entries: ReadinessEntry[] = this.living('party').concat(this.living('enemy')).map((c) => ({
+      id: c.id,
+      readiness: c.readiness ?? 0,
+      speed: this.effectiveSpeed(c),
+    }));
+    const id = advanceQueue(entries);
+    for (const e of entries) {
+      const c = this.byId(e.id);
+      if (c) c.readiness = e.readiness;
+    }
+    return id;
+  }
+
+  /** agi × chill × Haste/Slow stack — the one place turn speed is computed. */
+  private effectiveSpeed(c: Combatant): number {
+    let mult = c.ailments?.chill ? CHILL_AGI_MULT : 1;
+    if (c.speedStatuses) {
+      for (const status of Object.values(c.speedStatuses)) {
+        if (status) mult *= status.mult;
+      }
+    }
+    return Math.max(1, c.stats.agi * mult);
+  }
+
+  private refreshIntent(e: Combatant): void {
+    e.intent = e.broken ? undefined : this.enemyAi(e);
+  }
+
+  /** Same flee formula as before, resolved the instant it's chosen. */
+  private attemptFlee(events: BattleEvent[]): void {
+    const partyAgi = avg(this.living('party').map((c) => this.effectiveSpeed(c)));
+    const enemyAgi = avg(this.living('enemy').map((c) => this.effectiveSpeed(c)));
+    const chance = Math.min(0.9, Math.max(0.25, 0.5 + (partyAgi - enemyAgi) * 0.05));
+    if (Math.random() < chance) {
+      events.push({ kind: 'flee-ok', text: 'The party fled!' });
+      this.phase = 'fled';
+      this.clearPartyAilments();
+      return;
+    }
+    events.push({ kind: 'flee-fail', text: 'Could not flee!' });
+  }
+
+  /** Ailments and Haste/Slow tick down at the start of the bearer's own
+   * turn — CTB has no global "round end" to synchronize them to. */
+  private tickOwnStatuses(actor: Combatant, events: BattleEvent[]): void {
+    if (actor.stats.hp > 0 && actor.ailments) {
+      for (const [ailment, turns] of Object.entries(actor.ailments) as [Ailment, number][]) {
+        if (actor.stats.hp <= 0) break;
+        const dotMult = actor.side === 'enemy' ? this.bn.dotMult : 1;
+        if (ailment === 'burn' || ailment === 'venom') {
+          const frac = ailment === 'burn' ? BURN_FRAC : VENOM_FRAC;
+          const min = ailment === 'burn' ? 3 : 2;
+          const dmg = Math.round(Math.max(min, actor.stats.maxHp * frac) * dotMult);
+          this.applyDamage(actor, dmg);
+          const text = ailment === 'burn'
+            ? `${actor.name} burns for ${dmg}.`
+            : `Venom courses through ${actor.name} — ${dmg} damage.`;
+          events.push({ kind: 'dot', text, targetId: actor.id, amount: dmg, ailment });
+          this.maybeKo(actor, events);
+        }
+        if (turns - 1 <= 0) {
+          delete actor.ailments[ailment];
+          if (actor.stats.hp > 0) {
+            events.push({ kind: 'info', text: AILMENT_EXPIRE_TEXT[ailment](actor.name), targetId: actor.id });
+          }
+        } else {
+          actor.ailments[ailment] = turns - 1;
+        }
+      }
+    }
+    if (actor.speedStatuses) {
+      for (const [source, status] of Object.entries(actor.speedStatuses) as [SpeedSource, SpeedStatus][]) {
+        if (!status) continue;
+        if (status.turns - 1 <= 0) delete actor.speedStatuses[source];
+        else actor.speedStatuses[source] = { ...status, turns: status.turns - 1 };
+      }
+    }
+  }
+
+  // --- Resolution ------------------------------------------------------------
 
   private execute(actor: Combatant, cmd: Command, events: BattleEvent[]): void {
     switch (cmd.type) {
@@ -205,8 +286,6 @@ export class Battle {
         events.push({ kind: 'defend', text, actorId: actor.id });
         return;
       }
-      case 'flee':
-        return; // handled in resolveRound for party; enemies do not flee
       case 'attack': {
         const target = this.aliveTargetOr(cmd.targetId, actor.side === 'party' ? 'enemy' : 'party');
         if (!target) return;
@@ -473,9 +552,7 @@ export class Battle {
     target.guard = Math.max(0, (target.guard ?? 0) - chip);
     if (target.guard === 0) {
       target.broken = true;
-      target.brokenRound = this.round;
       target.intent = undefined;
-      this.commands.delete(target.id); // loses its action this round
       events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id });
     }
   }
@@ -507,36 +584,6 @@ export class Battle {
     // Refreshing an active ailment is silent to keep the log readable.
     if (!had) {
       events.push({ kind: 'ailment', text: AILMENT_APPLY_TEXT[inf.ailment](target.name), targetId: target.id, ailment: inf.ailment });
-    }
-  }
-
-  /** End of round: burn/venom damage ticks, all ailment durations count down. */
-  private tickAilments(events: BattleEvent[]): void {
-    for (const c of this.all()) {
-      if (c.stats.hp <= 0 || !c.ailments) continue;
-      for (const [ailment, rounds] of Object.entries(c.ailments) as [Ailment, number][]) {
-        if (c.stats.hp <= 0) break; // an earlier tick already felled them
-        const dotMult = c.side === 'enemy' ? this.bn.dotMult : 1;
-        if (ailment === 'burn' || ailment === 'venom') {
-          const frac = ailment === 'burn' ? BURN_FRAC : VENOM_FRAC;
-          const min = ailment === 'burn' ? 3 : 2;
-          const dmg = Math.round(Math.max(min, c.stats.maxHp * frac) * dotMult);
-          this.applyDamage(c, dmg);
-          const text = ailment === 'burn'
-            ? `${c.name} burns for ${dmg}.`
-            : `Venom courses through ${c.name} — ${dmg} damage.`;
-          events.push({ kind: 'dot', text, targetId: c.id, amount: dmg, ailment });
-          this.maybeKo(c, events);
-        }
-        if (rounds - 1 <= 0) {
-          delete c.ailments[ailment];
-          if (c.stats.hp > 0) {
-            events.push({ kind: 'info', text: AILMENT_EXPIRE_TEXT[ailment](c.name), targetId: c.id });
-          }
-        } else {
-          c.ailments[ailment] = rounds - 1;
-        }
-      }
     }
   }
 

@@ -506,6 +506,7 @@ export function restoreParty(): void {
     c.stats.mp = c.stats.maxMp;
     c.defending = false;
     c.ailments = undefined;
+    c.speedStatuses = undefined;
   }
 }
 

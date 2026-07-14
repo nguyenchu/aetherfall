@@ -73,8 +73,7 @@ export class BattleScene extends Phaser.Scene {
   private isElite = false;
 
   // Input
-  private order: Combatant[] = []; // living party in command order
-  private pos = 0;
+  private activeActor!: Combatant; // whoever's turn it is in the CTB queue
   private menuIndex = 0;
   private options: MenuOption[] = [];
   private subIndex = 0;
@@ -111,8 +110,6 @@ export class BattleScene extends Phaser.Scene {
   private resetState() {
     this.ui = 'menu';
     this.isElite = false;
-    this.order = [];
-    this.pos = 0;
     this.menuIndex = 0;
     this.options = [];
     this.subIndex = 0;
@@ -161,7 +158,8 @@ export class BattleScene extends Phaser.Scene {
     this.syncDisplay();
     music.play('battle', getArea(run.depth).theme.id as AreaThemeId);
     this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
-    this.startCommandPhase();
+    this.battle.start();
+    this.advance();
   }
 
   // --- Layout ---------------------------------------------------------------
@@ -316,29 +314,32 @@ export class BattleScene extends Phaser.Scene {
 
   // --- Turn Order & Intents ---------------------------------------------------
 
-  /** Chips across the top showing this round's initiative order. */
-  private renderTurnStrip() {
+  /** Vertical CTB queue on the right edge: active actor + upcoming turns,
+   * live-updated after every single action (not once per round). */
+  private renderQueue() {
     for (const chip of this.turnChips) chip.destroy();
     this.turnChips = [];
-    const order = this.battle.roundOrder();
-    const chipW = 15;
-    const total = order.length * (chipW + 3) - 3;
-    let x = (GAME.width - total) / 2;
-    const y = 6;
-    const label = this.add.text(x - 6, y + 7, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0.5).setDepth(30);
+    const upcoming = [this.activeActor, ...this.battle.previewQueue(7)];
+    const x = GAME.width - 18;
+    const y0 = 10;
+    const slotH = 17;
+    const label = this.add.text(x, y0 - 8, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5, 0).setDepth(30);
     this.turnChips.push(label);
-    for (const c of order) {
+    upcoming.forEach((c, i) => {
+      const y = y0 + 8 + i * slotH;
       const isParty = c.side === 'party';
-      const bg = this.add.rectangle(x, y, chipW, 14, isParty ? 0x11241c : 0x241114, 0.92)
-        .setOrigin(0, 0).setDepth(30)
-        .setStrokeStyle(1, c.broken ? 0x5a6080 : isParty ? c.color : 0xaa3344, 0.95);
-      const letter = this.add.text(x + chipW / 2, y + 7, c.broken ? '✖' : c.name[0], sharpText({
-        fontFamily: FONT, fontSize: '8px', strokeThickness: 2,
-        color: c.broken ? '#5a6080' : isParty ? '#' + c.color.toString(16).padStart(6, '0') : '#ff8a8a',
+      const active = i === 0;
+      // Active slot gets a solid gold fill — unambiguous regardless of the
+      // acting combatant's own color (e.g. Mira's is also gold-ish).
+      const bg = this.add.rectangle(x, y, active ? 24 : 22, active ? 16 : 15, active ? 0xf0d36c : (isParty ? 0x11241c : 0x241114), active ? 1 : 0.7)
+        .setDepth(30)
+        .setStrokeStyle(active ? 0 : 1, c.broken ? 0x5a6080 : isParty ? c.color : 0xaa3344, 0.95);
+      const letter = this.add.text(x, y, c.broken ? '✖' : c.name[0], sharpText({
+        fontFamily: FONT, fontSize: active ? '10px' : '8px', strokeThickness: 2,
+        color: active ? '#141a30' : c.broken ? '#5a6080' : isParty ? '#' + c.color.toString(16).padStart(6, '0') : '#ff8a8a',
       })).setOrigin(0.5).setDepth(31);
       this.turnChips.push(bg, letter);
-      x += chipW + 3;
-    }
+    });
   }
 
   /** Shows each living enemy's telegraphed action next to its sprite. */
@@ -378,31 +379,44 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private hideIntents() {
-    for (const ex of this.enemyExtras.values()) {
-      ex.intentBg.setVisible(false);
-      ex.intentText.setVisible(false);
-    }
-  }
-
   // --- Command Phase --------------------------------------------------------
 
-  private startCommandPhase() {
-    this.battle.prepareRound();
+  /** Advances the CTB queue to the next actor and either opens their command
+   * menu (party) or runs their telegraphed action (enemy). Ticks (ailments,
+   * MP regen, broken-recovery) may consume the turn with no command needed. */
+  private advance() {
+    const { actor, events, needsCommand } = this.battle.startTurn();
+    this.activeActor = actor;
+    this.playEvents(events, 0, () => {
+      if (this.syncAndCheckEnd()) return;
+      if (!needsCommand) { this.advance(); return; }
+      this.renderQueue();
+      this.renderIntents();
+      if (actor.side === 'party') this.openMenu();
+      else this.runEnemyTurn(actor);
+    });
+  }
+
+  private runEnemyTurn(actor: Combatant) {
+    this.runAction(actor.intent ?? { type: 'defend' });
+  }
+
+  /** Syncs displayed HP/MP and handles a battle-ending phase. Returns true
+   * if the battle ended (caller should stop advancing the queue). */
+  private syncAndCheckEnd(): boolean {
     this.syncDisplay();
-    this.renderTurnStrip();
-    this.renderIntents();
-    this.order = this.battle.living('party');
-    this.pos = 0;
-    this.battle.clearCommands();
-    if (this.order.length === 0) return; // should not happen
-    this.openMenu();
+    switch (this.battle.phase) {
+      case 'won': this.onVictory(); return true;
+      case 'fled': this.endBattle(500); return true;
+      case 'lost': this.gameOver(); return true;
+      default: return false;
+    }
   }
 
   private openMenu() {
     this.ui = 'menu';
     this.menuIndex = 0;
-    const m = this.order[this.pos];
+    const m = this.activeActor;
     const hasSpells = m.spells.some((s) => SPELLS[s]);
     const itemsAvail = Object.entries(getRun().inventory)
       .some(([id, n]) => n > 0 && ITEMS[id]?.target === 'ally');
@@ -496,7 +510,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private markActiveMember() {
-    const m = this.order[this.pos];
+    const m = this.activeActor;
     const img = this.sprites.get(m.id);
     if (img) {
       this.cursor.setPosition(img.x - img.displayWidth / 2 - 8, img.y - 4).setVisible(true);
@@ -561,11 +575,10 @@ export class BattleScene extends Phaser.Scene {
       if (this.pending?.kind === 'spell') this.openMagic();
       else if (this.pending?.kind === 'item') this.openItems();
       else this.openMenu();
-    } else if (this.ui === 'menu' && this.pos > 0) {
-      this.pos--;
-      this.openMenu();
-    } else if (this.ui === 'menu' && this.pos === 0) {
-      // Nothing left to back out of — cancel doubles as the menu button here.
+    } else if (this.ui === 'menu') {
+      // Top-level command menu, nothing to back out of — cancel doubles as
+      // the menu button here. (CTB: each actor's turn is its own, so there's
+      // no previous party member's choice left to step back into.)
       if (this.scene.isActive('GameMenu')) return;
       this.scene.pause();
       this.scene.launch('GameMenu', { caller: this.scene.key });
@@ -596,7 +609,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private openMagic() {
-    const m = this.order[this.pos];
+    const m = this.activeActor;
     this.ui = 'submenu';
     this.subIndex = 0;
     this.subItems = m.spells.map((id) => {
@@ -625,7 +638,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.pending = { kind: 'item' };
-    this.renderSubmenu(`${this.order[this.pos].name} - item`);
+    this.renderSubmenu(`${this.activeActor.name} - item`);
   }
 
   private confirmSubmenu() {
@@ -641,7 +654,7 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       if (spell.target === 'party') {
-        this.commit({ type: 'spell', spellId: sel.id, targetId: this.order[this.pos].id });
+        this.commit({ type: 'spell', spellId: sel.id, targetId: this.activeActor.id });
         return;
       }
       this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget');
@@ -691,7 +704,7 @@ export class BattleScene extends Phaser.Scene {
     // Attacks strike as the active member's weapon element (default phys).
     if (t.side === 'enemy' && this.pending) {
       const element: Element | undefined = this.pending.kind === 'attack'
-        ? this.order[this.pos]?.attackElement ?? 'phys'
+        ? this.activeActor.attackElement ?? 'phys'
         : this.pending.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id]?.element : undefined;
       if (element && element !== 'none' && t.weakness?.includes(element)) {
         this.promptText.setText(`Choose target  < >   ▶ ${t.name}: WEAK to this!`);
@@ -714,26 +727,21 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private commit(cmd: Command) {
-    this.returnAllHeroesHome();
-    this.battle.setCommand(this.order[this.pos].id, cmd);
     this.pending = null;
-    this.pos++;
-    if (this.pos >= this.order.length) {
-      this.resolve();
-    } else {
-      this.openMenu();
-    }
+    this.runAction(cmd);
   }
 
   // --- Resolution and Playback ---------------------------------------------
 
-  private resolve() {
+  /** Runs the active actor's command through the engine and plays its
+   * (typically 1-3) events, then advances the queue to whoever's next. */
+  private runAction(cmd: Command) {
+    const actor = this.activeActor;
     this.ui = 'busy';
     this.returnAllHeroesHome();
     this.cursor.setVisible(false);
     this.targetFrame.setVisible(false);
     this.clearMenuText();
-    this.hideIntents();
     this.promptText.setText('');
     this.logText.setVisible(true);
     // Snapshot for progressive HP reveal during playback.
@@ -741,13 +749,16 @@ export class BattleScene extends Phaser.Scene {
       this.hpDisplay.set(c.id, c.stats.hp);
       this.mpDisplay.set(c.id, c.stats.mp);
     }
-    const events = this.battle.resolveRound();
-    this.playEvents(events, 0);
+    const events = this.battle.executeTurn(actor, cmd);
+    this.playEvents(events, 0, () => {
+      if (this.syncAndCheckEnd()) return;
+      this.advance();
+    });
   }
 
-  private playEvents(events: BattleEvent[], i: number) {
+  private playEvents(events: BattleEvent[], i: number, onDone: () => void) {
     if (i >= events.length) {
-      this.time.delayedCall(250, () => this.afterRound());
+      this.time.delayedCall(250, onDone);
       return;
     }
     const ev = events[i];
@@ -786,30 +797,7 @@ export class BattleScene extends Phaser.Scene {
     // Hold confirm to fast-forward the round.
     const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : ev.kind === 'ailment' ? 560 : 460;
     const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
-    this.time.delayedCall(delay, () => this.playEvents(events, i + 1));
-  }
-
-  private afterRound() {
-    // Sync display to actual values.
-    for (const c of this.battle.all()) {
-      this.hpDisplay.set(c.id, c.stats.hp);
-      this.mpDisplay.set(c.id, c.stats.mp);
-    }
-    this.refreshStatus();
-
-    switch (this.battle.phase) {
-      case 'won':
-        this.onVictory();
-        break;
-      case 'fled':
-        this.endBattle(500);
-        break;
-      case 'lost':
-        this.gameOver();
-        break;
-      default:
-        this.startCommandPhase();
-    }
+    this.time.delayedCall(delay, () => this.playEvents(events, i + 1, onDone));
   }
 
   private onVictory() {
