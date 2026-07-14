@@ -344,6 +344,7 @@ export class DescentScene extends Phaser.Scene {
 
   private bindInput() {
     this.unsubs.push(input.on('cancel', () => {
+      if (this.busy) return; // mid-dialogue/transition — not a menu opportunity
       if (this.scene.isActive('GameMenu')) return;
       this.scene.pause();
       this.scene.launch('GameMenu', { caller: this.scene.key });

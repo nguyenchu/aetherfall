@@ -310,6 +310,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private onCancel() {
     if (this.state === 'shop') { this.closeShop(); return; }
+    if (this.state === 'busy') return; // mid-dialogue/transition — not a menu opportunity
     if (this.scene.isActive('GameMenu')) return;
     this.scene.pause();
     this.scene.launch('GameMenu', { caller: this.scene.key });
