@@ -513,11 +513,6 @@ export class BattleScene extends Phaser.Scene {
     this.unsubs.push(input.on('right', () => this.navTarget(1)));
     this.unsubs.push(input.on('confirm', () => this.confirm()));
     this.unsubs.push(input.on('cancel', () => this.cancel()));
-    this.unsubs.push(input.on('menu', () => {
-      if (this.scene.isActive('GameMenu')) return;
-      this.scene.pause();
-      this.scene.launch('GameMenu', { caller: this.scene.key });
-    }));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
     attachTouchControls(this, 'top', 'battle');
   }
@@ -569,6 +564,11 @@ export class BattleScene extends Phaser.Scene {
     } else if (this.ui === 'menu' && this.pos > 0) {
       this.pos--;
       this.openMenu();
+    } else if (this.ui === 'menu' && this.pos === 0) {
+      // Nothing left to back out of — cancel doubles as the menu button here.
+      if (this.scene.isActive('GameMenu')) return;
+      this.scene.pause();
+      this.scene.launch('GameMenu', { caller: this.scene.key });
     }
   }
 

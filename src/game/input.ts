@@ -8,13 +8,13 @@ import Phaser from 'phaser';
 import { sharpText, FONT } from '../ui/text';
 import { music } from '../audio/music';
 
-export type Btn = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'cancel' | 'menu';
+export type Btn = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'cancel';
 
-const ALL: Btn[] = ['up', 'down', 'left', 'right', 'confirm', 'cancel', 'menu'];
+const ALL: Btn[] = ['up', 'down', 'left', 'right', 'confirm', 'cancel'];
 
 class InputBus {
   private held: Record<Btn, boolean> = {
-    up: false, down: false, left: false, right: false, confirm: false, cancel: false, menu: false,
+    up: false, down: false, left: false, right: false, confirm: false, cancel: false,
   };
   private listeners = new Map<Btn, Set<() => void>>();
 
@@ -66,9 +66,10 @@ const KEY_MAP: Record<string, Btn> = {
   w: 'up', s: 'down', a: 'left', d: 'right',
   W: 'up', S: 'down', A: 'left', D: 'right',
   z: 'confirm', Z: 'confirm', Enter: 'confirm', ' ': 'confirm',
-  x: 'cancel', X: 'cancel', Backspace: 'cancel', Escape: 'cancel',
-  // Note: removed `m`/`M` here so `m` only toggles sound and does not open the menu.
-  Tab: 'menu', c: 'menu', C: 'menu',
+  // Cancel doubles as the menu button: each scene opens its pause menu from
+  // cancel when there's nothing else to back out of. Note: removed `m`/`M`
+  // here so `m` only toggles sound and does not open the menu.
+  x: 'cancel', X: 'cancel', Backspace: 'cancel', Escape: 'cancel', Tab: 'cancel',
 };
 
 let keyboardBound = false;
@@ -135,7 +136,7 @@ export function isTouchDevice(): boolean {
  * Adds a translucent d-pad on the left and A/B buttons on the right.
  * The buttons feed the same input bus. Called by scenes that need controls.
  */
-type TouchLayout = 'move' | 'battle' | 'menu' | 'side';
+type TouchLayout = 'move' | 'battle' | 'menu';
 
 export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top' = 'bottom', layout: TouchLayout = 'move'): void {
   if (!isTouchDevice()) return;
@@ -168,9 +169,6 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
     mkCircle(cx, cy + 24, 'v', 'down');
     mkCircle(cx - 24, cy, '<', 'left');
     mkCircle(cx + 24, cy, '>', 'right');
-  } else if (layout === 'side') {
-    mkCircle(cx - 24, cy, '<', 'left');
-    mkCircle(cx + 24, cy, '>', 'right');
   }
   // 'battle' and 'menu' have no d-pad: every row/target is already directly
   // tappable there (BattleScene's renderMenu/beginTargeting touch zones,
@@ -181,23 +179,21 @@ export function attachTouchControls(scene: Phaser.Scene, anchor: 'bottom' | 'top
     // BattleScene fills the middle two-thirds of the screen with sprites
     // (enemies on the left, party on the right, home row as high as y=64)
     // and the bottom third with panels, so the usual bottom-anchored OK/
-    // Back/Menu row would have nowhere free. Pack them into a tight row
-    // hugging the very top edge instead, clear of every sprite and of the
-    // turn-order strip (which is centered, not off to this side).
+    // Back row would have nowhere free. Pack them into a tight row hugging
+    // the very top edge instead, clear of every sprite and of the turn-order
+    // strip (which is centered, not off to this side). Back doubles as the
+    // menu button (see input.ts's KEY_MAP comment) — no separate Menu pill.
     mkPill(480, 14, 44, 'OK', 'confirm');
     mkPill(540, 14, 50, 'Back', 'cancel');
-    mkPill(598, 14, 50, 'Menu', 'menu');
   } else if (layout === 'menu') {
     // GameMenuScene's three panels fill almost the entire 640x360 screen,
     // so the default bottom-anchored cluster landed on top of real stat
     // text. OK is also dead here (tapping a row already selects *and*
-    // activates it), so only Back/Menu remain, pushed into the thin strip
-    // below every panel instead.
-    mkPill(550, 347, 56, 'Back', 'cancel');
-    mkPill(610, 347, 50, 'Menu', 'menu');
+    // activates it), so only Back remains, pushed into the thin strip below
+    // every panel instead.
+    mkPill(580, 347, 56, 'Back', 'cancel');
   } else {
     mkPill(442, cy - 8, 48, 'OK', 'confirm');
-    mkPill(402, cy + 20, 58, 'Back', 'cancel');
-    mkPill(474, cy + 20, 58, 'Menu', 'menu');
+    mkPill(438, cy + 20, 58, 'Back', 'cancel');
   }
 }

@@ -255,11 +255,6 @@ export class SanctuaryScene extends Phaser.Scene {
     this.unsubs.push(input.on('down', () => this.onVert(1)));
     this.unsubs.push(input.on('left', () => this.onHoriz(-1)));
     this.unsubs.push(input.on('right', () => this.onHoriz(1)));
-    this.unsubs.push(input.on('menu', () => {
-      if (this.scene.isActive('GameMenu')) return;
-      this.scene.pause();
-      this.scene.launch('GameMenu', { caller: this.scene.key });
-    }));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
   }
 
@@ -314,7 +309,10 @@ export class SanctuaryScene extends Phaser.Scene {
   }
 
   private onCancel() {
-    if (this.state === 'shop') this.closeShop();
+    if (this.state === 'shop') { this.closeShop(); return; }
+    if (this.scene.isActive('GameMenu')) return;
+    this.scene.pause();
+    this.scene.launch('GameMenu', { caller: this.scene.key });
   }
 
   update(time: number) {

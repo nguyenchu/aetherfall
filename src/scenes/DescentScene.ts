@@ -343,7 +343,7 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private bindInput() {
-    this.unsubs.push(input.on('menu', () => {
+    this.unsubs.push(input.on('cancel', () => {
       if (this.scene.isActive('GameMenu')) return;
       this.scene.pause();
       this.scene.launch('GameMenu', { caller: this.scene.key });

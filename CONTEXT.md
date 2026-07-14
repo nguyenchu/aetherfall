@@ -1,6 +1,40 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-13 (merchant).
+> Paste this into a new session to continue the work. Last updated: 2026-07-14.
+
+## 2026-07-14: Cancel Doubles as Menu — One Button Instead of Two
+
+Removed the `Btn` input bus's separate `'menu'` signal entirely (was: X/Backspace/
+Escape → `cancel`, Tab/C → `menu`, plus a dedicated on-screen "Menu" pill next to
+"Back" in every touch layout). Now there's just `cancel` (X, Backspace, Escape,
+Tab), and each scene's cancel handler falls through to opening the pause
+`GameMenu` when there's nothing else to back out of:
+
+- **DescentScene**: had no `cancel` handler at all (X did nothing there since
+  the retreat-shortcut removal, 2026-07-07) — now `cancel` opens the menu
+  unconditionally, since there was never anything else for it to do.
+- **SanctuaryScene**: `onCancel()` still closes the shop first if one's open;
+  only opens the menu when idle (previously a no-op in that case).
+- **BattleScene**: `cancel()`'s existing submenu/target/subtarget back-navigation
+  is unchanged and still takes priority; only falls through to opening the menu
+  when `ui === 'menu' && pos === 0` — i.e. already at the top-level "choose an
+  action" screen with nowhere left to back out to. Tradeoff: the old dedicated
+  Menu button could jump to the pause menu from *any* battle state (mid-submenu,
+  mid-animation); that's gone now, by design — X does the contextual thing first.
+- **GameMenuScene**: turned out `back()` already fell through to `close()` at
+  its own top level, so the separate `menu` → `close()` binding was pure
+  redundancy — deleted with no behavior change.
+
+Also removed: the now-dead `'side'` `TouchLayout` (unreachable since
+`SideScrollScene` was deleted 2026-07-09 (a)) and its unused d-pad branch.
+Touch "Back" pills nudged to center in the freed-up space where "Menu" used
+to sit (battle/menu/default layouts).
+
+Verified live via a save-injected Playwright session covering all four cases:
+X opens the menu from idle Sanctuary and from Descent; X closes the menu from
+its own top level; in Battle, X opens the menu at the top-level action screen
+but correctly backs out of an open Magic submenu first instead (menu stays
+closed). No console errors. `tsc` and `vite build` both clean.
 
 ## 2026-07-13 (merchant): Merchant Overhaul — Icons, Slot Clarity, Scroll Nav, Compare
 

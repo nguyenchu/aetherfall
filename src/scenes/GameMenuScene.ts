@@ -1211,7 +1211,6 @@ export class GameMenuScene extends Phaser.Scene {
     this.unsubs.push(input.on('right', () => this.moveHorizontal(1)));
     this.unsubs.push(input.on('confirm', () => this.activateSelection()));
     this.unsubs.push(input.on('cancel', () => this.back()));
-    this.unsubs.push(input.on('menu', () => this.close()));
   }
 
   private enterContent() {
