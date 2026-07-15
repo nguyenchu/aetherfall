@@ -1,6 +1,47 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-15.
+> Paste this into a new session to continue the work. Last updated: 2026-07-16.
+
+## 2026-07-16 (verify): Live-Verified Two Previously Code-Review-Only Fixes
+
+Two changes from the last session were checked by code review only, not by
+running the game (CONTEXT notes from 2026-07-13 and 2026-07-15 both flagged
+this explicitly). Live-verified both in a real (headless) browser this
+session:
+
+- **Items tab scroll/drill-down** (2026-07-13): seeded a save with 11 item
+  types via `localStorage` and drove the menu with real keypresses. Confirmed
+  the 6-row scroll window, `▲`/`▼` hidden-count indicators, window-edge
+  scroll in both directions, top/bottom clamping, drill-in to target
+  selection, and drill-out preserving the row all work exactly as described.
+  Bonus: caught the game correctly *refusing* to use Phoenix Down on a
+  full-HP ally ("Kael can't use Phoenix Down right now.") rather than wasting
+  it — not a bug, just confirms the guard exists.
+- **`firstClear` gate on the ending/feedback ceremony** (2026-07-15,
+  `BattleScene.onVictory`): fought the Ch4 boss twice via a seeded save +
+  console-assisted state jump (`getRun().depth = 8` then
+  `DescentScene.triggerEncounter('19,10', true, false)` — the same call a
+  player triggers by stepping on the tile, see `.claude/skills/verify/
+  SKILL.md`). With `ch4_complete` already flagged (simulating a returning
+  finisher), the kill fired `chapter_clear` and played the `ch4_win` dialogue
+  but **not** `game_complete`, and no feedback textarea ever appeared — went
+  straight back to Sanctuary. With the flag absent (genuine first clear), the
+  same fight fired `game_complete` and opened the "You reached the bottom"
+  ending + feedback prompt. Confirms the fix does exactly what it claims on
+  both branches.
+
+No code changes from this — both held up. Also set up
+`.claude/skills/verify/SKILL.md` (Playwright cold-start, headless-WebGL
+flags, dev hooks) so the next verification session skips the ~30min
+first-time setup this one paid.
+
+Separately: checked whether the Validation telemetry (live since 2026-07-13)
+has real player data yet — no. This machine has no SSH access to
+`aetherfall.nguyenchu.com` (the authorized key from 2026-07-13 is on the dev
+Mac only), and the log was truncated to zero on deploy day, so there's
+nothing to read yet regardless. Revisit once there's been real traffic and
+either SSH is set up from this machine too, or someone pulls the
+`analyze.mjs` report manually.
 
 ## 2026-07-15: Ascension (New Game+) — Endgame Replay Content
 
