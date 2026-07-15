@@ -1,31 +1,30 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
-import { BOONS } from '../game/boons';
 import { getRun, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
-import { input, attachTouchControls } from '../game/input';
+import { input } from '../game/input';
 import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { markSeen } from '../game/dialogue';
 import { track, chapterOfDepth } from '../game/analytics';
 import { paintPixelGrid } from '../art/sprites';
 import { themeFloor, themeWall, tileVariant } from '../art/tiles';
+import { DescentHudScene } from './DescentHudScene';
 
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
-const RANDOM_BATTLE_MIN_STEPS = 5;
+const RANDOM_BATTLE_MIN_STEPS = 7;
 // Bad-luck protection: independent per-step rolls can still produce long dry
 // spells even at a reasonable average rate, which reads as "broken" rather
 // than "unlucky". Force an encounter if one hasn't landed by this many steps.
-const RANDOM_BATTLE_MAX_STEPS = 20;
+const RANDOM_BATTLE_MAX_STEPS = 26;
+// Extra zoom on top of renderScale so the camera has room to actually pan —
+// at renderScale alone every hand-authored map already fits the viewport, so
+// follow+bounds would have nothing to scroll. 1.5x keeps renderScale*1.5 an
+// integer (crisp pixel art) while giving most maps real scroll room.
+const WORLD_ZOOM_BONUS = 1.5;
 type Facing = 'down' | 'up' | 'left' | 'right';
-
-interface PartyHudRow {
-  name: Phaser.GameObjects.Text;
-  hpFill: Phaser.GameObjects.Rectangle;
-  mpFill: Phaser.GameObjects.Rectangle;
-}
 
 /**
  * Fixed dungeon exploration. Each depth maps to a hand-crafted area defined
@@ -33,8 +32,13 @@ interface PartyHudRow {
  * bosses (B) and elite guardians (X) are fixed, marked encounters.
  * Treasure chests (T) and healing springs (H) reward exploring off the main path.
  */
+// How quickly the camera catches up to the player each frame (0-1, higher = snappier).
+const CAMERA_LERP = 0.1;
+
 export class DescentScene extends Phaser.Scene {
   private map: string[] = [];
+  private mapPixelW = 0;
+  private mapPixelH = 0;
   private currentThemeId = '';
   private player!: Phaser.GameObjects.Image;
   private playerShadow!: Phaser.GameObjects.Ellipse;
@@ -49,18 +53,17 @@ export class DescentScene extends Phaser.Scene {
   private pendingEncounterKey: string | null = null;
   private randomBattleSteps = 0;
   private unsubs: (() => void)[] = [];
-  private hintText?: Phaser.GameObjects.Text;
-  private goldText?: Phaser.GameObjects.Text;
-  private boonTexts: Phaser.GameObjects.Text[] = [];
-  private partyHud: PartyHudRow[] = [];
-  private hudSignature = '';
+  // Fixed-screen HUD (gold/party/boons/hint) — a separate scene with its own
+  // plain-zoom camera, so it never moves or rescales when this scene's own
+  // camera zooms in and follows the player. See DescentHudScene for why.
+  private hud!: DescentHudScene;
 
   constructor() {
     super('Descent');
   }
 
   create(data?: { deeper?: boolean }) {
-    this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
+    this.cameras.main.setOrigin(0, 0).setZoom(renderScale * WORLD_ZOOM_BONUS);
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
     this.unsubs = [];
@@ -68,15 +71,12 @@ export class DescentScene extends Phaser.Scene {
     this.springImages.clear();
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
-    this.hintText = undefined;
-    this.goldText = undefined;
-    this.boonTexts = [];
-    this.partyHud = [];
-    this.hudSignature = '';
 
     const run = getRun();
     const area = getArea(run.depth);
     this.map = area.map;
+    this.mapPixelW = this.map[0].length * GAME.tile;
+    this.mapPixelH = this.map.length * GAME.tile;
 
     // create() runs both on a fresh descent from Sanctuary (scene.start, no data)
     // and on advancing to the next stratum within a run (advanceArea's
@@ -98,15 +98,29 @@ export class DescentScene extends Phaser.Scene {
     this.drawMap();
     this.placePortals();
     this.spawnPlayer();
-    this.buildHud(area.name, area.theme.accent);
-    this.buildPartyHud();
-    this.refreshBoonHud();
+    // Phaser's built-in startFollow()/setBounds() clamping assumes camera
+    // width/height are already in world units — but ours are the raw 2x
+    // canvas size (see config.ts), with zoom doing the pixel-doubling. That
+    // mismatch makes Camera.clampX/clampY() (used by both startFollow's
+    // initial snap and the per-frame bounds check) pin the scroll to a
+    // wrong, zoom-skewed constant. So the camera is driven manually in
+    // update() instead of via startFollow/setBounds.
+    this.updateCameraFollow(true);
+
+    // scene.restart() (advanceArea) reuses this scene instance, which fires
+    // SHUTDOWN before this create() runs again — the once-listener below
+    // stops the previous stratum's HUD scene at that point, so launching a
+    // fresh one here never stacks duplicates.
+    this.scene.launch('DescentHud', { areaName: area.name, accentColor: area.theme.accent });
+    this.hud = this.scene.get('DescentHud') as DescentHudScene;
     this.bindInput();
-    attachTouchControls(this);
 
     music.play('explore', this.currentThemeId as AreaThemeId);
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.unsubs.forEach((u) => u());
+      this.scene.stop('DescentHud');
+    });
     this.events.on(Phaser.Scenes.Events.RESUME, (_sys: unknown, data?: { won?: boolean; fromBattle?: boolean }) => {
       this.busy = false;
       music.play('explore', this.currentThemeId as AreaThemeId);
@@ -121,8 +135,8 @@ export class DescentScene extends Phaser.Scene {
         this.clearEncounterMarker(key);
         this.pendingEncounterKey = null;
       }
-      this.goldText?.setText(`Gold ${getRun().gold}`);
-      this.refreshBoonHud();
+      this.hud.setGold(getRun().gold);
+      this.hud.refreshBoonHud();
     });
   }
 
@@ -296,73 +310,6 @@ export class DescentScene extends Phaser.Scene {
     });
   }
 
-  private buildHud(areaName: string, accentColor: number) {
-    const hex = '#' + accentColor.toString(16).padStart(6, '0');
-    const run = getRun();
-    this.add.text(4, 4, 'AETHERFALL', sharpText({ fontFamily: FONT, fontSize: '12px', color: hex })).setDepth(10);
-    this.add.text(4, 18, areaName, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5' })).setDepth(10);
-    this.goldText = this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
-      sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })).setOrigin(1, 0).setDepth(10);
-    // Active modifier
-    const mod = run.modifier;
-    if (mod.id !== 'none') {
-      this.add.text(GAME.width - 4, 18, `✦ ${mod.name}`,
-        sharpText({ fontFamily: FONT, fontSize: '8px', color: mod.color })).setOrigin(1, 0).setDepth(10);
-    }
-  }
-
-  /** Boons picked this run, listed under the modifier in the top-right corner. */
-  private refreshBoonHud() {
-    for (const t of this.boonTexts) t.destroy();
-    this.boonTexts = [];
-    const boons = getRun().boons;
-    const maxShown = 5;
-    boons.slice(0, maxShown).forEach((id, i) => {
-      const boon = BOONS[id];
-      if (!boon) return;
-      this.boonTexts.push(this.add.text(GAME.width - 4, 32 + i * 10, `◆ ${boon.name}`,
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#b8a8f8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
-    });
-    if (boons.length > maxShown) {
-      this.boonTexts.push(this.add.text(GAME.width - 4, 32 + maxShown * 10, `+${boons.length - maxShown} more`,
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
-    }
-  }
-
-  /** Compact party vitals in the bottom-left corner. */
-  private buildPartyHud() {
-    const run = getRun();
-    const top = GAME.height - 14 - run.party.length * 13;
-    this.add.rectangle(2, top - 4, 118, run.party.length * 13 + 8, 0x07060e, 0.62)
-      .setOrigin(0, 0).setDepth(9).setStrokeStyle(1, 0x2f3658, 0.5);
-    run.party.forEach((c, i) => {
-      const y = top + i * 13;
-      const name = this.add.text(6, y, c.name, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(10);
-      this.add.rectangle(44, y + 4, 44, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
-      const hpFill = this.add.rectangle(45, y + 4, 42, 2, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(11);
-      this.add.rectangle(92, y + 4, 24, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
-      const mpFill = this.add.rectangle(93, y + 4, 22, 2, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(11);
-      this.partyHud.push({ name, hpFill, mpFill });
-    });
-    this.updatePartyHud();
-  }
-
-  private updatePartyHud() {
-    const run = getRun();
-    const signature = run.party.map((c) => `${c.stats.hp}/${c.stats.mp}`).join('|');
-    if (signature === this.hudSignature) return;
-    this.hudSignature = signature;
-    run.party.forEach((c, i) => {
-      const row = this.partyHud[i];
-      if (!row) return;
-      const hpPct = Phaser.Math.Clamp(c.stats.hp / c.stats.maxHp, 0, 1);
-      const mpPct = c.stats.maxMp > 0 ? Phaser.Math.Clamp(c.stats.mp / c.stats.maxMp, 0, 1) : 0;
-      row.hpFill.setScale(hpPct, 1);
-      row.hpFill.setFillStyle(hpPct < 0.3 ? 0xff5a6a : 0x6cf0a0, 0.95);
-      row.mpFill.setScale(mpPct, 1);
-    });
-  }
-
   private bindInput() {
     this.unsubs.push(input.on('cancel', () => {
       if (this.busy) return; // mid-dialogue/transition — not a menu opportunity
@@ -372,10 +319,33 @@ export class DescentScene extends Phaser.Scene {
     }));
   }
 
+  /** Zoom-aware replacement for Camera.startFollow()/setBounds() — see the
+   * note in create() for why those don't work with this project's camera
+   * setup. Runs every frame regardless of movement lock so the camera keeps
+   * smoothly catching up even through brief input-lock windows. */
+  private updateCameraFollow(snap = false) {
+    const cam = this.cameras.main;
+    const visW = cam.width / cam.zoom;
+    const visH = cam.height / cam.zoom;
+    const maxScrollX = Math.max(0, this.mapPixelW - visW);
+    const maxScrollY = Math.max(0, this.mapPixelH - visH);
+    const targetX = Phaser.Math.Clamp(this.player.x - visW / 2, 0, maxScrollX);
+    const targetY = Phaser.Math.Clamp(this.player.y - visH / 2, 0, maxScrollY);
+    if (snap) {
+      cam.setScroll(targetX, targetY);
+    } else {
+      cam.setScroll(
+        Phaser.Math.Linear(cam.scrollX, targetX, CAMERA_LERP),
+        Phaser.Math.Linear(cam.scrollY, targetY, CAMERA_LERP),
+      );
+    }
+  }
+
   update(time: number) {
+    this.updateCameraFollow();
     if (!this.busy) {
-      this.updateHint();
-      this.updatePartyHud();
+      this.hud.setHint(this.hintLabel());
+      this.hud.updatePartyHud();
     }
     if (this.busy || time < this.moveLockedUntil) return;
     const d = input.dir();
@@ -484,7 +454,7 @@ export class DescentScene extends Phaser.Scene {
     setFlag(`chest_${depth}_${tileKey}`);
     const lines = openChest(contents);
     sfx.play('chest');
-    this.goldText?.setText(`Gold ${getRun().gold}`);
+    this.hud.setGold(getRun().gold);
     const img = this.tileImages.get(tileKey);
     if (img) {
       this.tweens.add({ targets: img, alpha: 0, y: img.y - 4, duration: 500, delay: 200, onComplete: () => img.destroy() });
@@ -514,7 +484,7 @@ export class DescentScene extends Phaser.Scene {
       });
     }
     this.floatText('The spring restores you (+50% HP/MP)', '#9ae8ff', 0);
-    this.updatePartyHud();
+    this.hud.updatePartyHud();
   }
 
   private floatText(text: string, color: string, delayOffset: number) {
@@ -537,7 +507,9 @@ export class DescentScene extends Phaser.Scene {
     if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
 
     const depth = getRun().depth;
-    const chance = tile === 'V' ? Math.min(0.5, (0.08 + depth * 0.008) * 3) : Math.min(0.16, 0.08 + depth * 0.008);
+    // Thicket keeps its 3x ambush rate (and 3x cap) on top of the base curve.
+    const raw = 0.055 + depth * 0.006;
+    const chance = tile === 'V' ? Math.min(0.33, raw * 3) : Math.min(0.11, raw);
     const forced = this.randomBattleSteps >= RANDOM_BATTLE_MAX_STEPS;
     if (!forced && Math.random() >= chance) return;
 
@@ -589,43 +561,25 @@ export class DescentScene extends Phaser.Scene {
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth }));
   }
 
-  private updateHint() {
+  /** Contextual action hint for whatever's next to the player, or '' for none. */
+  private hintLabel(): string {
     const depth = getRun().depth;
     const dirs = [{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
-    let label = '';
     for (const d of dirs) {
       const nx = this.px + d.x;
       const ny = this.py + d.y;
       const ch = this.map[ny]?.[nx];
       if (!ch) continue;
-      if (ch === '>') { label = 'Z / tap  ·  descend'; break; }
-      if (ch === '<') { label = 'Z / tap  ·  return home'; break; }
+      if (ch === '>') return 'Z / tap  ·  descend';
+      if (ch === '<') return 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
-        label = ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
-        break;
+        return ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
       }
-      if (ch === 'T' && !hasFlag(`chest_${depth}_${nx},${ny}`)) {
-        label = 'Z / tap  ·  open chest'; break;
-      }
-      if (ch === 'H' && !springUsed(`${depth}_${nx},${ny}`)) {
-        label = 'Z / tap  ·  rest at the spring'; break;
-      }
-      if (ch === 'S' && !hasFlag(`story_${depth}_${nx},${ny}`)) {
-        label = 'Z / tap  ·  examine'; break;
-      }
+      if (ch === 'T' && !hasFlag(`chest_${depth}_${nx},${ny}`)) return 'Z / tap  ·  open chest';
+      if (ch === 'H' && !springUsed(`${depth}_${nx},${ny}`)) return 'Z / tap  ·  rest at the spring';
+      if (ch === 'S' && !hasFlag(`story_${depth}_${nx},${ny}`)) return 'Z / tap  ·  examine';
     }
-    if (label) {
-      if (!this.hintText) {
-        this.hintText = this.add.text(GAME.width / 2, GAME.height - 18, label,
-          sharpText({ fontFamily: FONT, fontSize: '9px', color: '#6cf0c2' }))
-          .setOrigin(0.5, 1).setDepth(20).setAlpha(0);
-        this.tweens.add({ targets: this.hintText, alpha: 1, duration: 180 });
-      } else {
-        this.hintText.setText(label).setVisible(true);
-      }
-    } else if (this.hintText?.visible) {
-      this.hintText.setVisible(false);
-    }
+    return '';
   }
 
   private tileCenter(n: number): number { return n * GAME.tile + GAME.tile / 2; }

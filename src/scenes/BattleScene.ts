@@ -592,14 +592,10 @@ export class BattleScene extends Phaser.Scene {
       if (this.pending?.kind === 'spell') this.openMagic();
       else if (this.pending?.kind === 'item') this.openItems();
       else this.openMenu();
-    } else if (this.ui === 'menu') {
-      // Top-level command menu, nothing to back out of — cancel doubles as
-      // the menu button here. (CTB: each actor's turn is its own, so there's
-      // no previous party member's choice left to step back into.)
-      if (this.scene.isActive('GameMenu')) return;
-      this.scene.pause();
-      this.scene.launch('GameMenu', { caller: this.scene.key });
     }
+    // Top-level command menu: nothing to back out of, and the pause menu is
+    // deliberately unreachable mid-battle (it would let you re-equip gear or
+    // cast field-only healing outside the CTB rules). Flee is the only exit.
   }
 
   private confirmMenu() {
