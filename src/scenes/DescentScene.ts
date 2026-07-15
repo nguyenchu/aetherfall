@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, type AreaTheme } from '../game/chapters';
-import { getRun, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
+import { getRun, getSave, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
 import { input } from '../game/input';
 import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -443,7 +443,7 @@ export class DescentScene extends Phaser.Scene {
     this.busy = true;
     this.pendingEncounterKey = tileKey;
     this.scene.pause();
-    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group), elite: isElite });
+    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus), elite: isElite });
   }
 
   private openChestAt(tileKey: string) {
@@ -524,7 +524,7 @@ export class DescentScene extends Phaser.Scene {
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
     this.scene.pause();
-    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group) });
+    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus) });
   }
 
   private triggerStory(tileKey: string) {

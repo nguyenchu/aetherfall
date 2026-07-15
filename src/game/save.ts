@@ -16,6 +16,7 @@ export interface SaveData {
   equipmentOwned: string[];
   equipped: Record<string, Partial<Record<EquipSlot, string>>>;
   quests: Record<string, QuestStatus>;
+  ngPlus: number; // Ascension tier — raises postgame enemy difficulty/rewards
 }
 
 export interface SaveSummary {
@@ -42,6 +43,7 @@ function defaults(): SaveData {
     equipmentOwned: [...STARTING_EQUIPMENT],
     equipped: structuredClone(DEFAULT_EQUIPPED),
     quests: initialQuests(),
+    ngPlus: 0,
   };
 }
 
@@ -81,6 +83,7 @@ function normalize(data: SaveData): SaveData {
   data.equipmentOwned = Array.from(new Set([...(data.equipmentOwned ?? []), ...STARTING_EQUIPMENT]));
   data.equipped = { ...structuredClone(DEFAULT_EQUIPPED), ...(data.equipped ?? {}) };
   data.quests = { ...initialQuests(), ...(data.quests ?? {}) };
+  data.ngPlus = data.ngPlus ?? 0;
   return data;
 }
 

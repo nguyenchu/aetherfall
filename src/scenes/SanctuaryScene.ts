@@ -13,6 +13,7 @@ import {
   equipmentPrice,
   equippedFor,
   getRun,
+  getSave,
   hasFlag,
   hpBlessingCost,
   isQuestActive,
@@ -83,7 +84,7 @@ const MAP = [
   '#............................#',
   '#............................#',
   '#.........C.......V..........#',
-  '#............................#',
+  '#..........A.................#',
   '#............................#',
   '#..............P.............#',
   '#............................#',
@@ -96,7 +97,7 @@ interface Npc {
   spriteKey: string;
   scale: number;
   name: string;
-  kind: 'dialogue' | 'vendor';
+  kind: 'dialogue' | 'vendor' | 'ascend';
   scriptId?: string;
   /** Shows a bouncing "!" above the figure while true — an unclaimed quest. */
   questActive?: boolean;
@@ -133,6 +134,10 @@ function npcs(): Record<string, Npc> {
         scriptId: ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
         questActive: isQuestActive('heed_the_stranger'), questId: 'heed_the_stranger',
       },
+    } : {}),
+    // The Crystal itself — an Ascension prompt, once the anchors are restored.
+    ...(ch4Done ? {
+      A: { spriteKey: 'aether', scale: 0.9, name: 'the Crystal', kind: 'ascend' as const },
     } : {}),
   };
 }
@@ -402,8 +407,9 @@ export class SanctuaryScene extends Phaser.Scene {
 
       const npc = this.npcAt.get(`${nx},${ny}`);
       if (npc) {
+        const verb = npc.kind === 'vendor' ? 'shop' : npc.kind === 'ascend' ? 'ascend' : 'talk';
         return {
-          label: `Z / tap  ·  ${npc.kind === 'vendor' ? 'shop' : 'talk'}`,
+          label: `Z / tap  ·  ${verb}`,
           run: () => this.interact(npc),
         };
       }
@@ -465,7 +471,14 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private interact(npc: Npc) {
     if (npc.kind === 'vendor') this.openShop();
+    else if (npc.kind === 'ascend') this.openAscend();
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
+  }
+
+  private openAscend() {
+    this.state = 'busy';
+    this.cameras.main.fadeOut(250, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Ascend'));
   }
 
   // --- Dialog ---------------------------------------------------------------
@@ -540,10 +553,12 @@ export class SanctuaryScene extends Phaser.Scene {
 
     // Point toward whichever descent still holds the active main quest.
     const mainPortal = dTiles.length > 0 ? { x: dTiles[Math.floor(dTiles.length / 2)].c, y: dTiles[Math.floor(dTiles.length / 2)].r } : null;
+    const crystalPos = { x: 11, y: 8 };
     const nextObjective = !hasFlag('ch1_complete') ? mainPortal
       : !hasFlag('ch2_complete') ? this.ch2PortalPos
       : !hasFlag('ch3_complete') ? this.ch3PortalPos
       : !hasFlag('ch4_complete') ? this.ch4PortalPos
+      : getSave().ngPlus === 0 ? crystalPos
       : null;
     if (nextObjective) {
       this.addBounceMarker(nextObjective.x * GAME.tile + GAME.tile / 2, nextObjective.y * GAME.tile - 12, '▼', '#6cf0c2');

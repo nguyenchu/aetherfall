@@ -2,6 +2,7 @@
 // Connects persistent meta-progression (save.ts) with runtime state.
 // Death is not total: the Crystal returns you to town, but level/gold remain.
 
+import { track } from './analytics';
 import { boonTotals, type BoonTotals } from './boons';
 import type { ChestContents } from './chapters';
 import { ITEMS, SPELLS, makeParty } from './content';
@@ -519,6 +520,15 @@ export function returnToTown(): void {
   state.springsUsed = [];
   modifierApplied = false;
   saveProgress();
+}
+
+/** Raises the permanent Ascension tier and sends the player back to descend
+ * again — levels/gear/gold/flags are untouched, only postgame difficulty and
+ * rewards scale with the tier (see makeEncounterForArea in chapters.ts). */
+export function ascend(): void {
+  save.ngPlus += 1;
+  track('ngplus_start', { tier: save.ngPlus });
+  returnToTown();
 }
 
 /** Called in DescentScene.create() — applies startHpFactor once per run. */

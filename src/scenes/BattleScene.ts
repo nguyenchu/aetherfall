@@ -4,7 +4,7 @@ import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
 import { getArea } from '../game/chapters';
-import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, returnToTown, saveProgress, setFlag } from '../game/run';
+import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
 import { track, chapterOfDepth } from '../game/analytics';
@@ -830,8 +830,10 @@ export class BattleScene extends Phaser.Scene {
     const depth = run.depth;
     const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
+    let firstClear = false;
     if (boss) {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : depth <= 6 ? 'ch3_complete' : 'ch4_complete';
+      firstClear = !hasFlag(flag);
       setFlag(flag);
       const questId = flag === 'ch1_complete' ? 'clear_ch1' : flag === 'ch2_complete' ? 'clear_ch2'
         : flag === 'ch3_complete' ? 'defeat_ashbrand' : 'defeat_prism_sovereign';
@@ -846,7 +848,12 @@ export class BattleScene extends Phaser.Scene {
     if (boss) {
       this.time.delayedCall(1000, () => {
         const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : depth <= 6 ? 'ch3_win' : 'ch4_win';
-        if (depth > 6) track('game_complete', { d: depth });
+        // The full ending + feedback prompt is a one-time capstone for the
+        // first-ever Prism Sovereign kill. Later kills (Ascension replays)
+        // still get the win dialogue, just not the "you finished the game"
+        // ceremony again.
+        const isFinalBossFirstClear = depth > 6 && firstClear;
+        if (isFinalBossFirstClear) track('game_complete', { d: depth });
         // After the ending plays, prompt for feedback once — beating the game
         // is the single highest-signal moment to ask "how was the journey?".
         // The overlay's onClose resumes the flow home whether they send or not.
@@ -858,7 +865,7 @@ export class BattleScene extends Phaser.Scene {
             onClose: () => this.toTown(),
           }),
         });
-        const afterWin = depth > 6 ? endingThenFeedback : () => this.toTown();
+        const afterWin = isFinalBossFirstClear ? endingThenFeedback : () => this.toTown();
         this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
       });
       return;

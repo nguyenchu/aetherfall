@@ -733,11 +733,39 @@ export function getArea(depth: number): AreaDef {
   return ALL_AREAS[Math.min(depth - 1, ALL_AREAS.length - 1)];
 }
 
+// Ascension (New Game+) tuning: each tier scales enemy power and rewards up,
+// so postgame descents don't stay flat once a player has cleared Chapter 4.
+// Easily nudged if a tier feels too easy/brutal.
+const NGPLUS_STAT_MULT = 0.15;
+const NGPLUS_REWARD_MULT = 0.10;
+
+function scaleForNgPlus(enemies: Combatant[], ngPlus: number): Combatant[] {
+  if (ngPlus <= 0) return enemies;
+  const statMult = 1 + NGPLUS_STAT_MULT * ngPlus;
+  const rewardMult = 1 + NGPLUS_REWARD_MULT * ngPlus;
+  return enemies.map((c) => ({
+    ...c,
+    stats: {
+      maxHp: Math.round(c.stats.maxHp * statMult),
+      hp: Math.round(c.stats.maxHp * statMult),
+      maxMp: Math.round(c.stats.maxMp * statMult),
+      mp: Math.round(c.stats.maxMp * statMult),
+      str: Math.round(c.stats.str * statMult),
+      agi: Math.round(c.stats.agi * statMult),
+      vit: Math.round(c.stats.vit * statMult),
+      int: Math.round(c.stats.int * statMult),
+    },
+    goldReward: c.goldReward != null ? Math.round(c.goldReward * rewardMult) : c.goldReward,
+    xpReward: c.xpReward != null ? Math.round(c.xpReward * rewardMult) : c.xpReward,
+  }));
+}
+
 // Unified encounter factory for DescentScene
-export function makeEncounterForArea(area: AreaDef, group: string): Combatant[] {
-  if (area.id.startsWith('forest')) return makeChapter1Encounter(group as EncounterGroup);
-  if (area.id.startsWith('sunken')) return makeChapter2Encounter(group as Ch2EncounterGroup);
-  if (area.id.startsWith('ashen'))  return makeChapter3Encounter(group as Ch3EncounterGroup);
-  if (area.id.startsWith('crystal')) return makeChapter4Encounter(group as Ch4EncounterGroup);
-  return makeChapter1Encounter(group as EncounterGroup);
+export function makeEncounterForArea(area: AreaDef, group: string, ngPlus = 0): Combatant[] {
+  const enemies = area.id.startsWith('forest') ? makeChapter1Encounter(group as EncounterGroup)
+    : area.id.startsWith('sunken') ? makeChapter2Encounter(group as Ch2EncounterGroup)
+    : area.id.startsWith('ashen')  ? makeChapter3Encounter(group as Ch3EncounterGroup)
+    : area.id.startsWith('crystal') ? makeChapter4Encounter(group as Ch4EncounterGroup)
+    : makeChapter1Encounter(group as EncounterGroup);
+  return scaleForNgPlus(enemies, ngPlus);
 }

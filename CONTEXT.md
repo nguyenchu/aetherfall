@@ -1,6 +1,58 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-14.
+> Paste this into a new session to continue the work. Last updated: 2026-07-15.
+
+## 2026-07-15: Ascension (New Game+) — Endgame Replay Content
+
+Beating the Chapter 4 boss (Prism Sovereign) already had a real ending —
+`ch4_win` → `ending` dialogue, a one-time feedback prompt, back to Sanctuary
+(`BattleScene.onVictory`). But nothing happened *after* that: `getArea()`
+clamps to the last authored area past depth 8, so postgame descents replayed
+Chapters 1-4 at exactly the same enemy stats and rewards forever, and
+Sanctuary's "next objective" marker went to `null` once `ch4_complete` was
+set — a dead end. There was also a latent bug: the win/ending cutscene +
+feedback prompt was gated on `depth > 6`, not "first clear," so it would have
+replayed in full on every future Prism Sovereign kill.
+
+Added an opt-in, repeatable **Ascension** tier instead of jumping straight to
+a Chapter 5 — cheaper to build, and validates via the already-live telemetry
+whether finishers want more before investing in a new zone:
+- `SaveData.ngPlus` (persistent, default 0). `ascend()` in `run.ts` bumps it
+  and reuses `returnToTown()` — depth resets to 1, fresh modifier, boons
+  cleared. Levels, gear, gold, and story flags are **untouched** — Ascension
+  only raises a difficulty/reward ceiling, it doesn't reset the world.
+- `makeEncounterForArea(area, group, ngPlus)` in `chapters.ts` scales every
+  enemy's stats (+15%/tier) and gold/XP (+10%/tier) — applies to *any*
+  chapter being replayed, not just the Ch4 rematch, which is what actually
+  fixes the flat-postgame problem. `DescentScene` threads `getSave().ngPlus`
+  through both encounter call sites.
+- `BattleScene.onVictory` now captures `firstClear` (`!hasFlag(flag)`) before
+  `setFlag`, and only chains into the `ending` dialogue + feedback prompt on
+  the first-ever Ch4 clear. Later Prism Sovereign kills (Ascension replays)
+  still get the normal win-dialogue + loot flow, just not the "you finished
+  the game" ceremony again.
+- New Sanctuary interactable: the Crystal (`kind: 'ascend'` on `Npc`, reuses
+  the `aether` texture, no new art), gated on `hasFlag('ch4_complete')` same
+  as the postgame shop gear. Talking to it opens `AscendScene` (modeled on
+  `RunSummaryScene`'s layout) showing current/next tier and the stat/reward
+  bump; confirm calls `ascend()`, cancel leaves everything untouched. The
+  Sanctuary "next objective" bounce marker now points at the Crystal once
+  (only while `ngPlus === 0`) instead of going to a dead `null`.
+- `track('ngplus_start', { tier })` plugs into the existing `ops/analytics/`
+  pipeline so "do finishers come back for more" is actually measurable.
+
+Verified live: `pnpm build` clean, then a save-injected Playwright session
+(seeded `ch4_complete` + levels/gold, no vendored driver — same bar as prior
+UI work) drove the real flow — walked into the Crystal, confirmed the
+AscendScene text (`Current tier: None` → `Ascension 1`, `+15%`/`+10%`
+correct), confirmed **cancel** leaves `ngPlus` at 0, confirmed **confirm**
+persists `ngPlus: 1` to `localStorage` and is reflected on reopening
+(`Ascension 1` → `Ascension 2` preview). No console errors. Encounter scaling
+double-checked directly (tier-2 Prism Sovereign: 700→910 HP, 130→156 gold,
+matches the 1.30/1.20 multipliers exactly). **Not** live-verified: the
+`firstClear` fix on `BattleScene.onVictory` (would need a scripted full CTB
+battle win) — confirmed by careful code review instead (variable scoping,
+`hasFlag`/`setFlag` order) rather than an end-to-end run.
 
 ## 2026-07-14: Cancel Doubles as Menu — One Button Instead of Two
 
