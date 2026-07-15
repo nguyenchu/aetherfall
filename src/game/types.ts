@@ -112,6 +112,11 @@ export interface Combatant {
   // Enemy-only: reflects this fraction of a non-weakness hit's damage back
   // at the attacker (Crystal's Prism Sprite).
   reflectFrac?: number;
+  // On death, deals area damage to the whole living party (e.g. Ashen cinders).
+  deathBurst?: { element: Element; power: number };
+  // Shrugs off most damage of this element — forces switching attack element
+  // (e.g. Crystal prisms). Distinct from `weakness` (which amplifies).
+  wardElement?: Element;
   // Passive effects from equipped gear (party only).
   gear?: GearEffects;
   // Progression (party only):

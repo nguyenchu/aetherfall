@@ -292,15 +292,26 @@ function tideWarden(): Combatant {
   }, ['fire', 'holy'], 3);
 }
 
+// Sunken signature: a healer that mends its allies — burst it down or focus
+// the threats first, or the fight never ends.
+function tidecaller(id: string): Combatant {
+  return armed({
+    id, name: 'Tidecaller', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0x3a9ab0, size: 20,
+    spells: ['cure'], goldReward: 26, xpReward: 28,
+    stats: s(60, 6, 12, 6, 18, 44),
+  }, ['holy'], 1);
+}
+
 type Ch2EncounterGroup = 'soldiers' | 'soldier_sprite' | 'crawlers' | 'sprites' | 'elite' | 'ch2_boss';
 
 export function makeChapter2Encounter(group: Ch2EncounterGroup): Combatant[] {
   switch (group) {
     case 'soldiers':       return [drownedSoldier('e0'), drownedSoldier('e1')];
-    case 'soldier_sprite': return [drownedSoldier('e0'), mireSprite('e1')];
+    case 'soldier_sprite': return [drownedSoldier('e0'), tidecaller('e1')];
     case 'crawlers':       return [tombCrawler('e0'), tombCrawler('e1')];
-    case 'sprites':        return [mireSprite('e0'), mireSprite('e1'), mireSprite('e2')];
-    case 'elite':          return [keepSentinel(), mireSprite('e1')];
+    case 'sprites':        return [mireSprite('e0'), tidecaller('e1'), mireSprite('e2')];
+    case 'elite':          return [keepSentinel(), tidecaller('e1')];
     case 'ch2_boss':       return [tideWarden()];
   }
 }
@@ -433,15 +444,27 @@ function ashbrand(): Combatant {
   }, ['ice'], 4);
 }
 
+// Ashen signature: fragile but detonates on death for fire AoE — mind the kill
+// order, and don't pop one next to a wounded hero.
+function livingCinder(id: string): Combatant {
+  return armed({
+    id, name: 'Living Cinder', side: 'enemy',
+    spriteKey: 'e_ember', color: 0xff5522, size: 18,
+    spells: [], goldReward: 20, xpReward: 22,
+    deathBurst: { element: 'fire', power: 30 },
+    stats: s(38, 14, 15, 4, 2),
+  }, ['ice'], 1);
+}
+
 type Ch3EncounterGroup = 'hounds' | 'hound_wraith' | 'golems' | 'wraiths' | 'elite' | 'ch3_boss';
 
 export function makeChapter3Encounter(group: Ch3EncounterGroup): Combatant[] {
   switch (group) {
     case 'hounds':       return [emberHound('e0'), emberHound('e1')];
     case 'hound_wraith': return [emberHound('e0'), cinderWraith('e1')];
-    case 'golems':       return [magmaGolem('e0'), magmaGolem('e1')];
-    case 'wraiths':      return [cinderWraith('e0'), cinderWraith('e1'), cinderWraith('e2')];
-    case 'elite':        return [pyreColossus(), emberHound('e1')];
+    case 'golems':       return [magmaGolem('e0'), livingCinder('e1')];
+    case 'wraiths':      return [cinderWraith('e0'), livingCinder('e1'), cinderWraith('e2')];
+    case 'elite':        return [pyreColossus(), livingCinder('e1')];
     case 'ch3_boss':     return [ashbrand()];
   }
 }
@@ -500,15 +523,28 @@ function prismSovereign(): Combatant {
   }, ['fire', 'holy'], 4);
 }
 
+// Crystal signature: shrugs off ice almost entirely — switch to fire/holy/phys
+// (its weaknesses) to break through, or your frost hexes fizzle. Paired with
+// Prism Sprite (weak to ice) it punishes blanket frost AoE from both ends.
+function wardPrism(id: string): Combatant {
+  return armed({
+    id, name: 'Ward Prism', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0x6affd0, size: 20,
+    spells: ['frost'], goldReward: 30, xpReward: 36,
+    wardElement: 'ice',
+    stats: s(84, 10, 14, 8, 20, 28),
+  }, ['fire', 'holy'], 1);
+}
+
 type Ch4EncounterGroup = 'wisps' | 'wisp_stalker' | 'stalkers' | 'prisms' | 'elite' | 'ch4_boss';
 
 export function makeChapter4Encounter(group: Ch4EncounterGroup): Combatant[] {
   switch (group) {
     case 'wisps':        return [crystalWisp('e0'), crystalWisp('e1')];
     case 'wisp_stalker': return [crystalWisp('e0'), caveStalker('e1')];
-    case 'stalkers':     return [caveStalker('e0'), caveStalker('e1')];
-    case 'prisms':       return [prismSprite('e0'), prismSprite('e1'), prismSprite('e2')];
-    case 'elite':        return [geodeWarden(), caveStalker('e1')];
+    case 'stalkers':     return [caveStalker('e0'), wardPrism('e1')];
+    case 'prisms':       return [prismSprite('e0'), wardPrism('e1'), prismSprite('e2')];
+    case 'elite':        return [geodeWarden(), wardPrism('e1')];
     case 'ch4_boss':     return [prismSovereign()];
   }
 }

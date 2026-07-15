@@ -30,6 +30,7 @@ function rnd(min: number, max: number): number {
 const CRIT_BASE = 0.08;
 const CRIT_MULT = 1.6;
 const WEAK_MULT = 1.5;
+const WARD_MULT = 0.3; // a warded element does only 30% damage to that enemy
 const BREAK_MULT = 1.5;
 const DEFEND_MP_GAIN = 2;
 // Ailments (see types.ts): burn/venom tick at end of round, chill slows.
@@ -603,6 +604,8 @@ export class Battle {
       crit = Math.random() < CRIT_BASE + this.bn.critBonus + (actor.gear?.critBonus ?? 0);
       if (crit) dmg *= CRIT_MULT;
     }
+    // Prism ward: this element barely scratches it — switch to another school.
+    if (target.wardElement && element !== 'none' && element === target.wardElement) dmg *= WARD_MULT;
     if (target.defending) dmg *= element === 'phys' ? 0.5 : 0.75;
     return { dmg: Math.max(1, Math.round(dmg)), crit, weak };
   }
@@ -676,6 +679,18 @@ export class Battle {
       t.stats.hp = Math.round(t.stats.maxHp * 0.4);
       events.push({ kind: 'info', text: `The Crystal flares — ${t.name} returns to the fight!`, targetId: t.id, amount: -t.stats.hp });
       return;
+    }
+    // Living Cinders and the like detonate as they die, hitting the whole party.
+    if (t.side === 'enemy' && t.deathBurst) {
+      const b = t.deathBurst;
+      t.deathBurst = undefined; // consume so it can never double-fire
+      events.push({ kind: 'info', text: `${t.name} bursts apart!`, actorId: t.id });
+      for (const p of this.living('party')) {
+        const hit = this.computeHit(t, p, b.power, b.element);
+        this.applyDamage(p, hit.dmg);
+        events.push({ kind: 'spell', text: `${p.name} is caught in the blast (${hit.dmg}).`, targetId: p.id, amount: hit.dmg, element: b.element, weak: hit.weak });
+        this.maybeKo(p, events);
+      }
     }
     events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id });
   }
