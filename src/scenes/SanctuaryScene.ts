@@ -168,6 +168,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private sells: ShopOption[] = [];
   private hintText?: Phaser.GameObjects.Text;
   private questMarkers = new Map<string, Phaser.GameObjects.Text>();
+  private storyMarkers = new Map<string, Phaser.GameObjects.Text>();
 
   constructor() {
     super('Sanctuary');
@@ -180,6 +181,7 @@ export class SanctuaryScene extends Phaser.Scene {
     this.unsubs = [];
     this.npcAt.clear();
     this.questMarkers.clear();
+    this.storyMarkers.clear();
     this.grid = MAP;
     // Phaser destroys the previous instance's display objects on shutdown,
     // but this class instance (and its fields) survives scene restarts —
@@ -233,6 +235,12 @@ export class SanctuaryScene extends Phaser.Scene {
           this.add.text(x + GAME.tile / 2, y + GAME.tile + 1, npc.name, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5' })).setOrigin(0.5, 0).setDepth(4);
           if (npc.questActive && npc.questId) {
             this.questMarkers.set(npc.questId, this.addBounceMarker(x + GAME.tile / 2, y - 4, '!', '#f0d36c'));
+          } else if (npc.scriptId && !hasFlag(`seen_${npc.scriptId}`)) {
+            // Unclaimed-quest "!" takes priority; this is the quieter nudge for
+            // optional story/world-building lines that have no quest attached
+            // (e.g. an NPC's _after2/_after3 follow-up), which otherwise had
+            // zero on-screen indicator once their one-time quest was done.
+            this.storyMarkers.set(npc.scriptId, this.addBounceMarker(x + GAME.tile / 2, y - 4, '•', '#6cf0c2'));
           }
         }
       }
@@ -465,6 +473,9 @@ export class SanctuaryScene extends Phaser.Scene {
   private openDialogue(scriptId: string, questId?: string) {
     this.state = 'busy';
     input.releaseAll();
+    setFlag(`seen_${scriptId}`);
+    this.storyMarkers.get(scriptId)?.destroy();
+    this.storyMarkers.delete(scriptId);
     this.scene.pause();
     this.scene.launch('Dialogue', {
       scriptId,
