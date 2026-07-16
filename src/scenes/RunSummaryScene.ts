@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { input } from '../game/input';
 import { getRun, returnToTown } from '../game/run';
+import { BOONS } from '../game/boons';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { track, chapterOfDepth } from '../game/analytics';
@@ -59,13 +60,20 @@ export class RunSummaryScene extends Phaser.Scene {
       ['Depth reached', `Stratum ${depth}`],
       ['Gold carried', `${run.gold}`],
       ['Gold lost', data.lostGold && data.lostGold > 0 ? `${data.lostGold}` : '0'],
-      ['Run boons', run.boons.length > 0 ? `${run.boons.length}` : 'none'],
     ];
     rows.forEach(([label, value], i) => {
-      const y = 116 + i * 28;
+      const y = 116 + i * 24;
       this.add.text(70, y, label, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 }));
       this.add.text(208, y - 1, value, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', strokeThickness: 2 }));
     });
+
+    // Actual boon names, not just a count — the whole point of a roguelite
+    // recap is seeing what you actually built this run.
+    const boonNames = run.boons.map((id) => BOONS[id]?.name ?? id);
+    this.add.text(70, 190, 'Boons collected', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 }));
+    this.add.text(70, 202, boonNames.length > 0 ? boonNames.join('  ·  ') : 'None this run', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: '#c9a8ff', strokeThickness: 2, wordWrap: { width: 400 },
+    }));
 
     this.add.text(70, 238, run.party.map((m) => `${m.name}  Lv ${m.level ?? 1}`).join('     '),
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a8d8ff', strokeThickness: 2 }));

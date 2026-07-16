@@ -324,7 +324,16 @@ export class BattleScene extends Phaser.Scene {
     const x = GAME.width - 26;
     const ACTIVE_SIZE = 42;
     const REST_SIZE = 18;
-    const label = this.add.text(x, 4, 'ORDER', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5, 0).setDepth(30);
+    // Momentum stacks are a battle-wide crit bonus (boons.ts), not tied to any
+    // one party member, so it rides along in the queue label instead of a
+    // per-character badge.
+    const momentum = this.battle.momentumInfo();
+    const showMomentum = momentum.active && momentum.stacks > 0;
+    const label = this.add.text(
+      x, 4,
+      showMomentum ? `ORDER ✦${momentum.stacks}` : 'ORDER',
+      sharpText({ fontFamily: FONT, fontSize: '7px', color: showMomentum ? '#f0d36c' : '#8a93b8', strokeThickness: 2 }),
+    ).setOrigin(0.5, 0).setDepth(30);
     this.turnChips.push(label);
     let cursorY = 16;
     upcoming.forEach((c, i) => {
@@ -1288,6 +1297,10 @@ export class BattleScene extends Phaser.Scene {
       row.hp.setColor(dead ? '#ff5a6a' : '#6cf0a0');
       row.mp.setText(c.stats.maxMp > 0 ? `MP ${mp}/${c.stats.maxMp}` : '');
       row.bg.setAlpha(dead ? 0.38 : 0.7);
+      // Guardian's Wrath (boons.ts): defending buffs the next action — glow
+      // the row gold, same accent used for the active-turn chip, while it's live.
+      const buffed = !dead && c.guardBuffed === true;
+      row.bg.setStrokeStyle(buffed ? 2 : 1, buffed ? 0xf0d36c : 0x2f3658, buffed ? 0.9 : 0.45);
       for (const a of AILMENT_ORDER) {
         row.ailments[a].setVisible(!dead && (c.ailments?.[a] ?? 0) > 0);
       }

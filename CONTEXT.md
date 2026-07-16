@@ -2,6 +2,40 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Surface the New Synergy Mechanics, Real Boon Names on the Run Recap
+
+Follow-up to the same day's boon-synergy pass: that work added Momentum
+(stacking crit from weakness hits) and Guardian's Wrath (defend buffs the
+next action) with zero player-visible feedback — mechanically real but
+invisible. Also flagged in passing: `RunSummaryScene` showed "Run boons: 3",
+a bare count, on a roguelite's end-of-run recap where players actually want
+to see what they built.
+
+Fixes:
+- `battle.ts`: added `Battle.momentumInfo()` (`{ active, stacks }`) — a
+  public accessor so the scene doesn't need to reach into the private
+  `momentumStacks` field.
+- `BattleScene.ts`: `renderQueue()`'s "ORDER" label now reads `ORDER ✦3` in
+  the same gold (`#f0d36c`) used for the active-turn chip whenever Momentum
+  is active and stacked; `refreshStatus()` gives each party row a gold
+  glowing border (`setStrokeStyle`) while `guardBuffed` is true, same accent,
+  so Guardian's Wrath reads as "this character is charged" at a glance.
+- `RunSummaryScene.ts`: replaced the boon-count row with a wrapped list of
+  actual boon names (`BOONS[id].name`), falling back to "None this run".
+  Tightened the stat-row spacing (28px -> 24px) to make room without
+  crowding the party-level line below.
+
+Verified live (headless Chrome, SwiftShader): forced `RunSummary` with 4
+boons active — names render on one line, no overlap with the party/hint
+text below; forced it again with zero boons — "None this run" renders
+clean. Forced a real elite `Battle` via `triggerEncounter`, set
+`guardBuffed = true` on Kael and `momentumStacks = 3` directly on the live
+`Battle` instance, called `refreshStatus()`/`renderQueue()` — screenshot
+confirms Kael's row gets the gold border and the queue label reads
+`ORDER ✦3`, both while Lyra/Mira's rows stay unstyled. No console/page
+errors (one benign 404, unrelated to game code — browser's default favicon
+request).
+
 ## 2026-07-16 (gameplay): Boon Synergies, Fairer Modifiers, Smarter Enemy AI
 
 Playtest ask: "improve gameplay considerably." Audited `battle.ts`/`boons.ts`/

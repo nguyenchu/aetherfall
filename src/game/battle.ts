@@ -114,6 +114,11 @@ export class Battle {
     return [...this.party, ...this.enemies];
   }
 
+  /** For UI: current Momentum stack count, and whether the boon is even active this run. */
+  momentumInfo(): { active: boolean; stacks: number } {
+    return { active: this.bn.hasMomentum, stacks: this.momentumStacks };
+  }
+
   byId(id: string): Combatant | undefined {
     return this.all().find((c) => c.id === id);
   }
