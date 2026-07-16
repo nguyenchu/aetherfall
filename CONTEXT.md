@@ -2,6 +2,50 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (npc-wander): Sanctuary NPCs Wander, and Face You When You Talk
+
+Playtest ask: Sanctuary's NPCs stood on one fixed tile forever, and had no
+acknowledgement of the player. Reworked `SanctuaryScene.ts`'s NPC model:
+
+- **Wandering.** Warden Eda, Scholar Voss, the Child, and the Stranger
+  (`Npc.wander: true`) now idle-step one tile every ~1-4s within a 3-tile
+  leash of their spawn point (`isWanderable`: not a wall/portal/the player's
+  tile/another NPC's tile, and within leash). The Merchant and the Crystal
+  stay put — you want a shop exactly where you left it. Each NPC's
+  shadow/sprite/label/quest-marker are now children of one `Container`
+  (`spawnNpc`/`LiveNpc`), so wandering is just tweening the container —
+  everything rides along automatically instead of needing separate position
+  syncing.
+- **Data model swap.** `npcAt: Map<string, Npc>` (static tile → def) replaced
+  by `liveNpcs: LiveNpc[]` (live position, tracked at commit-time like the
+  player's own `px`/`py` — updates the instant a move is decided, tween is
+  cosmetic). `liveNpcAt(x, y)` replaces the old map lookup everywhere
+  (movement-collision, `getNearbyAction`).
+- **"Better interaction":** talking to (or bumping) an NPC now calls
+  `faceNpcTowardPlayer` first — a left/right sprite flip based on the
+  player's position, since these are single-frame portrait sprites with no
+  back-view. Small, but means an NPC visibly turns to acknowledge you
+  instead of you talking to the back of someone facing away.
+
+**Verification note — a genuine test-harness gotcha, not a code issue:**
+headless Chromium's render loop in this environment is heavily throttled
+(~4fps measured via `game.loop.frame`), and `Scene.time.now` for a *paused*
+scene (Sanctuary auto-pauses itself for the now-11-line intro dialogue on a
+fresh save) correctly stays frozen at 0 — so several passive
+"wait N real seconds and check if NPCs moved" attempts kept catching
+Sanctuary mid-intro rather than actually roaming, showing no movement for
+reasons that had nothing to do with the wander logic. Resolved by
+verifying the algorithm directly instead of waiting on real time: called
+`sanctuaryScene.updateNpcWander(fakeAdvancedTime)` directly via
+`page.evaluate` — confirmed wandering NPCs correctly step, respect
+walls/portals/other-NPC/player collision and the 3-tile leash, and the
+Merchant never moves. Separately confirmed `faceNpcTowardPlayer` flips
+correctly for player-left/player-right and leaves facing unchanged when the
+player is directly above/below (no back sprite to flip to). `tsc`/
+`pnpm build` clean. Not confirmed: a real-time, un-forced observation of
+wandering during normal play — the logic is verified, but a real player
+watching it happen for 30+ seconds wasn't.
+
 ## 2026-07-16 (stranger-quest): The Stranger Gets a Real Quest, Not Just Flavor Text
 
 Third and last follow-up to the dialogue rewrite. The Stranger had zero

@@ -103,6 +103,25 @@ interface Npc {
   questActive?: boolean;
   /** Quest resolved by talking to this NPC while questActive is true. */
   questId?: string;
+  /** Roams a small area around its spawn tile instead of standing still.
+   *  Off for the Merchant/Crystal — you want those exactly where you left them. */
+  wander?: boolean;
+}
+
+/** A spawned Npc plus its live position/display state. Shadow, sprite, name
+ *  label, and any quest/story marker are children of one Container, so
+ *  wandering just means tweening the container — everything rides along. */
+interface LiveNpc {
+  def: Npc;
+  container: Phaser.GameObjects.Container;
+  img: Phaser.GameObjects.Image;
+  x: number;
+  y: number;
+  homeX: number;
+  homeY: number;
+  facing: 1 | -1;
+  moving: boolean;
+  nextMoveAt: number;
 }
 
 function npcs(): Record<string, Npc> {
@@ -114,17 +133,17 @@ function npcs(): Record<string, Npc> {
     K: {
       spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
-      questActive: isQuestActive('speak_eda'), questId: 'speak_eda',
+      questActive: isQuestActive('speak_eda'), questId: 'speak_eda', wander: true,
     },
     L: {
       spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
-      questActive: isQuestActive('learn_of_anchors'), questId: 'learn_of_anchors',
+      questActive: isQuestActive('learn_of_anchors'), questId: 'learn_of_anchors', wander: true,
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
-      questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip',
+      questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip', wander: true,
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
     // The Stranger appears after Ch1 in the northwest corner
@@ -139,6 +158,7 @@ function npcs(): Record<string, Npc> {
         // what makes the second quest ever fire at all.
         questActive: isQuestActive(ch4Done ? 'stranger_truth' : 'heed_the_stranger'),
         questId: ch4Done ? 'stranger_truth' : 'heed_the_stranger',
+        wander: true,
       },
     } : {}),
     // The Crystal itself — an Ascension prompt, once the anchors are restored.
@@ -161,7 +181,7 @@ interface NearbyAction {
  */
 export class SanctuaryScene extends Phaser.Scene {
   private grid: string[] = [];
-  private npcAt = new Map<string, Npc>();
+  private liveNpcs: LiveNpc[] = [];
   private px = 0;
   private py = 0;
   private player!: Phaser.GameObjects.Image;
@@ -190,7 +210,7 @@ export class SanctuaryScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.state = 'roam';
     this.unsubs = [];
-    this.npcAt.clear();
+    this.liveNpcs = [];
     this.questMarkers.clear();
     this.storyMarkers.clear();
     this.grid = MAP;
@@ -239,23 +259,47 @@ export class SanctuaryScene extends Phaser.Scene {
           this.py = r;
         }
         const npc = npcDefs[ch];
-        if (npc) {
-          this.npcAt.set(`${c},${r}`, npc);
-          this.add.ellipse(x + GAME.tile / 2, y + GAME.tile / 2 + 7, 14, 5, 0x000000, 0.34).setDepth(3);
-          this.add.image(x + GAME.tile / 2, y + GAME.tile / 2, npc.spriteKey).setScale(npc.scale).setDepth(4);
-          this.add.text(x + GAME.tile / 2, y + GAME.tile + 1, npc.name, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5' })).setOrigin(0.5, 0).setDepth(4);
-          if (npc.questActive && npc.questId) {
-            this.questMarkers.set(npc.questId, this.addBounceMarker(x + GAME.tile / 2, y - 4, '!', '#f0d36c'));
-          } else if (npc.scriptId && !hasFlag(`seen_${npc.scriptId}`)) {
-            // Unclaimed-quest "!" takes priority; this is the quieter nudge for
-            // optional story/world-building lines that have no quest attached
-            // (e.g. an NPC's _after2/_after3 follow-up), which otherwise had
-            // zero on-screen indicator once their one-time quest was done.
-            this.storyMarkers.set(npc.scriptId, this.addBounceMarker(x + GAME.tile / 2, y - 4, '•', '#6cf0c2'));
-          }
-        }
+        if (npc) this.spawnNpc(npc, c, r);
       }
     }
+  }
+
+  /** Builds one NPC's shadow/sprite/label/marker as children of a single
+   *  Container, positioned at tile (c, r). Wandering just tweens the
+   *  container afterward — everything rides along with it. */
+  private spawnNpc(npc: Npc, c: number, r: number) {
+    const container = this.add.container(c * GAME.tile + GAME.tile / 2, r * GAME.tile + GAME.tile / 2).setDepth(4);
+    container.add(this.add.ellipse(0, 7, 14, 5, 0x000000, 0.34));
+    const img = this.add.image(0, 0, npc.spriteKey).setScale(npc.scale);
+    container.add(img);
+    container.add(this.add.text(0, GAME.tile / 2 + 1, npc.name, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#dfe4f5' })).setOrigin(0.5, 0));
+
+    if (npc.questActive && npc.questId) {
+      const marker = this.addNpcMarker(container, '!', '#f0d36c');
+      this.questMarkers.set(npc.questId, marker);
+    } else if (npc.scriptId && !hasFlag(`seen_${npc.scriptId}`)) {
+      // Unclaimed-quest "!" takes priority; this is the quieter nudge for
+      // optional story/world-building lines that have no quest attached
+      // (e.g. an NPC's _after2/_after3 follow-up), which otherwise had
+      // zero on-screen indicator once their one-time quest was done.
+      const marker = this.addNpcMarker(container, '•', '#6cf0c2');
+      this.storyMarkers.set(npc.scriptId, marker);
+    }
+
+    this.liveNpcs.push({
+      def: npc, container, img, x: c, y: r, homeX: c, homeY: r,
+      facing: 1, moving: false, nextMoveAt: this.time.now + Phaser.Math.Between(1000, 3000),
+    });
+  }
+
+  /** A small bouncing glyph parented to an NPC's container (local coords —
+   *  moves with the NPC automatically). See addBounceMarker for the
+   *  standalone, absolute-position version used for the next-objective marker. */
+  private addNpcMarker(container: Phaser.GameObjects.Container, glyph: string, color: string): Phaser.GameObjects.Text {
+    const marker = this.add.text(0, -GAME.tile / 2 - 4, glyph, sharpText({ fontFamily: FONT, fontSize: '11px', color })).setOrigin(0.5);
+    container.add(marker);
+    this.tweens.add({ targets: marker, y: marker.y - 4, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    return marker;
   }
 
   private spawnPlayer() {
@@ -338,6 +382,7 @@ export class SanctuaryScene extends Phaser.Scene {
   update(time: number) {
     if (this.state !== 'roam') return;
     this.updateHint();
+    this.updateNpcWander(time);
     if (time < this.moveLockedUntil) return;
     const d = input.dir();
     if (d.x === 0 && d.y === 0) return;
@@ -361,10 +406,10 @@ export class SanctuaryScene extends Phaser.Scene {
       return;
     }
 
-    const npc = this.npcAt.get(`${nx},${ny}`);
-    if (npc && npc.name) {
+    const live = this.liveNpcAt(nx, ny);
+    if (live) {
       this.moveLockedUntil = time + 220;
-      this.interact(npc);
+      this.interact(live);
       return;
     }
     if (ch === '#' || ch === undefined) {
@@ -376,6 +421,68 @@ export class SanctuaryScene extends Phaser.Scene {
     this.facing = this.facingFromDir(d.x, d.y);
     this.walkPlayerTo(this.px * GAME.tile + GAME.tile / 2, this.py * GAME.tile + GAME.tile / 2);
     this.moveLockedUntil = time + 120;
+  }
+
+  private liveNpcAt(x: number, y: number): LiveNpc | undefined {
+    return this.liveNpcs.find((n) => n.x === x && n.y === y);
+  }
+
+  /** True if a wandering NPC may step onto (x, y) right now: in-bounds
+   *  floor, not a wall/portal, not the player's tile, not another NPC's
+   *  tile, and within a short leash of home so they stay findable. */
+  private isWanderable(live: LiveNpc, x: number, y: number): boolean {
+    const ch = this.grid[y]?.[x];
+    if (!ch || ch === '#' || ch === 'D') return false;
+    if (x === this.px && y === this.py) return false;
+    if (this.liveNpcAt(x, y)) return false;
+    if (this.ch2PortalPos && x === this.ch2PortalPos.x && y === this.ch2PortalPos.y) return false;
+    if (this.ch3PortalPos && x === this.ch3PortalPos.x && y === this.ch3PortalPos.y) return false;
+    if (this.ch4PortalPos && x === this.ch4PortalPos.x && y === this.ch4PortalPos.y) return false;
+    const leash = 3;
+    return Math.max(Math.abs(x - live.homeX), Math.abs(y - live.homeY)) <= leash;
+  }
+
+  /** Idle wander for NPCs marked `wander: true` — occasionally steps one
+   *  tile in a random open direction, otherwise just waits. Ticks only
+   *  while roaming (dialogue/shop already pause or skip update() entirely). */
+  private updateNpcWander(time: number) {
+    for (const live of this.liveNpcs) {
+      if (!live.def.wander || live.moving || time < live.nextMoveAt) continue;
+      if (Math.random() < 0.4) {
+        live.nextMoveAt = time + Phaser.Math.Between(1200, 2600);
+        continue;
+      }
+      const dirs = Phaser.Utils.Array.Shuffle([{ x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }]);
+      let moved = false;
+      for (const d of dirs) {
+        const nx = live.x + d.x, ny = live.y + d.y;
+        if (!this.isWanderable(live, nx, ny)) continue;
+        if (d.x !== 0) { live.facing = d.x > 0 ? 1 : -1; live.img.setFlipX(live.facing === -1); }
+        live.x = nx;
+        live.y = ny;
+        live.moving = true;
+        this.tweens.add({
+          targets: live.container,
+          x: nx * GAME.tile + GAME.tile / 2,
+          y: ny * GAME.tile + GAME.tile / 2,
+          duration: 280,
+          ease: 'Linear',
+          onComplete: () => { live.moving = false; },
+        });
+        moved = true;
+        break;
+      }
+      live.nextMoveAt = time + (moved ? Phaser.Math.Between(2200, 4200) : Phaser.Math.Between(1000, 2000));
+    }
+  }
+
+  /** NPCs only have one sprite frame (no back-view), so "facing" the player
+   *  is just a left/right flip — a small acknowledgement when you walk up. */
+  private faceNpcTowardPlayer(live: LiveNpc) {
+    if (this.px === live.x) return;
+    const faceLeft = this.px < live.x;
+    live.facing = faceLeft ? -1 : 1;
+    live.img.setFlipX(faceLeft);
   }
 
   private updateHint() {
@@ -411,12 +518,12 @@ export class SanctuaryScene extends Phaser.Scene {
         return this.portalAction(() => this.descendToChapter4());
       }
 
-      const npc = this.npcAt.get(`${nx},${ny}`);
-      if (npc) {
-        const verb = npc.kind === 'vendor' ? 'shop' : npc.kind === 'ascend' ? 'ascend' : 'talk';
+      const live = this.liveNpcAt(nx, ny);
+      if (live) {
+        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'ascend' ? 'ascend' : 'talk';
         return {
           label: `Z / tap  ·  ${verb}`,
-          run: () => this.interact(npc),
+          run: () => this.interact(live),
         };
       }
     }
@@ -475,7 +582,9 @@ export class SanctuaryScene extends Phaser.Scene {
     this.player.setFlipX(this.facing === 'left');
   }
 
-  private interact(npc: Npc) {
+  private interact(live: LiveNpc) {
+    this.faceNpcTowardPlayer(live);
+    const npc = live.def;
     if (npc.kind === 'vendor') this.openShop();
     else if (npc.kind === 'ascend') this.openAscend();
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
