@@ -2,6 +2,73 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (story): Inotia 3 Pass — Ambient Banter, Deeper Quests, Tighter Plot, Merchant Humor
+
+Ask: "hva forbedrer vi nå? jeg lurer på om vi bør ha en slags historie som
+gir mening. tenk inotia 3" (what do we improve now, wondering if we should
+have a story that makes sense, think Inotia 3). Diagnosis: the previous
+narrative rewrite (character voices, backstory payoffs) was solid, but the
+party was completely silent *outside* scripted story beats — Inotia 3's
+actual strength isn't its plot, it's that the party never really goes
+quiet. Picked all 4 proposed directions rather than one.
+
+**1. Ambient exploration banter (new system).** `game/banter.ts`: pools of
+short multi-line exchanges (`BanterBeat`, 1-3 lines each) tagged by
+character voice, with optional `minFlag` gating so later banter can
+reference events (Toren's blade, an anchor restored) without being
+available before they happen. `pickBanter()` avoids repeating the last beat
+shown. `ui/banterToast.ts`: a small non-blocking speech toast (bottom-
+center, ~240x40px) that cycles through a beat's lines and fades — unlike
+DialogueScene it never pauses input or movement. Wired into both
+`DescentScene.ts` and `SanctuaryScene.ts` the same way the existing random-
+encounter roll works: a per-step counter + a small chance once a step floor
+is cleared (`resolveTile()` for Descent, the normal-movement branch of
+`update()` for Sanctuary), skipped whenever an encounter/portal/NPC-
+interact already consumed that step. ~12 descent beats, ~8 Sanctuary beats,
+mixing serious character moments with lighter banter.
+
+**2. Deeper side-quest chains.** Eda/Voss/Child previously had one paid
+"talk once" quest each with a hard stop (the story kept escalating in
+their dialogue tiers, but the quest system never paid out again). Copied
+the Stranger's existing `heed_the_stranger` -> `stranger_truth` pattern
+(dynamic `questId` switch on `ch4Done`) onto all three: `speak_eda` ->
+`eda_watchline`, `learn_of_anchors` -> `voss_hollow`, `find_pip` ->
+`pip_digging`, all unlocking at `ch4_complete` (`quests.ts`). Each pays off
+with a real twist appended to their existing `_after4` scripts
+(`dialogue.ts`): Eda admits she signed off on Kael's watch-line assignment
+and still isn't sure it was worth it; Voss finally translates "Twisting
+Hollow" as a warning, not a place-name — Ashenveil was deliberately chosen
+as the weakest anchor, not stumbled onto; Pip digs up a tarnished
+watch-sigil by Sanctuary's own well, matching the marks from the grove and
+the Ch4 casing — the same threat has already reached home.
+
+**3. Tightened the main throughline.** The "Twisting Hollow" line
+(`npc_scholar_after3`) was a real reveal that never got referenced again —
+a dropped thread, which was likely a chunk of what "doesn't make sense"
+was pointing at. Fixed via Voss's ch4 twist above, plus one new `ending`
+line (Mira, right before the "eight anchors remain" beat) acknowledging
+the well-sigil discovery specifically — so the endgame stakes ("it knows
+we're coming") are earned by something concrete in Sanctuary, not just
+told.
+
+**4. Light self-aware humor.** `MERCHANT_QUIPS` in `banter.ts` — six dry
+one-liners, one picked per shop visit (`SanctuaryScene.openShop()`) and
+rendered under the "MERCHANT" header, e.g. "No refunds. Not even if the
+sword turns out to be cursed. Especially not then." Kept out of the
+banter pools proper (which stay mostly in-voice) since the merchant is the
+one character who's always been more of a fixture than a person.
+
+Verified live (headless Chrome): forced both banter systems via the real
+`pickBanter`/`showBanterToast` call path — screenshots confirm clean,
+non-overlapping toasts in both Descent (over a live dungeon, doesn't clip
+the touch d-pad) and Sanctuary (full hub map visible, "the Anchor" NPC
+labeled correctly per the earlier rename); Merchant quip renders correctly
+under the shop header; all three new quest ids resolve and their
+`ch4Done`-gated `questId` switch confirmed live on Eda's actual `LiveNpc`
+state; new dialogue script text read back correct with no truncation or
+escaping bugs. `tsc --noEmit` clean throughout. No console/page errors
+beyond one benign 404 (browser's default favicon request, unrelated).
+
 ## 2026-07-16 (story): "The Crystal" Didn't Make Sense — Renamed to "the Anchor"
 
 Ask: "fjern The Crystal. det gir ikke noe mening" (remove The Crystal, it

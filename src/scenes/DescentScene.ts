@@ -10,6 +10,8 @@ import { track, chapterOfDepth } from '../game/analytics';
 import { paintPixelGrid } from '../art/sprites';
 import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 import { DescentHudScene } from './DescentHudScene';
+import { pickBanter, DESCENT_BANTER } from '../game/banter';
+import { showBanterToast } from '../ui/banterToast';
 
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
@@ -19,6 +21,10 @@ const RANDOM_BATTLE_MIN_STEPS = 7;
 // spells even at a reasonable average rate, which reads as "broken" rather
 // than "unlucky". Force an encounter if one hasn't landed by this many steps.
 const RANDOM_BATTLE_MAX_STEPS = 26;
+// Ambient party banter (see game/banter.ts): occasional, never forced — a
+// dry spell just means a quieter walk, unlike the battle bad-luck floor above.
+const BANTER_MIN_STEPS = 18;
+const BANTER_CHANCE = 0.12;
 // Extra zoom on top of renderScale so the camera has room to actually pan —
 // at renderScale alone every hand-authored map already fits the viewport, so
 // follow+bounds would have nothing to scroll. 1.5x keeps renderScale*1.5 an
@@ -52,6 +58,7 @@ export class DescentScene extends Phaser.Scene {
   private moveLockedUntil = 0;
   private pendingEncounterKey: string | null = null;
   private randomBattleSteps = 0;
+  private banterSteps = 0;
   private unsubs: (() => void)[] = [];
   // Fixed-screen HUD (gold/party/boons/hint) — a separate scene with its own
   // plain-zoom camera, so it never moves or rescales when this scene's own
@@ -434,6 +441,16 @@ export class DescentScene extends Phaser.Scene {
     }
 
     this.maybeTriggerRandomEncounter(ch);
+    if (!this.busy) this.maybeTriggerBanter();
+  }
+
+  private maybeTriggerBanter() {
+    this.banterSteps++;
+    if (this.banterSteps < BANTER_MIN_STEPS) return;
+    if (Math.random() >= BANTER_CHANCE) return;
+    this.banterSteps = 0;
+    const beat = pickBanter(DESCENT_BANTER);
+    if (beat) showBanterToast(this.hud, beat.lines);
   }
 
   private triggerEncounter(tileKey: string, isBoss: boolean, isElite: boolean) {

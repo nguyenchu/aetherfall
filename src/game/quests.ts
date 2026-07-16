@@ -77,6 +77,27 @@ export const QUESTS: QuestDef[] = [
     unlockFlag: 'ch4_complete',
     rewards: { gold: 40, equipment: ['watchers_ward'] },
   },
+  {
+    id: 'eda_watchline',
+    title: 'Eda\'s Old Command',
+    text: 'Warden Eda served with Kael\'s watch-line years ago. Ask her what she remembers before it\'s too late to ask.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 35, items: { tonic: 1 } },
+  },
+  {
+    id: 'voss_hollow',
+    title: 'The Grove\'s Old Name',
+    text: 'Scholar Voss finally translated the old name for Ashenveil\'s grove. Hear what it means.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 35, items: { warden_sigils: 1 } },
+  },
+  {
+    id: 'pip_digging',
+    title: 'What Pip Found',
+    text: 'Pip dug something up by the old well. The child wants you to see it.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 25, items: { potion: 1 } },
+  },
 ];
 
 export function questRewardText(q: QuestDef): string {

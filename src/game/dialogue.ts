@@ -163,6 +163,7 @@ export const SCRIPTS: Record<string, Script> = {
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Toren\'s blade is with me now. However this ends, that\'s one name I get to remember properly.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I used to think restoring anchors was about not failing again. Now I think it\'s about everyone still ahead of us who hasn\'t failed yet.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens kept faith for a thousand years without knowing why. Now we know. That\'s not nothing.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Whatever left that sigil by our well didn\'t need to reach us. It could have. That\'s the part that doesn\'t let me sleep.' },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Let them.' },
     { text: '— The story continues in a future update —', color: NARRATOR },
@@ -208,10 +209,14 @@ export const SCRIPTS: Record<string, Script> = {
   npc_keeper_after4: [
     { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Four anchors. The scouts who go near the deep caverns don\'t come back the same — quieter, like they heard something.' },
     { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I served with Kael\'s watch-line, years back. If pieces of it are still turning up this far from where they fell, whatever\'s out there isn\'t finished with them. Watch yourselves.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I put my name to that assignment. Eight names on a roster, and I signed off on all of them.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Kael came back. I told myself that meant it was worth it. I don\'t know if I believe that anymore — but I\'m glad it was him.' },
   ],
   npc_scholar_after4: [
     { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Four anchors restored, and the old texts agree on one thing now: the anchors aren\'t just lamps. They\'re a seal.' },
     { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Every one we fix pushes the Hollow back down. And every one we fix, it pushes harder.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'I finally translated that old name properly. "Twisting Hollow" isn\'t a place-name. It\'s a warning, carved by whoever built the original seal.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Ashenveil was the weakest anchor of the twelve. Whoever is doing this didn\'t stumble onto it first. They chose it.' },
   ],
   npc_stranger_after4: [
     { speaker: '???', color: 0x8a93b8, text: 'Four now. It felt that one — I saw it flinch, if a thing like that can flinch.' },
@@ -220,6 +225,9 @@ export const SCRIPTS: Record<string, Script> = {
   npc_child_after4: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'Four stars now. I drew them on my wall so I don\'t forget which ones are yours.' },
     { speaker: 'Child', color: 0x6cf0c2, text: 'Mum said something\'s digging under the city at night. Is that the thing you\'re fighting?' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Pip dug something up by the old well last night. I didn\'t touch it — it felt cold, like the stuff you bring back from the anchors.' },
+    { text: 'Under a flat stone, wrapped in cloth: a small, tarnished watch-sigil — the same mark from the grove, and from the casing in the depths.', color: NARRATOR },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Is that bad? You look like it\'s bad.' },
   ],
 };
 

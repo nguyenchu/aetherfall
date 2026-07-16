@@ -24,11 +24,17 @@ import {
 } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
 import { showQuestToast } from '../ui/questToast';
+import { showBanterToast } from '../ui/banterToast';
+import { pickBanter, SANCTUARY_BANTER, MERCHANT_QUIPS } from '../game/banter';
 import { tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 115;
+// Ambient party banter (see game/banter.ts) — same idea as DescentScene's,
+// tuned a little rarer since Sanctuary is a small hub you cross often.
+const BANTER_MIN_STEPS = 22;
+const BANTER_CHANCE = 0.1;
 type Facing = 'down' | 'up' | 'left' | 'right';
 
 // Merchant gear stock, unlocked by story flags. Found gear never appears here.
@@ -133,17 +139,28 @@ function npcs(): Record<string, Npc> {
     K: {
       spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
-      questActive: isQuestActive('speak_eda'), questId: 'speak_eda', wander: true,
+      // eda_watchline is the ch4 payoff to her "I served with Kael's
+      // watch-line" hint — same one-off-then-chained pattern as the Stranger.
+      questActive: isQuestActive(ch4Done ? 'eda_watchline' : 'speak_eda'),
+      questId: ch4Done ? 'eda_watchline' : 'speak_eda',
+      wander: true,
     },
     L: {
       spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
-      questActive: isQuestActive('learn_of_anchors'), questId: 'learn_of_anchors', wander: true,
+      // voss_hollow is the ch4 payoff to the "Twisting Hollow" reveal from
+      // npc_scholar_after3.
+      questActive: isQuestActive(ch4Done ? 'voss_hollow' : 'learn_of_anchors'),
+      questId: ch4Done ? 'voss_hollow' : 'learn_of_anchors',
+      wander: true,
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
-      questActive: ch1Done && isQuestActive('find_pip'), questId: 'find_pip', wander: true,
+      // pip_digging is the ch4 payoff — the sigil Pip digs up by the well.
+      questActive: ch1Done && isQuestActive(ch4Done ? 'pip_digging' : 'find_pip'),
+      questId: ch4Done ? 'pip_digging' : 'find_pip',
+      wander: true,
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
     // The Stranger appears after Ch1 in the northwest corner
@@ -190,9 +207,11 @@ export class SanctuaryScene extends Phaser.Scene {
   private walkFrame = 0;
   private facing: Facing = 'down';
   private moveLockedUntil = 0;
+  private banterSteps = 0;
   private state: State = 'roam';
   private unsubs: (() => void)[] = [];
   private shopBox?: Phaser.GameObjects.Container;
+  private merchantQuip = '';
   private shopColumn: 'buy' | 'sell' = 'buy';
   private shopSel = { buy: 0, sell: 0 };
   private shopScroll = { buy: 0, sell: 0 };
@@ -422,6 +441,16 @@ export class SanctuaryScene extends Phaser.Scene {
     this.facing = this.facingFromDir(d.x, d.y);
     this.walkPlayerTo(this.px * GAME.tile + GAME.tile / 2, this.py * GAME.tile + GAME.tile / 2);
     this.moveLockedUntil = time + 120;
+    this.maybeTriggerBanter();
+  }
+
+  private maybeTriggerBanter() {
+    this.banterSteps++;
+    if (this.banterSteps < BANTER_MIN_STEPS) return;
+    if (Math.random() >= BANTER_CHANCE) return;
+    this.banterSteps = 0;
+    const beat = pickBanter(SANCTUARY_BANTER);
+    if (beat) showBanterToast(this, beat.lines);
   }
 
   private liveNpcAt(x: number, y: number): LiveNpc | undefined {
@@ -797,6 +826,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private openShop() {
     this.state = 'shop';
+    this.merchantQuip = MERCHANT_QUIPS[Math.floor(Math.random() * MERCHANT_QUIPS.length)];
     this.buildShopOptions();
     this.shopColumn = 'buy';
     this.shopSel = { buy: 0, sell: 0 };
@@ -820,6 +850,7 @@ export class SanctuaryScene extends Phaser.Scene {
     box.add(this.add.rectangle(20, 22, 600, 316, 0x0d1024, 0.98).setOrigin(0, 0).setStrokeStyle(1, COLORS.wall));
     box.add(this.add.text(34, 30, 'MERCHANT', sharpText({ fontFamily: FONT, fontSize: '13px', color: '#f0d36c' })));
     box.add(this.add.text(150, 34, `Gold: ${getRun().gold}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
+    box.add(this.add.text(34, 44, this.merchantQuip, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
 
     this.renderShopColumn(box, 'buy', 32);
     this.renderShopColumn(box, 'sell', 320);
