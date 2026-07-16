@@ -10,6 +10,7 @@ import { hasFlag } from './run';
 export interface BanterLine {
   speaker: string;
   color: number;
+  portrait: string;
   text: string;
 }
 
@@ -21,100 +22,102 @@ export interface BanterBeat {
   minFlag?: string;
 }
 
-const KAEL = 0x6cf0c2;
-const LYRA = 0x8a6cf0;
-const MIRA = 0xf0d36c;
+// Same portrait_* texture keys DialogueScene/BattleScene/GameMenuScene
+// already use — banter is just another place these three talk.
+const KAEL = { speaker: 'Kael', color: 0x6cf0c2, portrait: 'portrait_kael' };
+const LYRA = { speaker: 'Lyra', color: 0x8a6cf0, portrait: 'portrait_lyra' };
+const MIRA = { speaker: 'Mira', color: 0xf0d36c, portrait: 'portrait_mira' };
 
 export const DESCENT_BANTER: BanterBeat[] = [
   { id: 'd_chest_teeth', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'Another chest guarded by something with too many teeth.' },
-    { speaker: 'Lyra', color: LYRA, text: 'At some point I\'d like a chest that\'s just a chest.' },
+    { ...KAEL, text: 'Another chest guarded by something with too many teeth.' },
+    { ...LYRA, text: 'At some point I\'d like a chest that\'s just a chest.' },
   ] },
   { id: 'd_protocol', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'Warden protocol says announce the enemy before engaging.' },
-    { speaker: 'Lyra', color: LYRA, text: 'You never do that.' },
-    { speaker: 'Mira', color: MIRA, text: 'Protocol also says be alive afterward. I prioritize.' },
+    { ...MIRA, text: 'Warden protocol says announce the enemy before engaging.' },
+    { ...LYRA, text: 'You never do that.' },
+    { ...MIRA, text: 'Protocol also says be alive afterward. I prioritize.' },
   ] },
   { id: 'd_sigil_check', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'You\'ve checked that same sigil twice today.' },
-    { speaker: 'Kael', color: KAEL, text: 'It\'s a big sigil.' },
-    { speaker: 'Lyra', color: LYRA, text: 'It\'s the same size it was an hour ago.' },
+    { ...LYRA, text: 'You\'ve checked that same sigil twice today.' },
+    { ...KAEL, text: 'It\'s a big sigil.' },
+    { ...LYRA, text: 'It\'s the same size it was an hour ago.' },
   ] },
   { id: 'd_names', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'Who names these places? "Ashenveil." "Sunken City." Nobody ever calls anywhere "Nice Meadow."' },
-    { speaker: 'Mira', color: MIRA, text: 'Would you trust a dungeon called Nice Meadow?' },
-    { speaker: 'Lyra', color: LYRA, text: '...no. Fair.' },
+    { ...LYRA, text: 'Who names these places? "Ashenveil." "Sunken City." Nobody ever calls anywhere "Nice Meadow."' },
+    { ...MIRA, text: 'Would you trust a dungeon called Nice Meadow?' },
+    { ...LYRA, text: '...no. Fair.' },
   ] },
   { id: 'd_spike_traps', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'Whoever designed these ruins had a real thing for spike traps.' },
-    { speaker: 'Lyra', color: LYRA, text: 'Or a grudge.' },
-    { speaker: 'Kael', color: KAEL, text: 'Or both. I\'ve met people like that.' },
+    { ...KAEL, text: 'Whoever designed these ruins had a real thing for spike traps.' },
+    { ...LYRA, text: 'Or a grudge.' },
+    { ...KAEL, text: 'Or both. I\'ve met people like that.' },
   ] },
   { id: 'd_normal', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'I keep waiting for this to feel normal. Anchors, Aether, the whole dying-world thing.' },
-    { speaker: 'Kael', color: KAEL, text: 'Don\'t. The day it feels normal is the day we stop noticing what\'s wrong.' },
+    { ...LYRA, text: 'I keep waiting for this to feel normal. Anchors, Aether, the whole dying-world thing.' },
+    { ...KAEL, text: 'Don\'t. The day it feels normal is the day we stop noticing what\'s wrong.' },
   ] },
   { id: 'd_left_side', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'You favor your left side when you fight. Old injury?' },
-    { speaker: 'Kael', color: KAEL, text: 'Old habit. Left\'s the side that still listens to me.' },
+    { ...MIRA, text: 'You favor your left side when you fight. Old injury?' },
+    { ...KAEL, text: 'Old habit. Left\'s the side that still listens to me.' },
   ] },
   { id: 'd_drink', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'If we ever clear one of these without a single scratch, I\'m buying everyone a drink.' },
-    { speaker: 'Lyra', color: LYRA, text: 'You\'ve said that every dungeon.' },
-    { speaker: 'Kael', color: KAEL, text: 'I\'m an optimist.' },
+    { ...KAEL, text: 'If we ever clear one of these without a single scratch, I\'m buying everyone a drink.' },
+    { ...LYRA, text: 'You\'ve said that every dungeon.' },
+    { ...KAEL, text: 'I\'m an optimist.' },
   ] },
   { id: 'd_ch1_anchor', minFlag: 'ch1_complete', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'First one\'s done. Doesn\'t get any less strange, watching light come back into a dead place.' },
-    { speaker: 'Lyra', color: LYRA, text: 'Get used to it. We\'ve got eleven more.' },
+    { ...MIRA, text: 'First one\'s done. Doesn\'t get any less strange, watching light come back into a dead place.' },
+    { ...LYRA, text: 'Get used to it. We\'ve got eleven more.' },
   ] },
   { id: 'd_torens_blade', minFlag: 'ch2_complete', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'Still not used to the weight of it.' },
-    { speaker: 'Lyra', color: LYRA, text: 'It\'s a sword, Kael.' },
-    { speaker: 'Kael', color: KAEL, text: 'It\'s his sword.' },
+    { ...KAEL, text: 'Still not used to the weight of it.' },
+    { ...LYRA, text: 'It\'s a sword, Kael.' },
+    { ...KAEL, text: 'It\'s his sword.' },
   ] },
   { id: 'd_ashbrand_oath', minFlag: 'ch3_complete', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'Ashbrand held an oath a thousand years and still came back from it. That\'s what the Wardens are built on.' },
-    { speaker: 'Kael', color: KAEL, text: 'Or the kind of faith that gets you buried under a mountain.' },
-    { speaker: 'Mira', color: MIRA, text: 'Sometimes both.' },
+    { ...MIRA, text: 'Ashbrand held an oath a thousand years and still came back from it. That\'s what the Wardens are built on.' },
+    { ...KAEL, text: 'Or the kind of faith that gets you buried under a mountain.' },
+    { ...MIRA, text: 'Sometimes both.' },
   ] },
   { id: 'd_ch4_knows', minFlag: 'ch4_complete', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'Four now. It knows we\'re coming.' },
-    { speaker: 'Kael', color: KAEL, text: 'Good. I\'d rather it worry than us.' },
+    { ...LYRA, text: 'Four now. It knows we\'re coming.' },
+    { ...KAEL, text: 'Good. I\'d rather it worry than us.' },
   ] },
 ];
 
 export const SANCTUARY_BANTER: BanterBeat[] = [
   { id: 's_quieter', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'Sanctuary\'s quieter every time we come back. I used to think that was peace.' },
-    { speaker: 'Lyra', color: LYRA, text: 'Now I just think it\'s fewer people.' },
+    { ...LYRA, text: 'Sanctuary\'s quieter every time we come back. I used to think that was peace.' },
+    { ...LYRA, text: 'Now I just think it\'s fewer people.' },
   ] },
   { id: 's_prices', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'The merchant marked their prices up again.' },
-    { speaker: 'Mira', color: MIRA, text: 'Everything\'s scarcer. Even patience, apparently.' },
+    { ...KAEL, text: 'The merchant marked their prices up again.' },
+    { ...MIRA, text: 'Everything\'s scarcer. Even patience, apparently.' },
   ] },
   { id: 's_eda_sleep', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'Warden Eda\'s been awake longer than either of us have been alive. I don\'t know when she sleeps.' },
-    { speaker: 'Lyra', color: LYRA, text: 'Maybe Wardens don\'t.' },
-    { speaker: 'Mira', color: MIRA, text: 'We do. We\'re just bad at it.' },
+    { ...MIRA, text: 'Warden Eda\'s been awake longer than either of us have been alive. I don\'t know when she sleeps.' },
+    { ...LYRA, text: 'Maybe Wardens don\'t.' },
+    { ...MIRA, text: 'We do. We\'re just bad at it.' },
   ] },
   { id: 's_pip_back', minFlag: 'ch1_complete', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'The kid\'s dog is back. Small good things count too.' },
-    { speaker: 'Kael', color: KAEL, text: 'They count double, this year.' },
+    { ...LYRA, text: 'The kid\'s dog is back. Small good things count too.' },
+    { ...KAEL, text: 'They count double, this year.' },
   ] },
   { id: 's_voss_books', lines: [
-    { speaker: 'Kael', color: KAEL, text: 'Scholar Voss has read more books than I\'ve had meals.' },
-    { speaker: 'Lyra', color: LYRA, text: 'That\'s not a high bar, Kael.' },
+    { ...KAEL, text: 'Scholar Voss has read more books than I\'ve had meals.' },
+    { ...LYRA, text: 'That\'s not a high bar, Kael.' },
   ] },
   { id: 's_four_stars', minFlag: 'ch4_complete', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'Four stars on that kid\'s wall now. Did you see?' },
-    { speaker: 'Kael', color: KAEL, text: 'I saw. Made the whole thing feel a little less abstract.' },
+    { ...MIRA, text: 'Four stars on that kid\'s wall now. Did you see?' },
+    { ...KAEL, text: 'I saw. Made the whole thing feel a little less abstract.' },
   ] },
   { id: 's_stranger_riddles', lines: [
-    { speaker: 'Lyra', color: LYRA, text: 'Sometimes I think the Stranger just likes being cryptic. Nobody needs to talk in riddles that much.' },
-    { speaker: 'Kael', color: KAEL, text: 'Maybe it\'s the only voice they\'ve got left to practice with.' },
+    { ...LYRA, text: 'Sometimes I think the Stranger just likes being cryptic. Nobody needs to talk in riddles that much.' },
+    { ...KAEL, text: 'Maybe it\'s the only voice they\'ve got left to practice with.' },
   ] },
   { id: 's_faith', lines: [
-    { speaker: 'Mira', color: MIRA, text: 'This place has stood a thousand years on faith alone. I\'d like it to stand a thousand more on something better.' },
+    { ...MIRA, text: 'This place has stood a thousand years on faith alone. I\'d like it to stand a thousand more on something better.' },
   ] },
 ];
 

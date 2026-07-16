@@ -2,6 +2,46 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Portraits in the Banter Toast
+
+Ask: "når de snakker, vis portrett også. gjør om på portrettene til noe kul"
+(show a portrait when they talk; make the portraits something cool). The
+banter toast (added earlier the same day) only showed a name + colored
+text, no art — everywhere else a character "talks" (DialogueScene,
+BattleScene's turn queue, GameMenuScene) already uses the same
+`portrait_kael`/`portrait_lyra`/`portrait_mira` PNGs (real painted art, not
+placeholder pixel work — see `src/assets/portraits/`), so banter was the
+odd one out.
+
+- `game/banter.ts`: `BanterLine` gained a `portrait` field. Refactored the
+  per-line `{ speaker, color }` repetition into three shared constants
+  (`KAEL`/`LYRA`/`MIRA`, each bundling speaker/color/portrait) spread into
+  every line — same content, less duplication.
+- `ui/banterToast.ts`: each line now renders its portrait as a 38x38 chip
+  with a square glow backdrop + colored ring border in the speaker's own
+  accent color, both updated per line via `setTexture`/`setFillStyle`/
+  `setStrokeStyle` as the toast cycles speakers. Deliberately square, not
+  circular — a true circular crop would need a geometry mask (fragile on a
+  tweening container) and would've clipped the square source art's
+  corners anyway; the square-glow treatment instead echoes BattleScene's
+  existing "active turn" chip motif (gold-framed square portrait), so it
+  reads as the same "spotlighted character" language already used
+  elsewhere in the game rather than a new, disconnected style.
+
+**Verification note for future sessions**: multi-line beat auto-advance
+(the `scene.time.delayedCall` chain in `showLine()`) looked stuck on line 1
+under this repo's headless-Chromium+SwiftShader test setup even after
+several real seconds — traced to `Phaser.Time.Clock`'s `PRE_UPDATE` event
+(which promotes a freshly-added timer from pending to active) not firing
+reliably at this environment's very low actual FPS, even though `UPDATE`
+(which just stamps `.now`) clearly does — confirmed by manually pumping
+`clock.preUpdate()` + `clock.update(t, 16.6)` in lockstep, which advanced
+the beat correctly. This is the same class of pre-existing headless-loop
+throttling documented earlier in this project's history, not a code bug —
+single-line portrait/color/ring rendering was screenshot-verified directly
+for all three characters (Kael teal, Lyra purple, Mira gold), and the
+sequencing logic itself was confirmed correct via the manual clock pump.
+
 ## 2026-07-16 (story): Inotia 3 Pass — Ambient Banter, Deeper Quests, Tighter Plot, Merchant Humor
 
 Ask: "hva forbedrer vi nå? jeg lurer på om vi bør ha en slags historie som
