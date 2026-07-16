@@ -32,7 +32,7 @@ export const QUESTS: QuestDef[] = [
   {
     id: 'clear_ch1',
     title: 'Clear the Ancient Grove',
-    text: 'Defeat the corrupted spirit at the heart of Ashenveil Forest.',
+    text: 'Defeat the Forest Shade, the corrupted spirit devouring Ashenveil\'s anchor.',
     rewards: { gold: 50, items: { tonic: 2 } },
   },
   {
@@ -52,21 +52,21 @@ export const QUESTS: QuestDef[] = [
   {
     id: 'clear_ch2',
     title: 'Drain the Flooded Keep',
-    text: 'Defeat the Tide Warden at the heart of the Sunken City.',
+    text: 'Defeat the Tide Warden guarding the drowned Tidal Anchor.',
     unlockFlag: 'ch1_complete',
     rewards: { gold: 90, items: { tonic: 3, potion: 1 }, equipment: ['tidewrought_mace', 'torens_blade'] },
   },
   {
     id: 'defeat_ashbrand',
     title: 'Silence the Ashbrand',
-    text: 'Defeat the ancient fire spirit bound to the Summit Shrine.',
+    text: 'Defeat Ashbrand, the ancient fire spirit bound to the Peaks Anchor.',
     unlockFlag: 'ch2_complete',
     rewards: { gold: 150, equipment: ['oracle_lantern'], items: { warden_sigils: 2 } },
   },
   {
     id: 'defeat_prism_sovereign',
     title: 'Crack the Prism Sovereign',
-    text: 'Defeat the crystal guardian bound to the Radiant Anchor in the Crystal Depths.',
+    text: 'Defeat the Prism Sovereign, the crystal guardian bound to the Radiant Anchor.',
     unlockFlag: 'ch3_complete',
     rewards: { gold: 175, equipment: ['radiant_mace'], items: { warden_sigils: 2 } },
   },

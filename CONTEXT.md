@@ -2,6 +2,27 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (quest-text): Chapter-Clear Quest Text — Consistent Anchor Naming
+
+Second follow-up to the dialogue rewrite. `quests.ts`'s four chapter-clear
+quests were inconsistent about naming the thing being fought over: only
+`defeat_prism_sovereign` named its anchor ("Radiant Anchor"); `clear_ch1`
+and `clear_ch2` didn't name theirs at all, and `defeat_ashbrand` said
+"Summit Shrine" — a name that matches neither `chapters.ts`'s actual area
+names (Ashen Foothills / Cinder Floor) nor dialogue.ts's "Peaks Anchor."
+Looked like a stale leftover from before an earlier rename.
+
+All four now follow the same pattern and match the names `dialogue.ts`
+already established: "Defeat the Forest Shade, the corrupted spirit
+devouring Ashenveil's anchor" / "...guarding the drowned Tidal Anchor" /
+"Defeat Ashbrand, ...bound to the Peaks Anchor" / "Defeat the Prism
+Sovereign, ...bound to the Radiant Anchor." Text-only change, no `QuestDef`
+shape or reward changes.
+
+Verified live: flagged ch1-3 complete, opened GameMenu's Quests tab, all
+four texts render correctly (word-wrap, apostrophe in "Ashenveil's"
+included) with the new consistent phrasing. `tsc`/`pnpm build` clean.
+
 ## 2026-07-16 (torens-blade): Toren's Blade — Kael's Watch-Line Arc Gets a Real Item
 
 Follow-up to the dialogue rewrite below: `ch2_win` has Kael find a named
