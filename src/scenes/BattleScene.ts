@@ -77,7 +77,7 @@ export class BattleScene extends Phaser.Scene {
   private menuIndex = 0;
   private options: MenuOption[] = [];
   private subIndex = 0;
-  private subItems: { id: string; label: string; desc?: string; enabled: boolean }[] = [];
+  private subItems: { id: string; label: string; desc?: string; enabled: boolean; element?: Element; weak?: boolean }[] = [];
   private pending: PendingAction | null = null;
   private targets: Combatant[] = [];
   private targetIndex = 0;
@@ -504,6 +504,17 @@ export class BattleScene extends Phaser.Scene {
       const prefix = i === this.subIndex ? '▶ ' : '  ';
       const t = this.add.text(16, GAME.height - 92 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
+      if (o.element) {
+        // Same element badge used on enemies (ELEMENT_LETTER/ELEMENT_COLOR),
+        // so a glance at the spell list matches what you already see on
+        // their HP bars. A star + gold flags a current weakness match.
+        const badgeColor = o.weak ? '#f0d36c' : (ELEMENT_COLOR[o.element] ?? '#dfe4f5');
+        const badgeText = (o.weak ? '✦' : '') + (ELEMENT_LETTER[o.element] ?? '?');
+        const badge = this.add.text(178, GAME.height - 91 + i * 18, badgeText, sharpText({
+          fontFamily: FONT, fontSize: '8px', color: badgeColor, strokeThickness: 2,
+        })).setDepth(16);
+        this.menuText.push(badge);
+      }
       if (o.desc) {
         const d = this.add.text(200, GAME.height - 90 + i * 18, o.desc, sharpText({ fontFamily: FONT, fontSize: '8px', color: o.enabled ? '#8fa8c8' : '#4a5070', strokeThickness: 2 })).setDepth(16);
         this.menuText.push(d);
@@ -634,10 +645,16 @@ export class BattleScene extends Phaser.Scene {
     const m = this.activeActor;
     this.ui = 'submenu';
     this.subIndex = 0;
+    // Show each spell's element (same badge used on enemies) and flag it if
+    // it currently hits a living enemy's weakness — so you don't have to
+    // commit to a spell and reach target-select just to find that out.
+    const livingEnemies = this.battle.living('enemy');
     this.subItems = m.spells.map((id) => {
       const s = SPELLS[id];
       const ok = m.stats.mp >= s.cost;
-      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok };
+      const element = s.element && s.element !== 'none' ? s.element : undefined;
+      const weak = element ? livingEnemies.some((e) => e.weakness?.includes(element)) : false;
+      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok, element, weak };
     });
     if (this.subItems.length === 0) {
       this.openMenu();

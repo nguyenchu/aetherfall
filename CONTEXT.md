@@ -2,6 +2,33 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Show a Spell's Element (and Weakness Match) in the Magic List
+
+Ask: "bør vi ha at skills viser allerede hva som monstre er weak mot før vi
+velger det?" (should skills already show what monsters are weak against
+before we pick one). The information already existed twice over — enemies
+show a persistent colored element-letter badge next to their HP bar all
+fight, and `pointCursorAtTarget()` already prints "▶ Name: WEAK to this!"
+once you've picked a spell and reached target-select — but the Magic list
+itself only showed spell name + MP cost, so matching a spell to a badge
+meant remembering the mapping or committing blind and finding out after.
+
+`BattleScene.ts`: `subItems` gained optional `element`/`weak` fields.
+`openMagic()` now computes, per spell, its element (skipped for `element:
+'none'` heals) and whether any currently-living enemy is weak to it
+(`this.battle.living('enemy')`). `renderSubmenu()` renders that as a small
+badge reusing the exact same `ELEMENT_LETTER`/`ELEMENT_COLOR` maps the
+enemy badges already use — plain letter normally, a gold `✦` prefix + gold
+color when it matches a live weakness. Scoped to spells only (not the
+top-level Attack command), since attack element is fixed per character
+rather than a per-turn choice.
+
+Verified live: forced a real elite battle (Alpha Shade Wolf + Shadow Wolf,
+both weak to fire) and opened Kael's list (Guardbreak, phys — plain white
+"P", not starred, correctly no match) and Lyra's list (Ember Hex, fire —
+gold "✦F"; Rime Hex, ice — plain blue "I", correctly no match). `tsc
+--noEmit` clean, no console/page errors.
+
 ## 2026-07-16 (gui): Same Portrait Ring Treatment on Main Story Dialogue
 
 Follow-up ("fortsett") to the banter-toast portrait pass. The banter toast
