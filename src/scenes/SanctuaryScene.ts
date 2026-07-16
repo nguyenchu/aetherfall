@@ -104,7 +104,7 @@ interface Npc {
   /** Quest resolved by talking to this NPC while questActive is true. */
   questId?: string;
   /** Roams a small area around its spawn tile instead of standing still.
-   *  Off for the Merchant/Crystal — you want those exactly where you left them. */
+   *  Off for the Merchant/Anchor — you want those exactly where you left them. */
   wander?: boolean;
 }
 
@@ -161,9 +161,10 @@ function npcs(): Record<string, Npc> {
         wander: true,
       },
     } : {}),
-    // The Crystal itself — an Ascension prompt, once the anchors are restored.
+    // Sanctuary's own Anchor — a shard of the one that shattered long ago
+    // (see IntroScene). An Ascension prompt, once the other anchors are restored.
     ...(ch4Done ? {
-      A: { spriteKey: 'aether', scale: 0.9, name: 'the Crystal', kind: 'ascend' as const },
+      A: { spriteKey: 'aether', scale: 0.9, name: 'the Anchor', kind: 'ascend' as const },
     } : {}),
   };
 }

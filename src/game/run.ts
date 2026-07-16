@@ -1,6 +1,6 @@
 // Runtime game state: living party, gold, inventory, and current depth.
 // Connects persistent meta-progression (save.ts) with runtime state.
-// Death is not total: the Crystal returns you to town, but level/gold remain.
+// Death is not total: the Anchor returns you to town, but level/gold remain.
 
 import { track } from './analytics';
 import { boonTotals, type BoonTotals } from './boons';

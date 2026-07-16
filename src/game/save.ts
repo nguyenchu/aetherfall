@@ -1,6 +1,6 @@
 // Persistent meta-progression in localStorage. Survives sessions and death:
 // in the Hades model, growth (levels, gold, upgrades) remains even when the
-// Crystal draws you back to Sanctuary.
+// Anchor draws you back to Sanctuary.
 
 import { DEFAULT_EQUIPPED, STARTING_EQUIPMENT, type EquipSlot } from './equipment';
 import { initialQuests, type QuestStatus } from './quests';

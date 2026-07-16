@@ -48,7 +48,7 @@ export class BoonScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '15px', color: data.elite ? '#ffcf6a' : '#a58cff',
     })).setOrigin(0.5).setDepth(2).setAlpha(0);
     this.tweens.add({ targets: titleText, alpha: 1, y: { from: 34, to: 42 }, duration: 320, ease: 'Sine.easeOut' });
-    this.add.text(GAME.width / 2, 62, 'Lasts until the Crystal draws you home.', sharpText({
+    this.add.text(GAME.width / 2, 62, 'Lasts until the Anchor draws you home.', sharpText({
       fontFamily: FONT, fontSize: '9px', color: '#8a93b8',
     })).setOrigin(0.5).setDepth(2);
 

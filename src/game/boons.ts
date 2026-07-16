@@ -1,5 +1,5 @@
 // Boons: run-scoped blessings chosen after won battles (the Hades model).
-// They live on RunState and reset when the Crystal draws you home, so every
+// They live on RunState and reset when the Anchor draws you home, so every
 // descent builds differently. The battle engine reads them via boonTotals().
 
 import type { Ailment, Element } from './types';
@@ -105,9 +105,9 @@ export const BOONS: Record<string, Boon> = {
     name: 'Deep Pockets', desc: 'Items restore 60% more.',
     potionBoost: 0.6,
   },
-  crystal_promise: {
-    id: 'crystal_promise', rarity: 'epic',
-    name: 'Crystal Promise', desc: 'Once per battle, a fallen hero returns at 40% HP.',
+  anchors_promise: {
+    id: 'anchors_promise', rarity: 'epic',
+    name: "Anchor's Promise", desc: 'Once per battle, a fallen hero returns at 40% HP.',
     reviveOnce: true,
   },
   overwhelming_power: {

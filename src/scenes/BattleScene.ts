@@ -807,7 +807,7 @@ export class BattleScene extends Phaser.Scene {
       if (a) this.mpDisplay.set(a.id, a.stats.mp);
     }
     if (ev.kind === 'ko' && ev.targetId) this.fadeKo(ev.targetId);
-    // Revives (Phoenix Down, or the Crystal Promise boon) bring hp back above
+    // Revives (Phoenix Down, or the Anchor's Promise boon) bring hp back above
     // zero on a sprite fadeKo left dimmed and dropped — undo that visually.
     if (ev.targetId) {
       const revived = this.battle.byId(ev.targetId);
@@ -907,7 +907,7 @@ export class BattleScene extends Phaser.Scene {
     this.ui = 'over';
     const depth = getRun().depth;
     const lost = applyWipePenalty();
-    this.pushLog('The Crystal draws you back...');
+    this.pushLog('The Anchor draws you back...');
     if (lost > 0) this.pushLog(`${lost} gold scatters into the dark.`);
     this.refreshStatus();
     music.fanfare('defeat');

@@ -35,7 +35,7 @@ export class RunSummaryScene extends Phaser.Scene {
     // Both outcomes (a party wipe and a voluntary retreat) funnel through here,
     // so this is the single canonical "run ended" signal.
     track('run_end', { reason: data.reason, ch: chapterOfDepth(depth), d: depth, g: run.gold });
-    const title = data.reason === 'wipe' ? 'THE CRYSTAL PULLS YOU HOME' : 'RETURNED TO SANCTUARY';
+    const title = data.reason === 'wipe' ? 'THE ANCHOR PULLS YOU HOME' : 'RETURNED TO SANCTUARY';
     const subtitle = data.reason === 'wipe'
       ? 'The descent ends, but your growth remains.'
       : 'You leave the dark before it can take more.';

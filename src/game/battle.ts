@@ -719,11 +719,11 @@ export class Battle {
 
   private maybeKo(t: Combatant, events: BattleEvent[]): void {
     if (t.stats.hp > 0) return;
-    // Crystal Promise: once per battle, a fallen hero returns.
+    // Anchor's Promise: once per battle, a fallen hero returns.
     if (t.side === 'party' && this.bn.reviveOnce && !this.reviveUsed) {
       this.reviveUsed = true;
       t.stats.hp = Math.round(t.stats.maxHp * 0.4);
-      events.push({ kind: 'info', text: `The Crystal flares — ${t.name} returns to the fight!`, targetId: t.id, amount: -t.stats.hp });
+      events.push({ kind: 'info', text: `The Anchor flares — ${t.name} returns to the fight!`, targetId: t.id, amount: -t.stats.hp });
       return;
     }
     // Living Cinders and the like detonate as they die, hitting the whole party.

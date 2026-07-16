@@ -9,7 +9,7 @@ const STAT_MULT = 0.15;
 const REWARD_MULT = 0.10;
 
 /**
- * Reached by talking to the Crystal in Sanctuary once Chapter 4 is cleared.
+ * Reached by talking to the Anchor in Sanctuary once Chapter 4 is cleared.
  * Opt-in, repeatable: raises the permanent Ascension tier, which scales
  * enemy stats/rewards on every future descent (see chapters.ts). Levels,
  * gear, gold, and story flags are untouched — this only raises the ceiling.

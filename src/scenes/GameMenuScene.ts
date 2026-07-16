@@ -859,7 +859,7 @@ export class GameMenuScene extends Phaser.Scene {
   }
 
   private quitToTitle() {
-    if (this.caller === 'Descent') returnToTown(); // the Crystal draws the party home
+    if (this.caller === 'Descent') returnToTown(); // the Anchor draws the party home
     input.releaseAll();
     this.scene.stop(this.caller);
     this.scene.start('Title');

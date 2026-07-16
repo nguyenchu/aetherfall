@@ -2,6 +2,50 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (story): "The Crystal" Didn't Make Sense — Renamed to "the Anchor"
+
+Ask: "fjern The Crystal. det gir ikke noe mening" (remove The Crystal, it
+doesn't make sense). Root cause: the game had **two unrelated things both
+called "the Crystal."** IntroScene's cold-open cosmology has a primordial
+Aether crystal that "fell" and "shattered into 12 shards" which became "the
+twelve anchors" — that part is real, load-bearing lore (it's why anchors
+exist at all). Completely separately, `SanctuaryScene.ts` had an NPC
+literally named `'the Crystal'` (kind: `'ascend'`) that opens the Ascension
+scene, plus a pile of flavor text calling the party-wipe recall "the
+Crystal" too — a second, disconnected entity sharing the same name as the
+first, explaining nothing about why it does what it does. That's the
+"doesn't make sense" — chose "remove the whole concept + mechanic" (not
+just reword one line) when asked to scope it.
+
+Fix: renamed every occurrence of that second, entity-flavored "Crystal" to
+**"the Anchor"** — reframed as Sanctuary's own anchor-shard (one of the
+twelve from the Intro's cosmology, kept safe at home), tying the
+death-recall/Ascension mechanic back into lore that already exists instead
+of inventing a second magic rock:
+- `SanctuaryScene.ts`: the ascend NPC is now `name: 'the Anchor'` (comment
+  updated to note it's a shard of the one that shattered).
+- Boon `crystal_promise` -> `anchors_promise` / "Anchor's Promise" (id,
+  name, and its battle.ts revive-flavor text `"The Anchor flares — ..."`).
+- All remaining flavor text/comments: `RunSummaryScene.ts`'s wipe title
+  ("THE ANCHOR PULLS YOU HOME"), `BoonScene.ts`'s subtitle, `BattleScene.ts`'s
+  game-over log line, `AscendScene.ts`/`GameMenuScene.ts`/`run.ts`/`save.ts`
+  comments.
+- **Left untouched on purpose**: IntroScene's primordial crystal (the
+  origin lore, now the *only* "Crystal"), and every mundane/adjectival use
+  of the word — "Crystal Depths" (Ch4 area name), "Crystal Wisp" (Ch4
+  enemy), "Crystal Weakness"/"Crystal Blessing" (unrelated modifier/shop-
+  upgrade names), "Crystalline" (an equipment trait). None of those claim to
+  *be* the entity that pulls you home or grants Ascension, so they don't
+  carry the same confusion — renaming them would've been surface-level
+  word-scrubbing, not fixing the actual sense-doesn't-follow problem.
+
+Verified live (headless Chrome): force-set all four chapter-complete flags
+and loaded Sanctuary — the ascend NPC's `def.name` reads `"the Anchor"`;
+forced `RunSummary` with `reason: 'wipe'` — title renders "THE ANCHOR PULLS
+YOU HOME"; forced `BoonPick` with the renamed boon — card shows "Anchor's
+Promise". `tsc --noEmit` clean, no console/page errors, no leftover
+`'the Crystal'` references (grepped after each pass).
+
 ## 2026-07-16 (gui): Remove the Bottom-Left Party Panel from Descent Maps
 
 Ask: "fjern kael lyra mira info venstre nederst i noen kart" — the compact
