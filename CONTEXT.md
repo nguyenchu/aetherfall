@@ -2,6 +2,33 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (torens-blade): Toren's Blade — Kael's Watch-Line Arc Gets a Real Item
+
+Follow-up to the dialogue rewrite below: `ch2_win` has Kael find a named
+ally's blade in the Sunken City wreckage, but nothing in-game backed that up
+— no item, just narration. Added `torens_blade` to `equipment.ts` (Kael-only
+weapon, +6 STR/+2 AGI, +5% crit — "Steadfast edge": a plain, non-elemental
+soldier's blade, deliberately contrasting `tidecleaver`'s ice/chill utility
+so both chapter-2 Kael weapons are real, distinct picks rather than a
+strict upgrade).
+
+Granted via `clear_ch2`'s quest reward (`quests.ts`), alongside the existing
+`tidewrought_mace` — this is the same `completeQuest()` call
+`BattleScene.onVictory` already fires on the real Tide Warden kill, so it
+lands in the player's hands at exactly the moment the dialogue describes
+finding it, guaranteed (not a random chest/drop roll). Added a sell-price
+entry in `run.ts` alongside the other found gear. Icon is free — `BootScene`
+generates `icon_<id>` textures from `Object.values(EQUIPMENT)` generically.
+
+Verified live: `completeQuest('clear_ch2')` correctly granted both
+`tidewrought_mace` and `torens_blade` to `ownedEquipment()` (gold 0→90,
+matching the quest reward). Equip menu → Kael → Weapon shows "Toren's
+Blade — Steadfast edge", `+6 STR +2 AGI`, `✦ +5% crit`, full description,
+stat-delta preview (STR 17→20, AGI 9→10) against the currently-equipped
+Slender Blade. Confirmed the equip action itself: `equippedFor('kael')`
+shows `weapon: 'torens_blade'` after selecting it and confirming. `tsc`/
+`pnpm build` clean.
+
 ## 2026-07-16 (story): Rewrote Chapter 1-4 Dialogue — Voice, Backstory Payoffs, Villain Presence
 
 Playtest note: the story read as filler between fights. Every chapter's

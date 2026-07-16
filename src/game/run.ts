@@ -404,6 +404,7 @@ export function equipmentPrice(itemId: string): number | undefined {
     // Found gear (sell value = half of this):
     emberfang: 100,
     tidecleaver: 150,
+    torens_blade: 155,
     tidewrought_mace: 160,
     tidewarden_mail: 130,
     vampire_fang: 140,

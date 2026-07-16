@@ -172,6 +172,17 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { attackElement: 'ice', attackInflict: { ailment: 'chill', chance: 0.2, rounds: 2 } },
     icon: { kind: 'blade', base: 0x6cb8ff, accent: 0xdff6ff },
   },
+  torens_blade: {
+    id: 'torens_blade',
+    name: 'Toren\'s Blade',
+    slot: 'weapon',
+    users: ['kael'],
+    bonus: { str: 6, agi: 2 },
+    trait: 'Steadfast edge',
+    description: 'Carried a watch-line\'s discipline into every strike. No magic in the steel — just years spent trusting it.',
+    effects: { critBonus: 0.05 },
+    icon: { kind: 'blade', base: 0x9aa4c8, accent: 0xdfe4f5 },
+  },
   stormcaller_rod: {
     id: 'stormcaller_rod',
     name: 'Stormcaller Rod',
