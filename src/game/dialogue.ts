@@ -30,6 +30,7 @@ export const SCRIPTS: Record<string, Script> = {
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I can feel Aether traces inside the forest. Something is drawing it out — deliberately.', visual: 'heroes_meet' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens have kept this anchor since before Sanctuary had walls. I don\'t intend to be the one who loses it.', visual: 'heroes_meet' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The old grove at the heart of the forest holds the crystal. If it still stands...', visual: 'heroes_meet' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'It\'s stood through worse. So will we.', visual: 'heroes_meet' },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we find it. And whoever is doing this.' },
     { text: 'Speak with the people of Sanctuary. Then enter the forest through the eastern gate.', color: NARRATOR },
   ],
@@ -52,9 +53,12 @@ export const SCRIPTS: Record<string, Script> = {
   // Story trigger at the dying Aether crystal in the Ancient Grove.
   ch1_crystal: [
     { text: 'At the center of the grove stands a crystalline pillar — cracked, its light sputtering.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'This is the anchor. It\'s almost gone.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'This is the anchor. It\'s dying just like—' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Never mind. It\'s not gone yet. That\'s what matters.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Something is here. Something that doesn\'t want us to restore it.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we deal with it first.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'There\'s a mark cut into the stone by the roots. A watch-sigil. Ours.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Kael—' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Later. Right now we deal with it first.' },
     { text: 'A shape tears itself from the shadows — the Forest Shade, an Aether spirit consumed by the drain.', color: NARRATOR },
   ],
 
@@ -72,17 +76,24 @@ export const SCRIPTS: Record<string, Script> = {
   // After defeating the Forest Shade — triggered by BattleScene on boss win.
   ch1_win: [
     { text: 'The Forest Shade dissolves. The grove falls silent.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The crystal is stabilising. Slowly, but it\'s holding.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Whoever started the drain will know someone pushed back.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Good. Let them.' },
-    { text: 'The first anchor holds. The search for the others begins.', color: NARRATOR },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Same sigil as the one on the crystal. My unit\'s mark. Someone else came through here.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Recently?' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Long enough the moss covered it. I don\'t know what that means yet.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Whatever it means, the anchor is holding. That\'s what tonight needed to be.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The first one\'s the hardest to believe in. After this it\'s just... work.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Good. Let\'s get to work, then.' },
+    { text: 'The first anchor holds. Whatever comes next, it comes for people who are still standing.', color: NARRATOR },
   ],
 
   // Chapter 2 — Sunken City story trigger before boss.
   ch2_warden: [
     { text: 'The chamber is vast, half-flooded. Pillars of ancient stone rise from black water.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Tidal Anchor is here. I can feel it — somewhere beneath the water.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Tidal Anchor\'s down there. Buried. Just like—' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Like the one you couldn\'t save?' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Yeah.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'This one isn\'t staying buried.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'There\'s something standing in the way. Something that used to be a Warden.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'One of ours. I don\'t care what it\'s become — it doesn\'t get to still wear that title.' },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then it ends here.' },
   ],
 
@@ -99,50 +110,61 @@ export const SCRIPTS: Record<string, Script> = {
   // After defeating the Tide Warden.
   ch2_win: [
     { text: 'The Tide Warden shatters. The water in the chamber begins to recede.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Tidal Anchor — it\'s surfacing. It\'s been whole this whole time, just buried.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Two anchors restored. Ten more.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'We keep moving.' },
-    { text: 'Somewhere above, the light over Sanctuary grows a little brighter.', color: NARRATOR },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'It\'s surfacing. Whole. It waited down there — but it didn\'t drown.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'There\'s a blade in the wreckage. I know the maker\'s mark. Toren carried one like it.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'One of your seven?' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Was. I don\'t know how it got all the way down here.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Then he\'s still part of this. Whatever\'s collecting these anchors — it\'s touched more than we knew.' },
+    { text: 'The pattern is older than four days. Older, maybe, than any of them had guessed.', color: NARRATOR },
   ],
   // Chapter 3 story trigger before Ashbrand.
   ch3_ashbrand: [
     { text: 'The summit is scorched stone and ash. At the center, a pillar of black rock pulses with fire.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Peaks Anchor. It\'s still intact — but something is burning from inside it.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'That presence... it was bound here willingly once. It doesn\'t feel willing anymore.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Can you reach it? Remind it what it is?' },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Not while it\'s like this. We need to break through first.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'I know this text. Ashbrand wasn\'t captured — it swore an oath. Same as every Warden since.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Then it should still be in there. Buried under whatever\'s driving it now.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Can we get it back?' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'I don\'t know. But I intend to try before we put it down for good.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Not while it\'s like this. We break through first.' },
   ],
 
   ch3_win: [
     { text: 'The fire recedes. Ashbrand — the spirit within the anchor — stirs, as if waking from a long dream.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'It\'s still in there. The real spirit. The corruption broke when we fought through.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Three anchors. The world feels a little lighter.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Nine more. But tonight we rest.' },
-    { text: 'The Ashen Peaks grow quiet for the first time in living memory.', color: NARRATOR },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Still an oath-keeper under there. The corruption didn\'t erase that — it just buried it deeper than the anchor.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Ashbrand\'s been burning since before Eda was born. If someone\'s been doing this that long...' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: '...then Ashenveil wasn\'t the start. It might not even be close.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Then we keep going. That\'s always been the job.' },
+    { text: 'The Ashen Peaks grow quiet for the first time in living memory. Somewhere, that quiet is noticed.', color: NARRATOR },
   ],
 
   // Chapter 4 — Crystal Depths story trigger before the Prism Sovereign.
   ch4_story: [
     { text: 'The cavern opens into a hollow so vast the crystal walls seem to breathe light.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Radiant Anchor. It\'s whole — but something has grown around it, layer over layer.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Radiant Anchor. Whole — but wrapped, layer over layer. Someone\'s kept it alive on purpose.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'A guardian, once. Now it\'s wearing its own prison like armor.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we crack it open.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'This casing is watch-work. Someone built this on purpose. Someone who knew exactly what they were doing.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Kael—' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Not now. Let\'s finish this first.' },
   ],
 
   ch4_win: [
     { text: 'The crystal shell fractures and falls away. The Prism Sovereign beneath it dims, then steadies.', color: NARRATOR },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Four anchors. Whatever is pushing up from underneath, it just lost ground.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'It knows we\'re coming now. All of them will.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight more. Let it know.' },
-    { text: 'Deep beneath Sanctuary, something ancient turns its attention upward.', color: NARRATOR },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Four now. Whatever\'s underneath, it just lost real ground.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Kael. Finish what you didn\'t say back there.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'The casing was watch-work. Real craftsmanship, not scavenged. Someone from the old line is still building — for whoever\'s doing this.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Willingly or not, I don\'t know yet. I need to find out which.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Then we will.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Eight anchors left. Wherever the trail goes, it goes through them.' },
+    { text: 'Deep beneath Sanctuary, something that has been patient for a very long time stops being patient.', color: NARRATOR },
   ],
 
   ending: [
     { text: 'Four anchors restored. Four corrupted guardians returned to the light.', color: NARRATOR },
     { text: 'The world still sinks — but slower now. Sanctuary stands.', color: NARRATOR },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight anchors remain. We know what we\'re doing now.' },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'The Aether is responding. Every anchor we restore is one more thread holding the world together.' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'We rest. Then we keep going. Together.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Toren\'s blade is with me now. However this ends, that\'s one name I get to remember properly.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I used to think restoring anchors was about not failing again. Now I think it\'s about everyone still ahead of us who hasn\'t failed yet.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens kept faith for a thousand years without knowing why. Now we know. That\'s not nothing.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Let them.' },
     { text: '— The story continues in a future update —', color: NARRATOR },
     { text: 'Thank you for playing Aetherfall.', color: NARRATOR },
   ],
@@ -154,6 +176,7 @@ export const SCRIPTS: Record<string, Script> = {
   npc_scholar_after3: [
     { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The old texts mention twelve anchors — but they also mention something that predates them all.' },
     { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The Hollow. The empty space beneath the world where the Aether originally fell from. I think it\'s waking up.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'That grove where the first anchor stood — old maps call it "Twisting Hollow." No one ever explained why.' },
   ],
   // The Stranger — appears after Ch1, hints at a deeper threat
   npc_stranger: [
@@ -162,11 +185,12 @@ export const SCRIPTS: Record<string, Script> = {
   ],
   npc_stranger_after2: [
     { speaker: '???', color: 0x8a93b8, text: 'Ten anchors remain. But the one who\'s draining them will feel each restoration like a thorn.' },
-    { speaker: '???', color: 0x8a93b8, text: 'They\'ll send something worse soon. Be ready.' },
+    { speaker: '???', color: 0x8a93b8, text: 'I stood where the Tide Warden used to kneel, long before it was a Warden at all. They\'ll send something worse soon. Be ready.' },
   ],
   npc_stranger_after3: [
     { speaker: '???', color: 0x8a93b8, text: 'The Hollow stirs. When the time comes, you\'ll need to go deeper than any map shows.' },
     { speaker: '???', color: 0x8a93b8, text: 'Nine more anchors. And then... something else entirely.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Your swordsman carries a new blade. Ask him whose. I already know the answer, and I don\'t think you\'ll like it.' },
   ],
   npc_child_after1: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'The wolves are gone from Ashenveil. Pip came back last night.' },
@@ -183,7 +207,7 @@ export const SCRIPTS: Record<string, Script> = {
   // Post-Ch4 NPC follow-ups
   npc_keeper_after4: [
     { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Four anchors. The scouts who go near the deep caverns don\'t come back the same — quieter, like they heard something.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Whatever the Hollow is, it isn\'t waiting anymore. Watch yourselves.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I served with Kael\'s watch-line, years back. If pieces of it are still turning up this far from where they fell, whatever\'s out there isn\'t finished with them. Watch yourselves.' },
   ],
   npc_scholar_after4: [
     { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Four anchors restored, and the old texts agree on one thing now: the anchors aren\'t just lamps. They\'re a seal.' },
@@ -191,7 +215,7 @@ export const SCRIPTS: Record<string, Script> = {
   ],
   npc_stranger_after4: [
     { speaker: '???', color: 0x8a93b8, text: 'Four now. It felt that one — I saw it flinch, if a thing like that can flinch.' },
-    { speaker: '???', color: 0x8a93b8, text: 'Eight anchors left. It will not let you reach all of them quietly.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Eight anchors left. It will not let you reach all of them quietly. Or all of you.' },
   ],
   npc_child_after4: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'Four stars now. I drew them on my wall so I don\'t forget which ones are yours.' },

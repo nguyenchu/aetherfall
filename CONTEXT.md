@@ -2,6 +2,63 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (story): Rewrote Chapter 1-4 Dialogue — Voice, Backstory Payoffs, Villain Presence
+
+Playtest note: the story read as filler between fights. Every chapter's
+story-trigger/win script followed the same 3-beat template (Lyra senses the
+anchor → Mira notes corruption → Kael says something terse), Lyra and Mira
+were interchangeable exposition devices, and both Kael's ("eight of us, I
+never heard from the other seven") and Lyra's ("I've stood where an anchor
+already failed") intro hooks were never mentioned again. The antagonist was
+100% narrated, never shown.
+
+Rewrote `src/game/dialogue.ts` content only — same scriptIds, same
+`DialogueLine` shape, no scene-code changes:
+- **Differentiated voices.** Kael: grounded, protective, cares about specific
+  people over the abstract mission. Lyra: intuitive/haunted, the one who
+  voices doubt. Mira: duty/institution-driven (a Warden herself), the one who
+  reframes and grounds the party. Each chapter now leads with a different one
+  instead of the same rotation.
+- **Paid off both intro hooks across the 4 chapters.** Kael finds a trace of
+  his missing watch-line at every anchor (a sigil in ch1, a named ally's
+  blade — Toren — in ch2, a timeline realization in ch3, proof someone from
+  his old unit is still building for the enemy in ch4), landing on a real
+  "which — dead, or working for them" question by the ending, not silence.
+  Lyra's echo lands in `ch2_warden`/`ch2_win` (the buried Tidal Anchor
+  mirrors the anchor she couldn't save) with a Mira line that finally
+  acknowledges it instead of leaving it as a dangling intro-only beat.
+- **Villain got physical traces, not just narration** — Kael's discoveries
+  above, plus a Scholar Voss payoff: the ch1 boss-room area is *already
+  named* "Twisting Hollow" in `chapters.ts` (coincidental, unconnected to the
+  Hollow reveal until now) — added one line tying the old map name to the
+  late-game reveal instead of leaving it an unexplained coincidence. The
+  Stranger's lines now reference specifics only someone who'd physically been
+  at the anchors would know, and directly calls out Kael's new blade in
+  `npc_stranger_after3`.
+- **Added party banter** — short beats where they talk to each other instead
+  of reciting exposition at the player (Mira: "Like the one you couldn't
+  save?" / Lyra: "Kael. Finish what you didn't say back there.").
+- Ending rewritten so each character lands a closing beat on their own arc
+  instead of a flat "we rest, then keep going" — Lyra's last line ("Let
+  them.") deliberately echoes Kael's line from `ch1_win`, earned rather than
+  reused.
+
+Verified live via the new `verify` skill: played `intro`, `ch1_crystal`,
+`ch1_win`, and `ending` to completion via direct `Dialogue` scene-starts,
+polling `index`/`typing`/`shown`/`visualId` per line. All four scripts
+completed (`onDone` fired), the new short interjection lines ("Kael—",
+"Recently?") transition cleanly, the `heroes_meet` visual tag still applies
+to exactly the intro lines that carry it. Also mashed confirm 25× with zero
+delay through `ch1_crystal` (now 8 lines, up from 5) — completes cleanly, no
+stuck state. No console errors beyond a pre-existing unrelated 404 and
+benign headless-WebGL performance warnings. `tsc`/`pnpm build` clean.
+
+Not touched: `npc_keeper`/`npc_scholar`/`npc_child` (pre-ch1) and the
+Child/Pip thread, both already solid. Quest text (`quests.ts`) and
+equipment/item flavor (`equipment.ts`/`content.ts`) are unchanged — could use
+a pass for consistency with the sharpened character voices but weren't part
+of this request.
+
 ## 2026-07-16 (verify): Live-Verified Two Previously Code-Review-Only Fixes
 
 Two changes from the last session were checked by code review only, not by
