@@ -32,6 +32,7 @@ export class DialogueScene extends Phaser.Scene {
   private nameBox!: Phaser.GameObjects.Rectangle;
   private box!: Phaser.GameObjects.Rectangle;
   private portrait!: Phaser.GameObjects.Rectangle;
+  private portraitGlow!: Phaser.GameObjects.Rectangle;
   private portraitImg?: Phaser.GameObjects.Image;
   private portraitY = 0;
   private indicator!: Phaser.GameObjects.Text;
@@ -64,7 +65,10 @@ export class DialogueScene extends Phaser.Scene {
     const nameY = boxY - 15;
     this.portraitY = boxY + 29;
 
-    // Portrait box on the left and dialogue box across the rest.
+    // Portrait box on the left and dialogue box across the rest. The glow
+    // sits just behind the frame and gets recolored per line to match
+    // whoever's speaking — same "cool" treatment as the banter toast.
+    this.portraitGlow = this.add.rectangle(43, this.portraitY, 68, 68, 0xffffff, 0.28).setOrigin(0.5).setDepth(0.5).setVisible(false);
     this.portrait = this.add.rectangle(14, boxY, 58, 58, 0x0d1024).setOrigin(0, 0).setDepth(1).setStrokeStyle(1, COLORS.wall);
     this.box = this.add.rectangle(80, boxY, GAME.width - 94, 98, 0x0d1024, 0.98).setOrigin(0, 0).setDepth(1);
     this.box.setStrokeStyle(1, COLORS.wall);
@@ -125,11 +129,14 @@ export class DialogueScene extends Phaser.Scene {
     if (!narration && line.portrait && this.textures.exists(line.portrait)) {
       this.portraitImg = this.add.image(43, this.portraitY, line.portrait).setDepth(2).setDisplaySize(52, 52);
       this.portrait.setVisible(true);
+      this.setPortraitRing(line.color);
     } else if (!narration && line.color != null) {
       this.portrait.setVisible(true).setFillStyle(0x0d1024);
       this.portraitImg = this.add.image(43, this.portraitY, this.dotTexture(line.color)).setDepth(2);
+      this.setPortraitRing(line.color);
     } else {
       this.portrait.setVisible(false);
+      this.portraitGlow.setVisible(false);
     }
     this.bodyText.setWordWrapWidth(narration ? 520 : GAME.width - 110);
     this.bodyText.setAlign(narration ? 'center' : 'left');
@@ -237,6 +244,13 @@ export class DialogueScene extends Phaser.Scene {
         });
       });
     });
+  }
+
+  /** Recolors the portrait frame + backing glow to match whoever's speaking. */
+  private setPortraitRing(color?: number) {
+    const c = color ?? 0xdfe4f5;
+    this.portraitGlow.setVisible(true).setFillStyle(c, 0.28);
+    this.portrait.setStrokeStyle(2, c, 0.95);
   }
 
   /** Creates one small round portrait dot texture per color. */

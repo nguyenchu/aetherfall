@@ -2,6 +2,30 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Same Portrait Ring Treatment on Main Story Dialogue
+
+Follow-up ("fortsett") to the banter-toast portrait pass. The banter toast
+got a glowing colored ring per speaker, but `DialogueScene` — where
+portraits actually show up most (every story beat and NPC conversation) —
+still had a plain static-gray (`COLORS.wall`) frame around the portrait,
+regardless of who's talking. Extended the same treatment there for
+consistency:
+- New `portraitGlow` rectangle (68x68, behind the frame, depth 0.5),
+  recolored per line.
+- `setPortraitRing(color)` helper: sets the glow's fill and the existing
+  `portrait` frame's stroke to the line's own `color` (falls back to
+  `0xdfe4f5` if a line has no color, though in practice every non-narration
+  line has one).
+- Applies to both branches that show a portrait: real art
+  (`portrait_kael`/etc.) and the color-swatch dot fallback used for NPCs
+  without dedicated portrait art (Warden Eda, Scholar Voss, the Child, the
+  Stranger) — so even NPCs without custom art get a matching colored ring
+  instead of looking unfinished next to the three heroes.
+
+Verified live: Kael's `ch1_win` line shows the teal ring around his real
+portrait art; Warden Eda's `npc_keeper` line shows the same gold ring
+around her color-swatch dot. No console/page errors.
+
 ## 2026-07-16 (gui): Portraits in the Banter Toast
 
 Ask: "når de snakker, vis portrett også. gjør om på portrettene til noe kul"
