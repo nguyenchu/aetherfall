@@ -126,6 +126,9 @@ export interface Combatant {
   learnset?: Record<number, string[]>; // level -> spell ids learned
   // Runtime battle state:
   defending?: boolean;
+  // Guardian's Wrath boon: set when defending, consumed by the bearer's
+  // next non-defend action (see Battle.executeTurn).
+  guardBuffed?: boolean;
   // CTB turn queue (battle.ts): count-time readiness and Haste/Slow stack.
   readiness?: number;
   speedStatuses?: Partial<Record<SpeedSource, SpeedStatus>>;

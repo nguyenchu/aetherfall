@@ -28,6 +28,15 @@ export interface Boon {
   sureInflict?: Ailment; // party hits that can apply this ailment always do
   dotMult?: number; // burn/venom ticks on enemies are multiplied by this
   healsCure?: boolean; // party healing spells also cure ailments
+  // --- Synergy hooks: these read/react to other systems (ailments, break,
+  // low HP, defend) rather than just multiplying a number, so they combine
+  // with each other and with the boons above into real build identities. ---
+  vulnerableBonus?: number; // afflicted enemies (any ailment) take this much more damage from everything
+  spreadAilmentOnDeath?: boolean; // a dying enemy's Burn/Venom leaps to another living enemy
+  hasMomentum?: boolean; // weakness hits stack a crit bonus for the rest of the battle
+  breakInflictsChill?: boolean; // breaking an enemy also Chills it
+  hasLastStand?: boolean; // bonus damage/crit for a hero below 30% HP
+  hasGuardiansWrath?: boolean; // defending empowers the bearer's next action
 }
 
 export const BOONS: Record<string, Boon> = {
@@ -131,6 +140,45 @@ export const BOONS: Record<string, Boon> = {
     name: 'Smoldering Ruin', desc: 'Burn and Venom on enemies tick for double damage.',
     dotMult: 2,
   },
+
+  // --- Synergy boons: each combines with several boons above instead of
+  // standing alone (see Boon's synergy-hook fields for exactly how). ---
+  vulnerable_flesh: {
+    id: 'vulnerable_flesh', rarity: 'epic',
+    name: 'Vulnerable Flesh',
+    desc: 'Afflicted enemies (Burn, Chill, or Venom) take +20% damage from everything.',
+    vulnerableBonus: 0.2,
+  },
+  spreading_rot: {
+    id: 'spreading_rot', rarity: 'rare',
+    name: 'Spreading Rot',
+    desc: 'When a Burning or Poisoned enemy dies, the affliction leaps to another living enemy.',
+    spreadAilmentOnDeath: true,
+  },
+  momentum: {
+    id: 'momentum', rarity: 'rare',
+    name: 'Momentum',
+    desc: 'Weakness hits raise your crit chance by 10% for the rest of the battle (max +50%).',
+    hasMomentum: true,
+  },
+  broken_chill: {
+    id: 'broken_chill', rarity: 'rare',
+    name: 'Broken Chill',
+    desc: 'Breaking an enemy also Chills it.',
+    breakInflictsChill: true,
+  },
+  last_stand: {
+    id: 'last_stand', rarity: 'epic',
+    name: 'Last Stand',
+    desc: 'Below 30% HP, a hero deals +40% damage and gains +15% crit chance.',
+    hasLastStand: true,
+  },
+  guardians_wrath: {
+    id: 'guardians_wrath', rarity: 'rare',
+    name: "Guardian's Wrath",
+    desc: 'Defending empowers your next action: +30% damage.',
+    hasGuardiansWrath: true,
+  },
 };
 
 /** Aggregated boon effects for quick reads in damage formulas. */
@@ -151,6 +199,12 @@ export interface BoonTotals {
   sureInflict: Ailment[];
   dotMult: number;
   healsCure: boolean;
+  vulnerableBonus: number;
+  spreadAilmentOnDeath: boolean;
+  hasMomentum: boolean;
+  breakInflictsChill: boolean;
+  hasLastStand: boolean;
+  hasGuardiansWrath: boolean;
 }
 
 export function boonTotals(ids: string[]): BoonTotals {
@@ -159,6 +213,8 @@ export function boonTotals(ids: string[]): BoonTotals {
     thorns: 0, goldMult: 1, xpMult: 1, defendHeal: 0, breakDmgBonus: 0,
     guardChipBonus: 0, potionBoost: 0, reviveOnce: false,
     sureInflict: [], dotMult: 1, healsCure: false,
+    vulnerableBonus: 0, spreadAilmentOnDeath: false, hasMomentum: false,
+    breakInflictsChill: false, hasLastStand: false, hasGuardiansWrath: false,
   };
   for (const id of ids) {
     const b = BOONS[id];
@@ -182,6 +238,12 @@ export function boonTotals(ids: string[]): BoonTotals {
     if (b.sureInflict) t.sureInflict.push(b.sureInflict);
     if (b.dotMult) t.dotMult *= b.dotMult;
     if (b.healsCure) t.healsCure = true;
+    if (b.vulnerableBonus) t.vulnerableBonus += b.vulnerableBonus;
+    if (b.spreadAilmentOnDeath) t.spreadAilmentOnDeath = true;
+    if (b.hasMomentum) t.hasMomentum = true;
+    if (b.breakInflictsChill) t.breakInflictsChill = true;
+    if (b.hasLastStand) t.hasLastStand = true;
+    if (b.hasGuardiansWrath) t.hasGuardiansWrath = true;
   }
   return t;
 }

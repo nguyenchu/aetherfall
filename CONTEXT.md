@@ -2,6 +2,78 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gameplay): Boon Synergies, Fairer Modifiers, Smarter Enemy AI
+
+Playtest ask: "improve gameplay considerably." Audited `battle.ts`/`boons.ts`/
+`modifiers.ts`/`progression.ts`. Findings: all 18 boons were flat stat
+multipliers with zero synergy between them despite the game explicitly
+citing "the Hades model" (Hades' depth comes from boons that combine); two
+of six run modifiers (`crystal_weakness`, `dark_drain`) were pure downside
+with no compensating upside, unlike `blood_pact`'s real risk/reward; enemy
+AI targeted raw-HP "weakest" (not HP ratio) and never avoided defending
+targets or varied ailment application.
+
+**Six new synergy boons** (`boons.ts`), each a mechanic hook that combines
+with several existing boons instead of standing alone:
+- `vulnerable_flesh` (epic): any ailment on an enemy (not just the DoT
+  itself) makes it take +20% from everything — amplifies every
+  ailment-applying boon/weapon in the pool.
+- `spreading_rot` (rare): a dying Burning/Poisoned enemy's affliction leaps
+  to another living enemy — combos with `smoldering_ruin`/`kindling_soul`/
+  `winters_grasp` into a real DoT-spread build.
+- `momentum` (rare): weakness hits stack +10% crit for the rest of the
+  battle, capped at +50% — rewards `perfect_break`/`shattering_force`-style
+  weakness-hunting builds.
+- `broken_chill` (rare): breaking an enemy also Chills it (slower, weaker).
+- `last_stand` (epic): below 30% HP, +40% damage and +15% crit — pairs with
+  `crystal_promise`/`iron_bulwark` as a deliberate high-risk safety net.
+- `guardians_wrath` (rare): defending empowers the bearer's next action,
+  +30% damage — makes Defend an active choice, not just a filler heal-tick.
+
+Implementation notes: `Momentum`'s stack count and `Guardian's Wrath`'s
+buffed flag are the first boon effects that need battle-scoped/combatant-
+scoped *state* rather than a flat `BoonTotals` number — added
+`Battle.momentumStacks` and `Combatant.guardBuffed` (consumed by
+`executeTurn()` right after a non-defend action resolves, so it survives
+repeated defends and covers the whole action even for AoE spells).
+
+**Modifiers** (`modifiers.ts`): `crystal_weakness` now also grants +15%
+damage ("desperation sharpens the blade"); `dark_drain` now also grants
++30% gold ("the drained Aether turns to gold"). Both reuse existing
+`RunModifier` fields (`dmgMult`/`goldMult`) already read by `battle.ts` —
+no engine changes needed, pure data.
+
+**Enemy AI** (`battle.ts` `enemyAi`): "weakest" now compares HP *ratio*
+(`hp/maxHp`), not raw HP — a squishy caster at 90% no longer loses out to a
+tank at 50% with more raw HP. Prefers non-defending targets when any exist
+(a defending target only takes half/three-quarter damage, so hitting them
+was usually the weaker play the AI didn't know to avoid). When casting a
+spell that inflicts an ailment, prefers a target who doesn't have it yet
+instead of piling onto the same target — spreads pressure across the party.
+
+Verified with a direct logic-level test script (`battle.ts` has no Phaser
+dependency by design, so it runs standalone under `tsx`, bypassing the
+browser): 15/15 checks — Vulnerable Flesh's damage ratio, Guardian's
+Wrath's set/consume/refresh-on-redefend lifecycle, Momentum's stacking and
+cap, Broken Chill firing exactly on break, Last Stand's damage+crit
+compounding (math confirmed by hand: 1.4x dmg × elevated crit rate ≈
+1.5-1.6x observed, not a bare 1.4x — first attempt's tighter bound was the
+test's error, not the code's), Spreading Rot's leap to another enemy, both
+modifier fixes present, and both AI changes (defender-avoidance,
+HP-ratio targeting) at their statistically-expected rates. Separately
+launched the real `BoonPick` scene directly with all six new boons —
+confirmed correct name/rarity color/description render with proper
+word-wrap and selection highlight. `tsc`/`pnpm build` clean.
+
+Not verified: a full UI-driven battle (menu navigation via simulated
+keypresses start-to-finish) in this environment — hit a `BattleScene`
+menu-index error that traced to this session's separately-documented
+headless render-loop throttling / boot-sequence flakiness (Title/Dialogue
+scenes not fully settled before input was sent), not to anything touched
+here (confirmed via `git status`: only `battle.ts`/`boons.ts`/
+`modifiers.ts`/`types.ts` changed — `BattleScene.ts`, where the error
+actually occurred, wasn't touched at all).
+
 ## 2026-07-16 (npc-wander): Sanctuary NPCs Wander, and Face You When You Talk
 
 Playtest ask: Sanctuary's NPCs stood on one fixed tile forever, and had no

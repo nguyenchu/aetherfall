@@ -49,16 +49,18 @@ export const MODIFIERS: RunModifier[] = [
   {
     id: 'crystal_weakness',
     name: 'Crystal Weakness',
-    desc: 'Party descends at 70% max HP.',
+    desc: 'Party descends at 70% max HP, but desperation sharpens the blade: +15% damage.',
     color: '#6c9cf0',
     startHpFactor: 0.7,
+    dmgMult: 1.15,
   },
   {
     id: 'dark_drain',
     name: 'Dark Drain',
-    desc: 'The dungeon saps life — 1 HP lost per step.',
+    desc: 'The dungeon saps life (1 HP lost per step) — but the drained Aether turns to gold: +30%.',
     color: '#aa4466',
     hpDrainPerStep: 1,
+    goldMult: 1.3,
   },
 ];
 

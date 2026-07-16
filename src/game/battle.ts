@@ -38,6 +38,13 @@ const CHILL_AGI_MULT = 0.55;
 const CHILL_DMG_MULT = 0.75;
 const BURN_FRAC = 0.06; // of max HP per tick, min 3
 const VENOM_FRAC = 0.05; // of max HP per tick, min 2
+// Synergy boons (boons.ts) — see computeHit/chipGuard/maybeKo/executeTurn.
+const GUARDIANS_WRATH_MULT = 1.3;
+const LAST_STAND_THRESHOLD = 0.3;
+const LAST_STAND_DMG_MULT = 1.4;
+const LAST_STAND_CRIT_BONUS = 0.15;
+const MOMENTUM_CRIT_PER_STACK = 0.1;
+const MOMENTUM_MAX_STACKS = 5;
 
 // --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
 // Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
@@ -94,6 +101,7 @@ export class Battle {
 
   private bn: BoonTotals;
   private reviveUsed = false;
+  private momentumStacks = 0; // Momentum boon: +crit per weakness hit landed, for the rest of the battle
 
   /** Shared inventory (item id -> count), mutated when items are used. */
   constructor(party: Combatant[], enemies: Combatant[], private inventory: Record<string, number>) {
@@ -171,6 +179,9 @@ export class Battle {
       return events;
     }
     this.execute(actor, cmd, events);
+    // Guardian's Wrath: the buff persists through repeated defends, and is
+    // spent by whatever non-defend action finally uses it.
+    if (cmd.type !== 'defend' && actor.guardBuffed) actor.guardBuffed = false;
     if (!this.checkEnd(events) && actor.side === 'enemy' && actor.stats.hp > 0 && !actor.broken) {
       this.refreshIntent(actor);
     }
@@ -286,6 +297,10 @@ export class Battle {
           actor.stats.hp += heal;
           text = `${actor.name} braces (+${DEFEND_MP_GAIN} MP, +${heal} HP).`;
         }
+        if (actor.side === 'party' && this.bn.hasGuardiansWrath) {
+          actor.guardBuffed = true;
+          text += ' Their next strike will hit harder.';
+        }
         events.push({ kind: 'defend', text, actorId: actor.id });
         return;
       }
@@ -362,6 +377,7 @@ export class Battle {
     const hit = this.computeHit(actor, target, base, element);
     this.applyDamage(target, hit.dmg);
     this.chipGuard(actor, target, hit.weak, spell?.guardHit ?? 0, events);
+    this.maybeGainMomentum(actor, hit.weak);
     const tags = hitTags(hit);
     events.push({
       kind: 'attack',
@@ -424,6 +440,7 @@ export class Battle {
       const hit = this.computeHit(actor, target, base, 'phys');
       this.applyDamage(target, hit.dmg);
       this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
+      this.maybeGainMomentum(actor, hit.weak);
       events.push({
         kind: 'spell',
         text: `${actor.name} uses ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
@@ -448,6 +465,7 @@ export class Battle {
       const hit = this.computeHit(actor, target, basePower, spell.element);
       this.applyDamage(target, hit.dmg);
       this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
+      this.maybeGainMomentum(actor, hit.weak);
       events.push({
         kind: 'spell',
         text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
@@ -601,7 +619,20 @@ export class Battle {
       dmg *= this.bn.dmgMult * (this.bn.elementMult[element] ?? 1);
       if (weak) dmg *= WEAK_MULT;
       if (target.broken) dmg *= BREAK_MULT + this.bn.breakDmgBonus;
-      crit = Math.random() < CRIT_BASE + this.bn.critBonus + (actor.gear?.critBonus ?? 0);
+      // Vulnerable Flesh: any ailment on the target (not just DoTs) opens it
+      // up to everything else too — synergizes with every ailment-applying
+      // boon/gear/weapon in the pool.
+      if (this.bn.vulnerableBonus && target.ailments && Object.keys(target.ailments).length > 0) {
+        dmg *= 1 + this.bn.vulnerableBonus;
+      }
+      // Guardian's Wrath: consumed by executeTurn() right after this action resolves.
+      if (actor.guardBuffed) dmg *= GUARDIANS_WRATH_MULT;
+      const lastStand = this.bn.hasLastStand && actor.stats.hp / actor.stats.maxHp <= LAST_STAND_THRESHOLD;
+      if (lastStand) dmg *= LAST_STAND_DMG_MULT;
+      let critChance = CRIT_BASE + this.bn.critBonus + (actor.gear?.critBonus ?? 0)
+        + (this.bn.hasMomentum ? this.momentumStacks * MOMENTUM_CRIT_PER_STACK : 0);
+      if (lastStand) critChance += LAST_STAND_CRIT_BONUS;
+      crit = Math.random() < critChance;
       if (crit) dmg *= CRIT_MULT;
     }
     // Prism ward: this element barely scratches it — switch to another school.
@@ -621,7 +652,17 @@ export class Battle {
       target.broken = true;
       target.intent = undefined;
       events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id });
+      if (this.bn.breakInflictsChill) {
+        this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: 2 }, events, true);
+      }
     }
+  }
+
+  /** Momentum boon: a landed weakness hit raises crit chance for the rest
+   * of the battle (read back in computeHit), capped so it can't run away. */
+  private maybeGainMomentum(actor: Combatant, weak: boolean): void {
+    if (!weak || actor.side !== 'party' || !this.bn.hasMomentum) return;
+    this.momentumStacks = Math.min(MOMENTUM_MAX_STACKS, this.momentumStacks + 1);
   }
 
   private applyDamage(t: Combatant, dmg: number): void {
@@ -692,6 +733,19 @@ export class Battle {
         this.maybeKo(p, events);
       }
     }
+    // Spreading Rot: a Burning or Poisoned enemy's affliction leaps to
+    // another living enemy on death instead of just fizzling out.
+    if (t.side === 'enemy' && this.bn.spreadAilmentOnDeath && t.ailments) {
+      const spreadable = (Object.entries(t.ailments) as [Ailment, number][]).find(([a]) => a === 'burn' || a === 'venom');
+      if (spreadable) {
+        const [ailment, rounds] = spreadable;
+        const others = this.living('enemy').filter((e) => e.id !== t.id);
+        if (others.length > 0) {
+          const victim = others[Math.floor(Math.random() * others.length)];
+          this.applyAilment(victim, { ailment, chance: 1, rounds: Math.max(2, rounds) }, events, true);
+        }
+      }
+    }
     events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id });
   }
 
@@ -714,10 +768,18 @@ export class Battle {
       if (defender) return { type: 'attack', targetId: defender.id };
     }
 
-    // Prefer the weakest living hero, but not relentlessly — pure focus fire
-    // feels unfair and makes protecting a wounded member impossible.
-    const weakest = targets.reduce((w, c) => c.stats.hp < w.stats.hp ? c : w);
-    const target = Math.random() < 0.6 ? weakest : targets[Math.floor(Math.random() * targets.length)];
+    // A defending target only takes half damage from a physical hit (75% from
+    // magic) — usually the weaker play, so prefer whoever isn't bracing
+    // unless everyone is (Ashbrand's hunt-the-defender case is handled above).
+    const openTargets = targets.filter((t) => !t.defending);
+    const pool = openTargets.length > 0 ? openTargets : targets;
+
+    // Prefer the weakest living hero by HP *ratio*, not raw HP — a squishy
+    // caster at 90% can have less raw HP than a tank at 50%, but the tank is
+    // the one actually close to falling. Not relentless, though — pure focus
+    // fire feels unfair and makes protecting a wounded member impossible.
+    const weakest = pool.reduce((w, c) => (c.stats.hp / c.stats.maxHp) < (w.stats.hp / w.stats.maxHp) ? c : w);
+    const target = Math.random() < 0.6 ? weakest : pool[Math.floor(Math.random() * pool.length)];
 
     // Cast occasionally if MP allows; bosses cast more often.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
@@ -733,7 +795,13 @@ export class Battle {
           return { type: 'spell', spellId, targetId: wounded.id };
         }
       } else {
-        return { type: 'spell', spellId, targetId: target.id };
+        // Spread ailments across the party instead of piling one onto a
+        // target that already has it — prefer an open target without this
+        // spell's ailment yet, falling back to the usual pick.
+        const spellTarget = spell.inflict
+          ? pool.find((t) => !t.ailments?.[spell.inflict!.ailment]) ?? target
+          : target;
+        return { type: 'spell', spellId, targetId: spellTarget.id };
       }
     }
     return { type: 'attack', targetId: target.id };
