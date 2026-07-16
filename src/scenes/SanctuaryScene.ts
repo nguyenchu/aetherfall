@@ -132,7 +132,13 @@ function npcs(): Record<string, Npc> {
       T: {
         spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
         scriptId: ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
-        questActive: isQuestActive('heed_the_stranger'), questId: 'heed_the_stranger',
+        // heed_the_stranger is a one-off "you've noticed them" bootstrap quest
+        // (completes on first talk after ch1); stranger_truth is the real
+        // payoff, gated on ch4 so it can't complete until the after4 tier —
+        // completeQuest() no-ops on an already-complete id, so this switch is
+        // what makes the second quest ever fire at all.
+        questActive: isQuestActive(ch4Done ? 'stranger_truth' : 'heed_the_stranger'),
+        questId: ch4Done ? 'stranger_truth' : 'heed_the_stranger',
       },
     } : {}),
     // The Crystal itself — an Ascension prompt, once the anchors are restored.

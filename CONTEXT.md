@@ -2,6 +2,37 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (stranger-quest): The Stranger Gets a Real Quest, Not Just Flavor Text
+
+Third and last follow-up to the dialogue rewrite. The Stranger had zero
+mechanical footprint — `heed_the_stranger` was a one-off "you noticed the
+mysterious NPC" bootstrap quest that completes on the first talk after ch1
+and nothing since (their `after2`/`after3`/`after4` dialogue tiers fire from
+`hasFlag` progression alone, no quest tied to any of it).
+
+Added `stranger_truth` (`quests.ts`): unlocks on `ch4_complete`, rewards
+gold + a new charm, `watchers_ward` (`equipment.ts` — universal charm,
++6 MP/+2 AGI, +6% crit, "Given by someone who has watched these anchors far
+longer than anyone in Sanctuary knows"). `SanctuaryScene.ts`'s Stranger NPC
+now picks `questId` dynamically (`heed_the_stranger` before ch4,
+`stranger_truth` after) instead of the old hardcoded single id — needed
+because `completeQuest()` no-ops on an already-complete id, so without the
+switch the second quest could never fire at all. `questActive` follows the
+same switch so the bounce-marker "!" reappears once there's something new
+to claim.
+
+Verified live: `stranger_truth` correctly inactive/hidden from the quest log
+before `ch4_complete`; after flagging ch2/ch3/ch4 complete, it activates,
+shows the right title/text in the log, and `completeQuest('stranger_truth')`
+grants gold (0→40) and `watchers_ward` to `ownedEquipment()`. Confirmed the
+Sanctuary NPC itself picks up `scriptId: 'npc_stranger_after4'` +
+`questId: 'stranger_truth'` after a scene restart. Equip menu → any
+character → Charm shows "Watcher's Ward", `+6 MP +2 AGI`, `✦ +6% crit`,
+correct "Fits: Kael, Lyra, Mira". `tsc`/`pnpm build` clean.
+
+Between this, `torens_blade`, and the quest-text pass, all three follow-ups
+flagged after the dialogue rewrite are done.
+
 ## 2026-07-16 (quest-text): Chapter-Clear Quest Text — Consistent Anchor Naming
 
 Second follow-up to the dialogue rewrite. `quests.ts`'s four chapter-clear

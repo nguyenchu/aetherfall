@@ -418,6 +418,7 @@ export function equipmentPrice(itemId: string): number | undefined {
     prism_edge: 240,
     geode_plate: 200,
     radiant_mace: 260,
+    watchers_ward: 190,
   };
   return prices[itemId] ?? 55;
 }

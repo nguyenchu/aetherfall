@@ -70,6 +70,13 @@ export const QUESTS: QuestDef[] = [
     unlockFlag: 'ch3_complete',
     rewards: { gold: 175, equipment: ['radiant_mace'], items: { warden_sigils: 2 } },
   },
+  {
+    id: 'stranger_truth',
+    title: 'Earn the Stranger\'s Trust',
+    text: 'Four anchors restored. Speak to the Stranger once more — they may finally trust you with something.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 40, equipment: ['watchers_ward'] },
+  },
 ];
 
 export function questRewardText(q: QuestDef): string {

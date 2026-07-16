@@ -371,6 +371,19 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { mpRegen: 2 },
     icon: { kind: 'ring', base: 0xc78aff, accent: 0xdfe4f5 },
   },
+
+  // --- Given by the Stranger, after chapter 4 -----------------------------------
+  watchers_ward: {
+    id: 'watchers_ward',
+    name: 'Watcher\'s Ward',
+    slot: 'charm',
+    users: ['kael', 'lyra', 'mira'],
+    bonus: { maxMp: 6, agi: 2 },
+    trait: 'Unseen vigil',
+    description: 'Given by someone who has watched these anchors far longer than anyone in Sanctuary knows. It hums faintly near corrupted things.',
+    effects: { critBonus: 0.06 },
+    icon: { kind: 'orb', base: 0x8a93b8, accent: 0xdfe4f5 },
+  },
 };
 
 export const STARTING_EQUIPMENT = ['slender_blade', 'ember_staff', 'dawn_mace', 'scout_vest', 'aether_robe', 'sun_charm'];
