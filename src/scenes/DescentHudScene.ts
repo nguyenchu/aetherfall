@@ -5,12 +5,6 @@ import { getRun } from '../game/run';
 import { attachTouchControls } from '../game/input';
 import { sharpText, FONT } from '../ui/text';
 
-interface PartyHudRow {
-  name: Phaser.GameObjects.Text;
-  hpFill: Phaser.GameObjects.Rectangle;
-  mpFill: Phaser.GameObjects.Rectangle;
-}
-
 interface HudData {
   areaName: string;
   accentColor: number;
@@ -29,8 +23,6 @@ interface HudData {
 export class DescentHudScene extends Phaser.Scene {
   private goldText?: Phaser.GameObjects.Text;
   private boonTexts: Phaser.GameObjects.Text[] = [];
-  private partyHud: PartyHudRow[] = [];
-  private hudSignature = '';
   private hintText?: Phaser.GameObjects.Text;
 
   constructor() {
@@ -40,13 +32,10 @@ export class DescentHudScene extends Phaser.Scene {
   create(data: HudData) {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.boonTexts = [];
-    this.partyHud = [];
-    this.hudSignature = '';
     this.hintText = undefined;
     this.goldText = undefined;
 
     this.buildHud(data.areaName, data.accentColor);
-    this.buildPartyHud();
     this.refreshBoonHud();
     attachTouchControls(this);
   }
@@ -81,40 +70,6 @@ export class DescentHudScene extends Phaser.Scene {
       this.boonTexts.push(this.add.text(GAME.width - 4, 32 + maxShown * 10, `+${boons.length - maxShown} more`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
     }
-  }
-
-  /** Compact party vitals in the bottom-left corner. */
-  private buildPartyHud() {
-    const run = getRun();
-    const top = GAME.height - 14 - run.party.length * 13;
-    this.add.rectangle(2, top - 4, 118, run.party.length * 13 + 8, 0x07060e, 0.62)
-      .setOrigin(0, 0).setDepth(9).setStrokeStyle(1, 0x2f3658, 0.5);
-    run.party.forEach((c, i) => {
-      const y = top + i * 13;
-      const name = this.add.text(6, y, c.name, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(10);
-      this.add.rectangle(44, y + 4, 44, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
-      const hpFill = this.add.rectangle(45, y + 4, 42, 2, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(11);
-      this.add.rectangle(92, y + 4, 24, 4, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(10).setStrokeStyle(1, 0x0c0e16);
-      const mpFill = this.add.rectangle(93, y + 4, 22, 2, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(11);
-      this.partyHud.push({ name, hpFill, mpFill });
-    });
-    this.updatePartyHud();
-  }
-
-  updatePartyHud() {
-    const run = getRun();
-    const signature = run.party.map((c) => `${c.stats.hp}/${c.stats.mp}`).join('|');
-    if (signature === this.hudSignature) return;
-    this.hudSignature = signature;
-    run.party.forEach((c, i) => {
-      const row = this.partyHud[i];
-      if (!row) return;
-      const hpPct = Phaser.Math.Clamp(c.stats.hp / c.stats.maxHp, 0, 1);
-      const mpPct = c.stats.maxMp > 0 ? Phaser.Math.Clamp(c.stats.mp / c.stats.maxMp, 0, 1) : 0;
-      row.hpFill.setScale(hpPct, 1);
-      row.hpFill.setFillStyle(hpPct < 0.3 ? 0xff5a6a : 0x6cf0a0, 0.95);
-      row.mpFill.setScale(mpPct, 1);
-    });
   }
 
   setGold(gold: number) {

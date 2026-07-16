@@ -345,7 +345,6 @@ export class DescentScene extends Phaser.Scene {
     this.updateCameraFollow();
     if (!this.busy) {
       this.hud.setHint(this.hintLabel());
-      this.hud.updatePartyHud();
     }
     if (this.busy || time < this.moveLockedUntil) return;
     const d = input.dir();
@@ -484,7 +483,6 @@ export class DescentScene extends Phaser.Scene {
       });
     }
     this.floatText('The spring restores you (+50% HP/MP)', '#9ae8ff', 0);
-    this.hud.updatePartyHud();
   }
 
   private floatText(text: string, color: string, delayOffset: number) {

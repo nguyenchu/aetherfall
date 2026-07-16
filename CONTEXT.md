@@ -2,6 +2,20 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Remove the Bottom-Left Party Panel from Descent Maps
+
+Ask: "fjern kael lyra mira info venstre nederst i noen kart" — the compact
+party name/HP/MP panel `DescentHudScene.buildPartyHud()` drew in the
+bottom-left corner during dungeon exploration was unwanted clutter. Removed
+`buildPartyHud()`/`updatePartyHud()`/`PartyHudRow` entirely from
+`DescentHudScene.ts`, and the two now-dead `this.hud.updatePartyHud()` call
+sites in `DescentScene.ts` (per-frame `update()` and after using a healing
+spring). Party HP/MP during a descent is still visible via the GameMenu
+(pause) screen; this only removed the always-on-screen mini version.
+Verified live: screenshot of a fresh descent map shows only the top-left
+area name / top-right gold+modifier HUD — bottom-left is now clear except
+the touch d-pad. No console/page errors.
+
 ## 2026-07-16 (gui): Surface the New Synergy Mechanics, Real Boon Names on the Run Recap
 
 Follow-up to the same day's boon-synergy pass: that work added Momentum
