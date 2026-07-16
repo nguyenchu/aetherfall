@@ -136,6 +136,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
+    this.cameras.main.fadeIn(400, 7, 6, 14);
     // Phaser reuses scene instances between battles, so reset all state.
     this.resetState();
 
@@ -204,23 +205,42 @@ export class BattleScene extends Phaser.Scene {
   private placeSide(list: Combatant[], x: number) {
     const spacing = 62;
     const startY = 126 - ((list.length - 1) * spacing) / 2;
+    // Combatants step into position at the start of battle rather than just
+    // popping in — enemies slide in from further left, the party from
+    // further right, staggered so the whole side doesn't arrive at once.
+    const fromOffset = x < GAME.width / 2 ? -46 : 46;
     list.forEach((c, i) => {
-      const img = this.add.image(x, startY + i * spacing, c.spriteKey).setScale(2.4).setDepth(5);
+      const homeY = startY + i * spacing;
+      const img = this.add.image(x + fromOffset, homeY, c.spriteKey).setScale(2.4).setDepth(5).setAlpha(0);
       this.sprites.set(c.id, img);
-      this.spriteHome.set(c.id, { x: img.x, y: img.y });
-      if (c.isElite) {
-        const ring = this.add.ellipse(img.x, img.y + img.displayHeight / 2 + 3, img.displayWidth + 18, 12)
-          .setStrokeStyle(2, 0xffa03c, 0.8).setDepth(4);
-        this.tweens.add({ targets: ring, alpha: { from: 0.85, to: 0.3 }, duration: 700, yoyo: true, repeat: -1 });
-      }
-      // Idle float — enemies and party members bob at slightly different speeds
-      const dur = c.side === 'enemy' ? 1600 + i * 220 : 2000 + i * 180;
+      this.spriteHome.set(c.id, { x, y: homeY });
       this.tweens.add({
         targets: img,
-        y: { from: img.y - 2, to: img.y + 2 },
-        duration: dur, yoyo: true, repeat: -1,
-        delay: i * 300, ease: 'Sine.easeInOut',
+        x,
+        alpha: 1,
+        duration: 550,
+        delay: 150 + i * 140,
+        ease: 'Back.easeOut',
+        onComplete: () => this.startIdleMotion(img, c, i),
       });
+    });
+  }
+
+  /** Elite ring + idle bob — started only once a combatant's entrance
+   *  slide-in has finished, so nothing floats or pulses mid-slide. */
+  private startIdleMotion(img: Phaser.GameObjects.Image, c: Combatant, i: number) {
+    if (c.isElite) {
+      const ring = this.add.ellipse(img.x, img.y + img.displayHeight / 2 + 3, img.displayWidth + 18, 12)
+        .setStrokeStyle(2, 0xffa03c, 0.8).setDepth(4);
+      this.tweens.add({ targets: ring, alpha: { from: 0.85, to: 0.3 }, duration: 700, yoyo: true, repeat: -1 });
+    }
+    // Idle float — enemies and party members bob at slightly different speeds
+    const dur = c.side === 'enemy' ? 1600 + i * 220 : 2000 + i * 180;
+    this.tweens.add({
+      targets: img,
+      y: { from: img.y - 2, to: img.y + 2 },
+      duration: dur, yoyo: true, repeat: -1,
+      ease: 'Sine.easeInOut',
     });
   }
 

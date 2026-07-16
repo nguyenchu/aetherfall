@@ -2,6 +2,47 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-16.
 
+## 2026-07-16 (gui): Longer Intro Cutscene + a Real Battle-Start Entrance
+
+Ask: "lag lengre animasjon i starten" (make the animation at the start
+longer), clarified to mean both the opening cinematic and battle entrance.
+
+**IntroScene.ts**: scaled up every phase's hold time (~1.4-1.6x), stretching
+the total runtime from ~24s to ~35s. `seq0_void` 2000->3000ms; `seq1_crystal`
+4500->6500ms (crystal/caption fade-ins slowed too); `seq2_flicker`
+2000->3000ms with the flicker itself extended (repeat 8->12) so it still
+fills the held time; `seq3_shatter` 3000->4500ms with longer shard flight
+(700-1400 -> 900-1800ms); `seq4_rain` 3200->5000ms with more rain drops
+(repeat 60->90); `seq5_sanctuary` 5000->7000ms with the three captions
+re-paced to fit; `seq6_heroes` 3200->4500ms + a longer pre-title pause
+(500->800ms); final fade-out 800->1100ms. Docstring's phase-start comments
+updated to match. Skip-on-any-key still works identically.
+
+**BattleScene.ts**: battles previously popped in with zero transition — no
+`fadeIn` anywhere in the file. Added `cameras.main.fadeIn(400, ...)` at the
+top of `create()`, and reworked `placeSide()` so combatants slide + fade
+into their positions (enemies from further left, party from further
+right, `Back.easeOut`, staggered ~140ms apart) instead of appearing fully
+formed instantly. The elite ring and idle-bob tween (previously started
+immediately) now only start once a combatant's own entrance tween
+finishes (`startIdleMotion()`), so nothing bobs or pulses mid-slide.
+
+**Verification note**: this repo's headless-Chromium test harness has a
+known, previously-documented issue where `scene.time.delayedCall`/`addEvent`
+callbacks (used by `IntroScene`'s `after()` helper) don't fire reliably at
+this environment's very low actual FPS — confirmed again here (a phase
+transition looked stuck past its expected time in a real-time screenshot
+test). Distinguished this from an actual bug by inspecting object state
+directly: star fade-tween alpha values were correctly progressing
+(0.3-0.9 range) and `scene.time.now` advanced normally, proving the
+scene's own logic is correct and this is purely the pre-existing
+timer-callback quirk, not a regression. `Tweens.add` (used by the new
+battle-entrance animation, not `delayedCall`) was confirmed reliable in
+this same environment via direct state checks: sprites captured mid-slide
+at their offset start position with `alpha: 0`, then at their final home
+position with `alpha: 1` a moment later — both screenshotted and
+programmatically verified. `tsc --noEmit` clean, no console/page errors.
+
 ## 2026-07-16 (gui): Show a Spell's Element (and Weakness Match) in the Magic List
 
 Ask: "bør vi ha at skills viser allerede hva som monstre er weak mot før vi

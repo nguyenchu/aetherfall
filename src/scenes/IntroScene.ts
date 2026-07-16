@@ -7,17 +7,17 @@ const CY = GAME.height / 2;
 
 /**
  * Cinematic intro sequence before the title screen.
- * Runs ~20 seconds. Any key or tap skips immediately to Title.
+ * Runs ~35 seconds. Any key or tap skips immediately to Title.
  *
  * Sequence:
- *  0 s  — black void, stars drift in
- *  2 s  — Aether crystal forms at center, text: "In the age of light…"
- *  5 s  — crystal flickers, text: "Then it fell."
- *  7 s  — crystal shatters into 12 shards
- *  9 s  — particle rain, text: "The twelve anchors began to fail."
- * 12 s  — rain slows, single warm glow, text: "Sanctuary."
- * 15 s  — three silhouettes, text: "You are its last hope."
- * 18 s  — fade to black → TitleScene
+ *  0 s    — black void, stars drift in
+ *  3 s    — Aether crystal forms at center, text: "In the age of light…"
+ *  9.5 s  — crystal flickers, text: "Then it fell."
+ * 12.5 s  — crystal shatters into 12 shards
+ * 17 s    — particle rain, text: "The twelve anchors began to fail."
+ * 22 s    — rain slows, single warm glow, text: "Sanctuary."
+ * 29 s    — three silhouettes, text: "You are its last hope."
+ * 34 s    — fade to black → TitleScene
  */
 export class IntroScene extends Phaser.Scene {
   private done = false;
@@ -97,7 +97,7 @@ export class IntroScene extends Phaser.Scene {
       },
     });
 
-    this.after(2000, () => this.seq1_crystal());
+    this.after(3000, () => this.seq1_crystal());
   }
 
   // ── Phase 1: crystal forms, first text ───────────────────────────────────
@@ -106,10 +106,10 @@ export class IntroScene extends Phaser.Scene {
     const crystal = this.buildCrystal(CX, CY - 10);
 
     const t1 = this.caption('In the age of light, Aether bound the world aloft.', CY + 60, '#dfe4f5', '12px');
-    this.after(400, () => this.fadeIn(crystal, 1200));
-    this.after(900, () => this.fadeIn(t1, 900));
+    this.after(600, () => this.fadeIn(crystal, 1400));
+    this.after(1300, () => this.fadeIn(t1, 1000));
 
-    this.after(4500, () => {
+    this.after(6500, () => {
       this.fadeOut(t1, 500);
       this.seq2_flicker(crystal);
     });
@@ -156,14 +156,14 @@ export class IntroScene extends Phaser.Scene {
     let count = 0;
     const flicker = this.time.addEvent({
       delay: 160,
-      repeat: 8,
+      repeat: 12,
       callback: () => {
         count++;
         crystal.setAlpha(count % 2 === 0 ? 0.2 : 1);
       },
     });
 
-    this.after(2000, () => {
+    this.after(3000, () => {
       flicker.remove();
       this.fadeOut(t2, 400);
       this.seq3_shatter(crystal);
@@ -192,15 +192,15 @@ export class IntroScene extends Phaser.Scene {
         y: (CY - 10) + Math.sin(angle) * dist,
         alpha: 0,
         angle: shard.angle + Phaser.Math.Between(-180, 180),
-        duration: Phaser.Math.Between(700, 1400),
+        duration: Phaser.Math.Between(900, 1800),
         ease: 'Quad.easeOut',
         onComplete: () => shard.destroy(),
       });
     }
 
     const t3 = this.caption('The twelve anchors of the world began to fail.', CY + 60, '#c9cee8', '11px');
-    this.after(500, () => this.fadeIn(t3, 800));
-    this.after(3000, () => { this.fadeOut(t3, 500); this.seq4_rain(); });
+    this.after(700, () => this.fadeIn(t3, 900));
+    this.after(4500, () => { this.fadeOut(t3, 500); this.seq4_rain(); });
   }
 
   // ── Phase 4: world sinking, particle rain ────────────────────────────────
@@ -209,7 +209,7 @@ export class IntroScene extends Phaser.Scene {
     const rainParticles: Phaser.GameObjects.Arc[] = [];
     const rain = this.time.addEvent({
       delay: 55,
-      repeat: 60,
+      repeat: 90,
       callback: () => {
         const x = Phaser.Math.Between(0, GAME.width);
         const p = this.add.circle(x, -4, Phaser.Math.FloatBetween(0.8, 2.2), 0x8a6cf0, 0.7).setDepth(5);
@@ -223,9 +223,9 @@ export class IntroScene extends Phaser.Scene {
     });
 
     const t4 = this.caption('One by one, the lands sank into the deep.', CY + 50, '#8a93b8', '11px');
-    this.after(400, () => this.fadeIn(t4, 800));
+    this.after(600, () => this.fadeIn(t4, 900));
 
-    this.after(3200, () => {
+    this.after(5000, () => {
       rain.remove();
       this.fadeOut(t4, 500);
       this.seq5_sanctuary();
@@ -251,11 +251,11 @@ export class IntroScene extends Phaser.Scene {
     const t5a = this.caption('One crystal holds.', CY + 30, '#f0d36c', '13px');
     const t5b = this.caption('One city stands.', CY + 52, '#f0d36c', '13px');
     const t5c = this.caption('S A N C T U A R Y', CY + 80, '#dfe4f5', '16px');
-    this.after(800, () => this.fadeIn(t5a, 700));
-    this.after(1600, () => this.fadeIn(t5b, 700));
-    this.after(2400, () => this.fadeIn(t5c, 900));
+    this.after(1000, () => this.fadeIn(t5a, 800));
+    this.after(2200, () => this.fadeIn(t5b, 800));
+    this.after(3200, () => this.fadeIn(t5c, 1100));
 
-    this.after(5000, () => {
+    this.after(7000, () => {
       [t5a, t5b, t5c].forEach((t) => this.fadeOut(t, 400));
       this.seq6_heroes();
     });
@@ -289,11 +289,11 @@ export class IntroScene extends Phaser.Scene {
     });
 
     const t6 = this.caption('And you are its last hope.', CY + 90, '#dfe4f5', '13px');
-    this.after(1000, () => this.fadeIn(t6, 800));
+    this.after(1400, () => this.fadeIn(t6, 900));
 
-    this.after(3200, () => {
+    this.after(4500, () => {
       this.fadeOut(t6, 500);
-      this.after(500, () => this.seq7_end());
+      this.after(800, () => this.seq7_end());
     });
   }
 
@@ -302,7 +302,7 @@ export class IntroScene extends Phaser.Scene {
   private seq7_end() {
     if (this.done) return;
     this.done = true;
-    this.cameras.main.fadeOut(800, 7, 6, 14);
+    this.cameras.main.fadeOut(1100, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Title'));
   }
 }
