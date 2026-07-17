@@ -158,9 +158,95 @@ export class BattleScene extends Phaser.Scene {
     this.bindKeys();
     this.syncDisplay();
     music.play('battle', getArea(run.depth).theme.id as AreaThemeId);
-    this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
-    this.battle.start();
-    this.advance();
+
+    // Bosses get a cinematic reveal before the battle proper begins; the CTB
+    // loop is held (ui = 'busy' blocks input) until the reveal finishes so no
+    // turn resolves behind the overlay.
+    const bossC = this.battle.enemies.find((e) => e.isBoss);
+    if (bossC) {
+      this.ui = 'busy';
+      this.playBossReveal(bossC, getArea(run.depth).theme.accent, () => {
+        this.pushLog('The way is barred. Break through!');
+        this.battle.start();
+        this.advance();
+      });
+    } else {
+      this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
+      this.battle.start();
+      this.advance();
+    }
+  }
+
+  /** Boss title cards. Falls back to no subtitle for unlisted bosses. */
+  private static readonly BOSS_EPITHET: Record<string, string> = {
+    forest_shade: 'The Blight of Ashenveil',
+    tide_warden: 'Keeper of the Drowned Keep',
+    ashbrand: 'The Ember That Will Not Die',
+    prism_sovereign: 'Sovereign of the Shattered Depths',
+  };
+
+  /**
+   * Dramatic pre-battle reveal for bosses. Draws over a darkened overlay with a
+   * blown-up copy of the boss sprite, pulse rings, a swept-in name banner, and a
+   * camera shake — purely decorative, so it never touches the real sprite, its
+   * HP bar, or the intent UI (all hidden beneath the overlay until it clears).
+   */
+  private playBossReveal(boss: Combatant, accent: number, done: () => void) {
+    const cx = GAME.width / 2;
+    const cy = 96;
+    const overlay = this.add.rectangle(0, 0, GAME.width, GAME.height, 0x05060e, 0)
+      .setOrigin(0, 0).setDepth(45);
+    this.tweens.add({ targets: overlay, alpha: 0.82, duration: 260, ease: 'Sine.easeOut' });
+
+    // Expanding element-colored rings behind the boss.
+    for (let i = 0; i < 3; i++) {
+      const ring = this.add.circle(cx, cy, 10, accent, 0.5).setDepth(46);
+      this.tweens.add({
+        targets: ring, scale: 8 + i * 3, alpha: 0,
+        duration: 900, delay: 250 + i * 160, ease: 'Cubic.easeOut',
+        onComplete: () => ring.destroy(),
+      });
+    }
+
+    // Blown-up copy of the boss sprite: slams in, then breathes.
+    const hero = this.add.image(cx, cy, boss.spriteKey).setScale(0).setDepth(48).setAlpha(0);
+    this.tweens.add({ targets: hero, scale: 3.6, alpha: 1, duration: 420, delay: 240, ease: 'Back.easeOut' });
+    this.time.delayedCall(660, () => {
+      this.cameras.main.shake(360, 0.014);
+      sfx.play('magic');
+      hero.setTintFill(boss.color);
+      this.time.delayedCall(180, () => hero.clearTint());
+      this.tweens.add({ targets: hero, scaleX: 3.4, scaleY: 3.8, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    });
+
+    // Name banner: two rules sweep out from center, name + epithet fade in.
+    const bannerY = cy + 78;
+    const ruleTop = this.add.rectangle(cx, bannerY - 15, 4, 2, accent, 0.95).setDepth(49);
+    const ruleBot = this.add.rectangle(cx, bannerY + 15, 4, 2, accent, 0.95).setDepth(49);
+    this.tweens.add({ targets: [ruleTop, ruleBot], width: 260, duration: 520, delay: 520, ease: 'Cubic.easeOut' });
+
+    const name = this.add.text(cx, bannerY, boss.name.toUpperCase(),
+      sharpText({ fontFamily: FONT, fontSize: '22px', color: '#ffffff', strokeThickness: 3, align: 'center' }))
+      .setOrigin(0.5).setDepth(50).setAlpha(0).setScale(1.3);
+    this.tweens.add({ targets: name, alpha: 1, scale: 1, duration: 520, delay: 560, ease: 'Back.easeOut' });
+
+    const epithet = BattleScene.BOSS_EPITHET[boss.id];
+    const sub = epithet
+      ? this.add.text(cx, bannerY + 20, epithet,
+          sharpText({ fontFamily: FONT, fontSize: '10px', color: '#c9cee8', strokeThickness: 2, align: 'center' }))
+          .setOrigin(0.5).setDepth(50).setAlpha(0)
+      : undefined;
+    if (sub) this.tweens.add({ targets: sub, alpha: 1, duration: 600, delay: 900 });
+
+    // Hold, then clear everything and hand control to the battle.
+    this.time.delayedCall(2100, () => {
+      const junk = [overlay, hero, ruleTop, ruleBot, name, ...(sub ? [sub] : [])];
+      junk.forEach((o) => this.tweens.killTweensOf(o));
+      this.tweens.add({
+        targets: junk, alpha: 0, duration: 480, ease: 'Sine.easeIn',
+        onComplete: () => { junk.forEach((o) => o.destroy()); done(); },
+      });
+    });
   }
 
   // --- Layout ---------------------------------------------------------------
@@ -911,7 +997,16 @@ export class BattleScene extends Phaser.Scene {
             onClose: () => this.toTown(),
           }),
         });
-        const afterWin = isFinalBossFirstClear ? endingThenFeedback : () => this.toTown();
+        // Non-ending boss wins get the "anchor restored" interstitial between
+        // the victory dialogue and the return to town. The final-boss first
+        // clear keeps its own ending ceremony instead.
+        const chapterClear = () => this.scene.launch('ChapterClear', {
+          chapter: chapterOfDepth(depth),
+          accent: getArea(depth).theme.accent,
+          areaName: getArea(depth).name,
+          onDone: () => this.toTown(),
+        });
+        const afterWin = isFinalBossFirstClear ? endingThenFeedback : chapterClear;
         this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
       });
       return;
@@ -991,19 +1086,31 @@ export class BattleScene extends Phaser.Scene {
   private returnAllHeroesHome(exceptId?: string) {
     for (const c of this.battle.party) {
       if (c.id === exceptId) continue;
+      // Downed members stay slumped where fadeKo left them — don't stand them
+      // back up and bob them as if they were alive.
+      if (c.stats.hp <= 0) continue;
       const img = this.sprites.get(c.id);
       const home = this.spriteHome.get(c.id);
       if (!img || !home) continue;
       this.tweens.killTweensOf(img);
       this.tweens.add({
         targets: img, x: home.x, y: home.y, duration: 120, ease: 'Sine.easeOut',
-        onComplete: () => {
-          if (img.active) {
-            this.tweens.add({ targets: img, y: { from: home.y - 2, to: home.y + 2 }, duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-          }
-        },
+        onComplete: () => this.restartIdle(c.id),
       });
     }
+  }
+
+  /** (Re)starts the gentle home-position idle bob for a living combatant,
+   *  replacing any tween currently on the sprite. */
+  private restartIdle(id: string) {
+    const img = this.sprites.get(id);
+    const home = this.spriteHome.get(id);
+    if (!img || !home || !img.active) return;
+    this.tweens.killTweensOf(img);
+    this.tweens.add({
+      targets: img, y: { from: home.y - 2, to: home.y + 2 },
+      duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
   }
 
   private static spellColor(element?: string): number {
@@ -1078,18 +1185,30 @@ export class BattleScene extends Phaser.Scene {
     const actor = this.sprites.get(actorId);
     const target = this.sprites.get(targetId);
     if (!actor || !target) return;
-    const ox = actor.x;
-    const oy = actor.y;
-    const dx = Phaser.Math.Clamp((target.x - actor.x) * 0.22, -26, 26);
-    const dy = Phaser.Math.Clamp((target.y - actor.y) * 0.12, -10, 10);
+    // The lunge starts wherever the actor stands (it may still be stepped
+    // forward from its menu), but it must always settle back on its home line —
+    // not on a position captured mid-flight while returnAllHeroesHome is tweening
+    // it, which used to leave the attacker frozen a few pixels out of formation.
+    const home = this.spriteHome.get(actorId);
+    const sx = actor.x;
+    const sy = actor.y;
+    const restX = home?.x ?? sx;
+    const restY = home?.y ?? sy;
+    this.tweens.killTweensOf(actor);
+    const dx = Phaser.Math.Clamp((target.x - sx) * 0.22, -26, 26);
+    const dy = Phaser.Math.Clamp((target.y - sy) * 0.12, -10, 10);
     this.tweens.add({
       targets: actor,
-      x: ox + dx,
-      y: oy + dy,
+      x: sx + dx,
+      y: sy + dy,
       duration: 95,
-      yoyo: true,
       ease: 'Quad.easeOut',
-      onComplete: () => actor.setPosition(ox, oy),
+      onComplete: () => {
+        this.tweens.add({
+          targets: actor, x: restX, y: restY, duration: 130, ease: 'Sine.easeIn',
+          onComplete: () => this.restartIdle(actorId),
+        });
+      },
     });
     const slashColor = element && element !== 'phys' && element !== 'none'
       ? BattleScene.spellColor(element)
@@ -1271,7 +1390,10 @@ export class BattleScene extends Phaser.Scene {
     const img = this.sprites.get(id);
     const home = this.spriteHome.get(id);
     if (!img) return;
-    this.tweens.add({ targets: img, alpha: 1, y: home?.y ?? img.y - 8, duration: 300, ease: 'Sine.easeOut' });
+    this.tweens.add({
+      targets: img, alpha: 1, y: home?.y ?? img.y - 8, duration: 300, ease: 'Sine.easeOut',
+      onComplete: () => this.restartIdle(id),
+    });
   }
 
   private syncDisplay() {
