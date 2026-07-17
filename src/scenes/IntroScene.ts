@@ -7,17 +7,31 @@ const CY = GAME.height / 2;
 
 /**
  * Cinematic intro sequence before the title screen.
- * Runs ~35 seconds. Any key or tap skips immediately to Title.
+ * Runs ~155 seconds. Any key or tap skips immediately to Title.
  *
- * Sequence:
- *  0 s    — black void, stars drift in
- *  3 s    — Aether crystal forms at center, text: "In the age of light…"
- *  9.5 s  — crystal flickers, text: "Then it fell."
- * 12.5 s  — crystal shatters into 12 shards
- * 17 s    — particle rain, text: "The twelve anchors began to fail."
- * 22 s    — rain slows, single warm glow, text: "Sanctuary."
- * 29 s    — three silhouettes, text: "You are its last hope."
- * 34 s    — fade to black → TitleScene
+ * Act I — the world (why the city matters):
+ *  0 s     — black void, stars drift in
+ *  3.2 s   — Aether crystal forms, text: "In the age of light…" then "Twelve anchors…"
+ * 16.1 s   — a ring of twelve lights forms around the crystal: "Sanctuary was only one light among many."
+ * 25 s     — crystal + ring flicker, text: "But light is not eternal." → "Then it fell."
+ * 31.4 s   — crystal shatters, text: "The twelve anchors began to fail, one by one."
+ * 35.9 s   — four colored fragments drift apart, naming the forest / sunken / ashen / crystal anchors
+ * 49.7 s   — particle rain, text: "One by one, the lands sank into the deep…"
+ * 54.7 s   — a Warden sigil forms: "Only the Wardens remained…" → "…the gates of the last anchor."
+ * 64.9 s   — single warm glow: "Around that light, a city grew…" → "Sanctuary."
+ * 75.4 s   — a lone silhouette walks out and fades: "Watchers were sent out…" → "Not all of them came home."
+ *
+ * Act II — the heroes (why they came together):
+ * 85 s     — Kael: a watch-line of eight marches into a forest gate; seven are
+ *            snuffed out, only Kael turns back.
+ * 101 s    — Lyra: reaches for a failing anchor; it shatters anyway; a spark
+ *            rekindles in her hand — her vow.
+ * 118 s    — Mira: a flame is handed down a line of kneeling Wardens; she rises
+ *            and lifts it to the sigil.
+ * 135 s    — the three walk in from off-screen and converge: "Three roads.
+ *            Three wounds. One light left to guard." → per-hero lines → "And you
+ *            are its last hope."
+ * 155 s    — fade to black → TitleScene
  */
 export class IntroScene extends Phaser.Scene {
   private done = false;
@@ -52,6 +66,32 @@ export class IntroScene extends Phaser.Scene {
 
   private fadeOut(obj: Phaser.GameObjects.GameObject & { alpha: number }, dur = 600) {
     this.tweens.add({ targets: obj, alpha: 0, duration: dur, ease: 'Sine.easeIn' });
+  }
+
+  /** Draws a simple humanoid silhouette around a local (0,0) origin, so it can
+   *  be wrapped in a container and moved/scaled as one. Used by every vignette. */
+  private drawHero(color: number, s = 1, alpha = 0.85): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics();
+    g.fillStyle(color, alpha);
+    g.fillCircle(0, 10 * s, 7 * s);            // head
+    g.fillRect(-6 * s, 17 * s, 12 * s, 18 * s); // torso
+    g.fillRect(-10 * s, 19 * s, 6 * s, 10 * s); // left arm
+    g.fillRect(4 * s, 19 * s, 6 * s, 10 * s);   // right arm
+    g.fillRect(-5 * s, 35 * s, 5 * s, 12 * s);  // left leg
+    g.fillRect(1 * s, 35 * s, 5 * s, 12 * s);   // right leg
+    return g;
+  }
+
+  /** Fades out and destroys everything a vignette built, then runs the next
+   *  phase. Kills any looping tweens first so they don't fight the fade. */
+  private sweep(objs: Array<Phaser.GameObjects.GameObject & { alpha: number }>, next: () => void, dur = 700) {
+    const alive = objs.filter((o) => o.active);
+    if (alive.length === 0) { next(); return; }
+    alive.forEach((o) => this.tweens.killTweensOf(o));
+    this.tweens.add({
+      targets: alive, alpha: 0, duration: dur, ease: 'Sine.easeIn',
+      onComplete: () => { alive.forEach((o) => o.destroy()); next(); },
+    });
   }
 
   private skip() {
@@ -97,7 +137,7 @@ export class IntroScene extends Phaser.Scene {
       },
     });
 
-    this.after(3000, () => this.seq1_crystal());
+    this.after(3200, () => this.seq1_crystal());
   }
 
   // ── Phase 1: crystal forms, first text ───────────────────────────────────
@@ -109,9 +149,16 @@ export class IntroScene extends Phaser.Scene {
     this.after(600, () => this.fadeIn(crystal, 1400));
     this.after(1300, () => this.fadeIn(t1, 1000));
 
-    this.after(6500, () => {
+    this.after(6000, () => {
       this.fadeOut(t1, 500);
-      this.seq2_flicker(crystal);
+      this.after(700, () => {
+        const t1b = this.caption('Twelve anchors, woven of living crystal, held the realm above the dark.', CY + 60, '#dfe4f5', '12px');
+        this.fadeIn(t1b, 1000);
+        this.after(5500, () => {
+          this.fadeOut(t1b, 500);
+          this.after(600, () => this.seq1b_anchors(crystal));
+        });
+      });
     });
   }
 
@@ -146,34 +193,78 @@ export class IntroScene extends Phaser.Scene {
     return container;
   }
 
+  // ── Phase 1b: a ring of twelve lights forms around the crystal ──────────
+
+  private seq1b_anchors(crystal: Phaser.GameObjects.Container) {
+    const ring: Phaser.GameObjects.Arc[] = [];
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12 - Math.PI / 2;
+      const x = CX + Math.cos(angle) * 55;
+      const y = (CY - 10) + Math.sin(angle) * 55;
+      const light = this.add.circle(x, y, 3, 0xaad4ff, 0).setDepth(9);
+      ring.push(light);
+      this.tweens.add({ targets: light, alpha: 0.8, duration: 500, delay: i * 90, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: light, alpha: { from: 0.8, to: 0.4 }, duration: 1400, yoyo: true, repeat: -1, delay: 1200 + i * 90 });
+    }
+
+    const t1 = this.caption('Forests grew in their glow. Cities rose in their warmth.', CY + 60, '#dfe4f5', '12px');
+    this.after(1600, () => this.fadeIn(t1, 900));
+
+    this.after(4600, () => {
+      this.fadeOut(t1, 500);
+      this.after(700, () => {
+        const t2 = this.caption('Sanctuary was only one light among many.', CY + 60, '#dfe4f5', '12px');
+        this.fadeIn(t2, 900);
+        this.after(3600, () => {
+          this.fadeOut(t2, 500);
+          this.seq2_flicker(crystal, ring);
+        });
+      });
+    });
+  }
+
   // ── Phase 2: crystal flickers ────────────────────────────────────────────
 
-  private seq2_flicker(crystal: Phaser.GameObjects.Container) {
-    const t2 = this.caption('Then it fell.', CY + 60, '#ff9a9a', '18px');
-    this.fadeIn(t2, 600);
+  private seq2_flicker(crystal: Phaser.GameObjects.Container, ring: Phaser.GameObjects.Arc[]) {
+    const pre = this.caption('But light is not eternal.', CY + 60, '#c9cee8', '12px');
+    this.fadeIn(pre, 700);
 
-    // Flicker the crystal
-    let count = 0;
-    const flicker = this.time.addEvent({
-      delay: 160,
-      repeat: 12,
-      callback: () => {
-        count++;
-        crystal.setAlpha(count % 2 === 0 ? 0.2 : 1);
-      },
-    });
+    this.after(2600, () => {
+      this.fadeOut(pre, 500);
+      this.after(600, () => {
+        const t2 = this.caption('Then it fell.', CY + 60, '#ff9a9a', '18px');
+        this.fadeIn(t2, 600);
 
-    this.after(3000, () => {
-      flicker.remove();
-      this.fadeOut(t2, 400);
-      this.seq3_shatter(crystal);
+        // Flicker the crystal and the ring of anchors together
+        let count = 0;
+        const flicker = this.time.addEvent({
+          delay: 160,
+          repeat: 14,
+          callback: () => {
+            count++;
+            crystal.setAlpha(count % 2 === 0 ? 0.2 : 1);
+            for (let i = 0; i < ring.length; i++) {
+              ring[i].setAlpha(count % 2 === 0 ? 0.1 : (i % 2 === 0 ? 0.7 : 0.4));
+            }
+          },
+        });
+
+        this.after(3200, () => {
+          flicker.remove();
+          this.fadeOut(t2, 400);
+          this.seq3_shatter(crystal, ring);
+        });
+      });
     });
   }
 
   // ── Phase 3: crystal shatters ────────────────────────────────────────────
 
-  private seq3_shatter(crystal: Phaser.GameObjects.Container) {
+  private seq3_shatter(crystal: Phaser.GameObjects.Container, ring: Phaser.GameObjects.Arc[]) {
     crystal.setAlpha(0);
+    for (const light of ring) {
+      this.tweens.add({ targets: light, alpha: 0, duration: 500, onComplete: () => light.destroy() });
+    }
 
     // Flash
     const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xeef2ff, 0.85).setOrigin(0, 0).setDepth(25);
@@ -198,9 +289,50 @@ export class IntroScene extends Phaser.Scene {
       });
     }
 
-    const t3 = this.caption('The twelve anchors of the world began to fail.', CY + 60, '#c9cee8', '11px');
+    const t3 = this.caption('The twelve anchors began to fail, one by one.', CY + 60, '#c9cee8', '11px');
     this.after(700, () => this.fadeIn(t3, 900));
-    this.after(4500, () => { this.fadeOut(t3, 500); this.seq4_rain(); });
+    this.after(4500, () => { this.fadeOut(t3, 500); this.seq3b_fragments(); });
+  }
+
+  // ── Phase 3b: the fallen anchors scatter into four kinds of ruin ────────
+
+  private seq3b_fragments() {
+    const beats: Array<{ text: string; color: number; angle: number }> = [
+      { text: 'Some sank into forests that forgot the sun.', color: 0x4aaa5a, angle: Math.PI * 1.25 },
+      { text: 'Some drowned beneath seas that never settled.', color: 0x3a7a9a, angle: Math.PI * 1.75 },
+      { text: 'Some smoldered in ash where the fire never sleeps.', color: 0xcc4411, angle: Math.PI * 0.25 },
+      { text: 'Some cracked into crystal, sharp and endless.', color: 0x8a4ae0, angle: Math.PI * 0.75 },
+    ];
+
+    const runBeat = (i: number) => {
+      if (i >= beats.length) {
+        this.after(600, () => this.seq4_rain());
+        return;
+      }
+      const b = beats[i];
+      for (let p = 0; p < 10; p++) {
+        const spread = Phaser.Math.FloatBetween(-0.3, 0.3);
+        const dist = Phaser.Math.Between(40, 120);
+        const shard = this.add.circle(CX, CY - 10, Phaser.Math.FloatBetween(1.5, 3.5), b.color, 0.85).setDepth(11);
+        this.tweens.add({
+          targets: shard,
+          x: CX + Math.cos(b.angle + spread) * dist,
+          y: (CY - 10) + Math.sin(b.angle + spread) * dist,
+          alpha: 0,
+          duration: Phaser.Math.Between(1600, 2400),
+          ease: 'Sine.easeOut',
+          onComplete: () => shard.destroy(),
+        });
+      }
+      const t = this.caption(b.text, CY + 60, '#c9cee8', '11px');
+      this.after(300, () => this.fadeIn(t, 800));
+      this.after(2800, () => {
+        this.fadeOut(t, 500);
+        this.after(500, () => runBeat(i + 1));
+      });
+    };
+
+    runBeat(0);
   }
 
   // ── Phase 4: world sinking, particle rain ────────────────────────────────
@@ -222,19 +354,59 @@ export class IntroScene extends Phaser.Scene {
       },
     });
 
-    const t4 = this.caption('One by one, the lands sank into the deep.', CY + 50, '#8a93b8', '11px');
+    const t4 = this.caption('One by one, the lands sank into the deep, and the sky itself grew hollow.', CY + 50, '#8a93b8', '11px');
     this.after(600, () => this.fadeIn(t4, 900));
 
     this.after(5000, () => {
       rain.remove();
       this.fadeOut(t4, 500);
-      this.seq5_sanctuary();
+      this.seq4b_wardens();
+    });
+  }
+
+  // ── Phase 4b: the Wardens' vigil ─────────────────────────────────────────
+
+  private seq4b_wardens() {
+    const g = this.add.graphics().setDepth(10).setAlpha(0);
+    g.lineStyle(2, 0xf0d36c, 0.9);
+    g.strokeCircle(CX, CY - 10, 18);
+    g.lineBetween(CX, CY - 28, CX, CY + 8);
+    g.lineBetween(CX - 14, CY - 10, CX + 14, CY - 10);
+    this.fadeIn(g, 1000);
+    this.after(1000, () => {
+      this.tweens.add({ targets: g, alpha: { from: 0.9, to: 0.5 }, duration: 1600, yoyo: true, repeat: -1 });
+    });
+
+    const t1 = this.caption('Only the Wardens remained, sworn to keep what little light was left.', CY + 60, '#f0d36c', '12px');
+    this.after(1200, () => this.fadeIn(t1, 900));
+
+    this.after(4600, () => {
+      this.fadeOut(t1, 500);
+      this.after(700, () => {
+        const t2 = this.caption('Generation after generation, they stood watch at the gates of the last anchor.', CY + 60, '#f0d36c', '12px');
+        this.fadeIn(t2, 900);
+        this.after(4200, () => {
+          this.fadeOut(t2, 500);
+          this.fadeOut(g, 600);
+          this.after(700, () => this.seq5_sanctuary());
+        });
+      });
     });
   }
 
   // ── Phase 5: single sanctuary glow ───────────────────────────────────────
 
   private seq5_sanctuary() {
+    const t0 = this.caption('Around that one light, a city grew — the last of its kind in a darkened world.', CY + 60, '#dfe4f5', '12px');
+    this.fadeIn(t0, 900);
+
+    this.after(3600, () => {
+      this.fadeOut(t0, 500);
+      this.after(500, () => this.seq5_glow());
+    });
+  }
+
+  private seq5_glow() {
     // Warm glow at center
     const glowColors = [0xf0d36c, 0xfff0aa, 0xf0d36c];
     for (let i = 0; i < 3; i++) {
@@ -257,44 +429,353 @@ export class IntroScene extends Phaser.Scene {
 
     this.after(7000, () => {
       [t5a, t5b, t5c].forEach((t) => this.fadeOut(t, 400));
-      this.seq6_heroes();
+      this.seq5b_watchers();
     });
   }
 
-  // ── Phase 6: three silhouettes + call to arms ─────────────────────────────
+  // ── Phase 5b: watchers sent out to the other anchors ─────────────────────
+
+  private seq5b_watchers() {
+    const figure = this.add.graphics().setDepth(10).setAlpha(0);
+    figure.fillStyle(0xdfe4f5, 0.85);
+    figure.fillCircle(CX, CY + 4, 6);
+    figure.fillRect(CX - 5, CY + 10, 10, 16);
+    this.fadeIn(figure, 800);
+
+    const t1 = this.caption('From Sanctuary, watchers were sent to the other anchors, to see what could still be saved.', CY + 60, '#c9cee8', '11px');
+    this.after(1000, () => this.fadeIn(t1, 900));
+
+    this.after(4200, () => {
+      this.fadeOut(t1, 500);
+      this.tweens.add({ targets: figure, x: -70, alpha: 0, duration: 2200, ease: 'Sine.easeIn' });
+
+      this.after(1400, () => {
+        const t2 = this.caption('Not all of them came home.', CY + 60, '#8a93b8', '13px');
+        this.fadeIn(t2, 900);
+        this.after(3400, () => {
+          this.fadeOut(t2, 500);
+          this.after(700, () => this.seq6a_kael());
+        });
+      });
+    });
+  }
+
+  // ── Phase 6a: Kael — the watch-line that never came back ─────────────────
+
+  private seq6a_kael() {
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
+    const TEAL = 0x6cf0c2;
+    const gx = CX + 96, gy = CY - 4;
+
+    // A dark forest gate on the right, with a sickly glow in the doorway.
+    const gate = this.add.graphics().setDepth(8).setAlpha(0);
+    gate.fillStyle(0x0e1f15, 0.95);
+    gate.fillRect(gx - 4, gy - 44, 8, 96);
+    gate.fillRect(gx - 46, gy - 44, 8, 96);
+    gate.fillRect(gx - 46, gy - 48, 50, 8);
+    gate.fillStyle(0x1c3f27, 0.6);
+    gate.fillRect(gx - 38, gy - 40, 34, 92);
+    objs.push(gate);
+    this.fadeIn(gate, 900);
+
+    const t1 = this.caption('Kael led a watch-line of eight into Ashenveil.', CY + 74, '#6cf0c2', '12px');
+    objs.push(t1);
+    this.after(700, () => this.fadeIn(t1, 900));
+
+    // Seven watchers march in from the left and are snuffed out at the gate.
+    for (let i = 0; i < 7; i++) {
+      const g = this.drawHero(TEAL, 0.5);
+      const c = this.add.container(-40 - i * 24, gy + 12, [g]).setDepth(10).setAlpha(0);
+      objs.push(c);
+      const bob = this.tweens.add({ targets: g, y: '-=2', duration: 170, yoyo: true, repeat: -1, delay: i * 40, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: c, alpha: 1, duration: 500, delay: 1600 + i * 110 });
+      this.tweens.add({
+        targets: c, x: gx - 22, duration: 4800, delay: 1600 + i * 110, ease: 'Sine.easeIn',
+        onComplete: () => {
+          bob.remove();
+          this.tweens.add({ targets: c, alpha: 0, y: c.y - 6, duration: 700, ease: 'Sine.easeIn' });
+          const ember = this.add.circle(gx - 22, gy + 6, 2, TEAL, 0.9).setDepth(11);
+          objs.push(ember);
+          this.tweens.add({ targets: ember, y: gy - 34, alpha: 0, duration: 950, ease: 'Sine.easeOut', onComplete: () => ember.destroy() });
+        },
+      });
+    }
+
+    // Kael stops short of the gate, then turns back.
+    const kg = this.drawHero(TEAL, 0.5);
+    const kael = this.add.container(-70, gy + 12, [kg]).setDepth(11).setAlpha(0);
+    objs.push(kael);
+    const kbob = this.tweens.add({ targets: kg, y: '-=2', duration: 170, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: kael, alpha: 1, duration: 500, delay: 1600 });
+    this.tweens.add({
+      targets: kael, x: gx - 64, duration: 4200, delay: 1600, ease: 'Sine.easeOut',
+      onComplete: () => kbob.remove(),
+    });
+
+    this.after(5400, () => { this.fadeOut(t1, 500); });
+    this.after(6000, () => {
+      const t2 = this.caption('One by one, the forest took them.', CY + 74, '#8a93b8', '12px');
+      objs.push(t2);
+      this.fadeIn(t2, 900);
+      this.after(4200, () => this.fadeOut(t2, 500));
+    });
+
+    // Kael turns and walks back out, alone.
+    this.after(8600, () => {
+      const kbob2 = this.tweens.add({ targets: kg, y: '-=2', duration: 190, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({
+        targets: kael, x: CX - 30, duration: 3200, ease: 'Sine.easeInOut',
+        onComplete: () => kbob2.remove(),
+      });
+    });
+
+    this.after(11000, () => {
+      const t3 = this.caption('Only Kael walked out — and he never learned what took the other seven.', CY + 74, '#6cf0c2', '11px');
+      objs.push(t3);
+      this.fadeIn(t3, 1200);
+    });
+
+    this.after(17200, () => this.sweep(objs, () => this.seq6b_lyra()));
+  }
+
+  // ── Phase 6b: Lyra — the light she could not hold ────────────────────────
+
+  private seq6b_lyra() {
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
+    const PURPLE = 0x8a6cf0;
+    const ax = CX, ay = CY - 46;
+
+    // A failing anchor above, a lone hexweaver reaching for it from below.
+    const crystal = this.buildCrystal(ax, ay);
+    objs.push(crystal);
+    this.fadeIn(crystal, 1200);
+
+    const lg = this.drawHero(PURPLE, 0.85);
+    lg.fillStyle(PURPLE, 0.85);
+    lg.fillRect(-2, -10, 4, 30); // raised arm reaching up toward the anchor
+    const lyra = this.add.container(ax, CY + 8, [lg]).setDepth(10).setAlpha(0);
+    objs.push(lyra);
+    this.after(600, () => this.fadeIn(lyra, 900));
+
+    const t1 = this.caption('Lyra once stood beneath a failing anchor, hands raised to hold its light.', CY + 78, '#8a6cf0', '11px');
+    objs.push(t1);
+    this.after(900, () => this.fadeIn(t1, 900));
+
+    // Aether motes drift up from her hands toward the crystal.
+    const rise = this.time.addEvent({
+      delay: 260, repeat: 16,
+      callback: () => {
+        const mx = ax + Phaser.Math.Between(-10, 10);
+        const m = this.add.circle(mx, CY, Phaser.Math.FloatBetween(1, 2.4), 0xd8ccff, 0.85).setDepth(11);
+        objs.push(m);
+        this.tweens.add({ targets: m, y: ay + 10, alpha: 0, duration: 1600, ease: 'Sine.easeOut', onComplete: () => m.destroy() });
+      },
+    });
+
+    // The light goes out anyway: flicker, then shatter, motes scatter away.
+    this.after(5000, () => {
+      rise.remove();
+      this.fadeOut(t1, 500);
+      let count = 0;
+      const flicker = this.time.addEvent({
+        delay: 150, repeat: 8,
+        callback: () => { count++; crystal.setAlpha(count % 2 === 0 ? 0.25 : 1); },
+      });
+      this.after(1500, () => {
+        flicker.remove();
+        crystal.setAlpha(0);
+        for (let i = 0; i < 12; i++) {
+          const a = (Math.PI * 2 * i) / 12 + Phaser.Math.FloatBetween(-0.2, 0.2);
+          const d = Phaser.Math.Between(30, 90);
+          const shard = this.add.circle(ax, ay, Phaser.Math.FloatBetween(1.5, 3), i % 2 === 0 ? 0xaad4ff : PURPLE, 0.9).setDepth(11);
+          objs.push(shard);
+          this.tweens.add({
+            targets: shard, x: ax + Math.cos(a) * d, y: ay + Math.sin(a) * d + 40, alpha: 0,
+            duration: Phaser.Math.Between(1000, 1700), ease: 'Quad.easeOut', onComplete: () => shard.destroy(),
+          });
+        }
+        // her reaching arm drops
+        this.tweens.add({ targets: lg, angle: -8, duration: 600, ease: 'Sine.easeIn', yoyo: true });
+        const t2 = this.caption('It went out anyway. She could not hold it.', CY + 78, '#8a93b8', '12px');
+        objs.push(t2);
+        this.after(500, () => this.fadeIn(t2, 900));
+        this.after(4600, () => this.fadeOut(t2, 500));
+      });
+    });
+
+    // A single spark rekindles in her hand — her vow.
+    this.after(11800, () => {
+      const spark = this.add.circle(ax, CY + 4, 1, PURPLE, 0).setDepth(12);
+      objs.push(spark);
+      this.tweens.add({ targets: spark, scale: 4, alpha: 0.9, duration: 900, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: spark, alpha: { from: 0.9, to: 0.45 }, duration: 700, yoyo: true, repeat: -1, delay: 900 });
+      const t3 = this.caption('She swore she would never watch a light die twice.', CY + 78, '#8a6cf0', '12px');
+      objs.push(t3);
+      this.fadeIn(t3, 1200);
+    });
+
+    this.after(17600, () => this.sweep(objs, () => this.seq6c_mira()));
+  }
+
+  // ── Phase 6c: Mira — the flame handed down ───────────────────────────────
+
+  private seq6c_mira() {
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
+    const GOLD = 0xf0d36c;
+    const sy = CY - 44;
+
+    // The Warden sigil overhead, dim at first.
+    const sigil = this.add.graphics().setDepth(9).setAlpha(0);
+    sigil.lineStyle(2, GOLD, 0.9);
+    sigil.strokeCircle(CX, sy, 18);
+    sigil.lineBetween(CX, sy - 18, CX, sy + 18);
+    sigil.lineBetween(CX - 14, sy, CX + 14, sy);
+    objs.push(sigil);
+    this.tweens.add({ targets: sigil, alpha: 0.35, duration: 1000 });
+
+    // A line of kneeling Wardens — generations of the watch.
+    const xs = [CX - 96, CX - 48, CX, CX + 48];
+    const wardens: Phaser.GameObjects.Container[] = [];
+    xs.forEach((x, i) => {
+      const g = this.drawHero(GOLD, 0.5, 0.55);
+      const c = this.add.container(x, CY + 24, [g]).setDepth(10).setAlpha(0);
+      wardens.push(c);
+      objs.push(c);
+      this.tweens.add({ targets: c, alpha: 1, duration: 700, delay: i * 160 });
+    });
+
+    const t1 = this.caption('The Wardens have kept the last anchor since before the walls rose.', CY + 78, '#f0d36c', '11px');
+    objs.push(t1);
+    this.after(900, () => this.fadeIn(t1, 900));
+
+    // A flame is passed hand to hand along the line, brightening each Warden.
+    const flame = this.add.circle(xs[0], CY + 18, 3.5, 0xfff0aa, 0).setDepth(12);
+    objs.push(flame);
+    this.after(1800, () => this.fadeIn(flame, 500));
+    xs.forEach((x, i) => {
+      if (i === 0) return;
+      this.after(1800 + i * 1400, () => {
+        this.tweens.add({ targets: flame, x, duration: 1100, ease: 'Sine.easeInOut' });
+        const lit = wardens[i].list[0] as Phaser.GameObjects.Graphics;
+        this.tweens.add({ targets: lit, alpha: { from: 0.55, to: 1 }, duration: 500, delay: 900, yoyo: true });
+      });
+    });
+
+    this.after(6600, () => { this.fadeOut(t1, 500); });
+    this.after(7100, () => {
+      const t2 = this.caption('Mira took the flame from hands that could no longer carry it.', CY + 78, '#f0d36c', '12px');
+      objs.push(t2);
+      this.fadeIn(t2, 900);
+      this.after(4200, () => this.fadeOut(t2, 500));
+    });
+
+    // Mira (the last in line) rises and lifts the flame toward the sigil.
+    this.after(7600, () => {
+      const mira = wardens[wardens.length - 1];
+      this.tweens.add({ targets: mira, y: CY + 8, duration: 1000, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: mira, scaleX: 1.25, scaleY: 1.25, duration: 1000, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: flame, x: xs[xs.length - 1], y: CY - 6, duration: 1200, ease: 'Sine.easeOut' });
+      // sigil flares bright
+      this.tweens.add({ targets: sigil, alpha: 1, duration: 1200, ease: 'Sine.easeOut' });
+      this.after(1200, () => {
+        this.tweens.add({ targets: sigil, alpha: { from: 1, to: 0.55 }, duration: 1400, yoyo: true, repeat: -1 });
+        this.tweens.add({ targets: flame, alpha: { from: 1, to: 0.6 }, duration: 800, yoyo: true, repeat: -1 });
+      });
+    });
+
+    this.after(11800, () => {
+      const t3 = this.caption('She does not intend to be the one who lets it go out.', CY + 78, '#f0d36c', '12px');
+      objs.push(t3);
+      this.fadeIn(t3, 1200);
+    });
+
+    this.after(17800, () => this.sweep(objs, () => this.seq6_heroes()));
+  }
+
+  // ── Phase 6: three silhouettes converge + call to arms ────────────────────
 
   private seq6_heroes() {
-    const positions = [CX - 48, CX, CX + 48];
+    const targetX = [CX - 48, CX, CX + 48];
+    const startPos = [
+      { x: -40, y: CY + 30 },
+      { x: CX, y: CY + 150 },
+      { x: GAME.width + 40, y: CY + 30 },
+    ];
     const colors = [0x6cf0c2, 0x8a6cf0, 0xf0d36c];
-    positions.forEach((x, i) => {
-      const figure = this.add.graphics().setDepth(10).setAlpha(0);
-      figure.fillStyle(colors[i], 0.85);
-      // Simple humanoid silhouette: head + body
-      figure.fillCircle(x, CY + 10, 7);
-      figure.fillRect(x - 6, CY + 17, 12, 18);
-      figure.fillRect(x - 10, CY + 19, 6, 10);
-      figure.fillRect(x + 4, CY + 19, 6, 10);
-      figure.fillRect(x - 5, CY + 35, 5, 12);
-      figure.fillRect(x + 1, CY + 35, 5, 12);
-      this.tweens.add({
-        targets: figure, alpha: 1,
-        duration: 600, delay: i * 280, ease: 'Sine.easeOut',
+
+    const bridge = this.caption('Three roads. Three wounds. One light left to guard.', CY + 90, '#c9cee8', '12px');
+    this.after(600, () => this.fadeIn(bridge, 900));
+    this.after(2600, () => this.fadeOut(bridge, 500));
+
+    targetX.forEach((tx, i) => {
+      const g = this.drawHero(colors[i]);
+      const figure = this.add.container(startPos[i].x, startPos[i].y, [g]).setDepth(10).setAlpha(0);
+      this.tweens.add({ targets: figure, alpha: 1, duration: 500, delay: i * 260, ease: 'Sine.easeOut' });
+
+      // Footstep bob while walking in
+      const bob = this.tweens.add({
+        targets: g, y: { from: 0, to: -3 }, duration: 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       });
-      // Subtle float
+
+      // Walk in from off-screen and converge on the group position
       this.tweens.add({
-        targets: figure, y: { from: 0, to: -4 },
-        duration: 2000 + i * 300, yoyo: true, repeat: -1,
-        delay: i * 400, ease: 'Sine.easeInOut',
+        targets: figure,
+        x: tx, y: CY + 10,
+        duration: 2200,
+        delay: i * 260,
+        ease: 'Sine.easeInOut',
+        onComplete: () => {
+          bob.remove();
+          g.y = 0;
+          // Subtle idle float once they've arrived
+          this.tweens.add({
+            targets: figure, y: { from: CY + 10, to: CY + 6 },
+            duration: 2000 + i * 300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          });
+        },
       });
     });
 
-    const t6 = this.caption('And you are its last hope.', CY + 90, '#dfe4f5', '13px');
-    this.after(1400, () => this.fadeIn(t6, 900));
-
-    this.after(4500, () => {
-      this.fadeOut(t6, 500);
-      this.after(800, () => this.seq7_end());
+    // Once the three stand together, a warm light rises around them and holds —
+    // the thing they have each chosen to guard. A held beat, not a quick blink.
+    this.after(2900, () => {
+      const flash = this.add.circle(CX, CY + 12, 4, 0xeef2ff, 0.6).setDepth(9);
+      this.tweens.add({ targets: flash, scale: 16, alpha: 0, duration: 900, ease: 'Sine.easeOut', onComplete: () => flash.destroy() });
+      const haloColors = [0xf0d36c, 0xfff0aa];
+      for (let i = 0; i < 2; i++) {
+        const halo = this.add.circle(CX, CY + 12, 22 + i * 22, haloColors[i], 0).setDepth(8);
+        this.tweens.add({ targets: halo, alpha: 0.1 - i * 0.03, scale: { from: 0.7, to: 1 }, duration: 1500, ease: 'Sine.easeOut' });
+        this.tweens.add({ targets: halo, alpha: { from: 0.1 - i * 0.03, to: 0.04 }, duration: 2200, yoyo: true, repeat: -1, delay: 1500, ease: 'Sine.easeInOut' });
+      }
     });
+
+    const lines: Array<{ text: string; color: string }> = [
+      { text: 'A blade still bound to an old watch-line, its oath unfinished.', color: '#6cf0c2' },
+      { text: 'A hexweaver who has already watched one anchor die.', color: '#8a6cf0' },
+      { text: 'A dawnkeeper sworn not to lose this one.', color: '#f0d36c' },
+    ];
+
+    const showLine = (i: number) => {
+      if (i >= lines.length) {
+        // A beat of near-silence before the last line lands.
+        const t6 = this.caption('And you are its last hope.', CY + 90, '#dfe4f5', '14px');
+        this.after(1200, () => this.fadeIn(t6, 1300));
+        this.after(5600, () => {
+          this.fadeOut(t6, 600);
+          this.after(1000, () => this.seq7_end());
+        });
+        return;
+      }
+      const line = lines[i];
+      const t = this.caption(line.text, CY + 90, line.color, '12px');
+      this.fadeIn(t, 800);
+      this.after(3000, () => {
+        this.fadeOut(t, 500);
+        this.after(500, () => showLine(i + 1));
+      });
+    };
+
+    this.after(3200, () => showLine(0));
   }
 
   // ── Phase 7: fade to title ─────────────────────────────────────────────────
