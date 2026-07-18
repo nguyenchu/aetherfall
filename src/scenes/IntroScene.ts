@@ -7,31 +7,30 @@ const CY = GAME.height / 2;
 
 /**
  * Cinematic intro sequence before the title screen.
- * Runs ~155 seconds. Any key or tap skips immediately to Title.
+ * Runs ~170 seconds. Any key or tap skips immediately to Title.
  *
- * Act I — the world (why the city matters):
+ * The heroes come first, so the animation the story is really about is what you
+ * see up front; the world's history plays afterward as the flashback that
+ * explains what they are fighting for.
+ *
+ * Act I — the heroes (who they are, why they gathered):
  *  0 s     — black void, stars drift in
- *  3.2 s   — Aether crystal forms, text: "In the age of light…" then "Twelve anchors…"
- * 16.1 s   — a ring of twelve lights forms around the crystal: "Sanctuary was only one light among many."
- * 25 s     — crystal + ring flicker, text: "But light is not eternal." → "Then it fell."
- * 31.4 s   — crystal shatters, text: "The twelve anchors began to fail, one by one."
- * 35.9 s   — four colored fragments drift apart, naming the forest / sunken / ashen / crystal anchors
- * 49.7 s   — particle rain, text: "One by one, the lands sank into the deep…"
- * 54.7 s   — a Warden sigil forms: "Only the Wardens remained…" → "…the gates of the last anchor."
- * 64.9 s   — single warm glow: "Around that light, a city grew…" → "Sanctuary."
- * 75.4 s   — a lone silhouette walks out and fades: "Watchers were sent out…" → "Not all of them came home."
- *
- * Act II — the heroes (why they came together):
- * 85 s     — Kael: a watch-line of eight marches into a forest gate; seven are
+ *  2.6 s   — cold open: "The world was going dark…" → "But three did not turn away."
+ * 11 s     — Kael: a watch-line of eight marches into a forest gate; seven are
  *            snuffed out, only Kael turns back.
- * 101 s    — Lyra: reaches for a failing anchor; it shatters anyway; a spark
+ * 28 s     — Lyra: reaches for a failing anchor; it shatters anyway; a spark
  *            rekindles in her hand — her vow.
- * 118 s    — Mira: a flame is handed down a line of kneeling Wardens; she rises
+ * 46 s     — Mira: a flame is handed down a line of kneeling Wardens; she rises
  *            and lifts it to the sigil.
- * 135 s    — the three walk in from off-screen and converge: "Three roads.
- *            Three wounds. One light left to guard." → per-hero lines → "And you
- *            are its last hope."
- * 155 s    — fade to black → TitleScene
+ * 64 s     — the three walk in and converge under a warm halo, then a pivot:
+ *            "…to know what they are fighting for, you have to know what was lost."
+ *
+ * Act II — the world (the flashback that explains the stakes):
+ * 78 s     — Aether crystal forms: "In the age of light…" then "Twelve anchors…"
+ * 91 s     — a ring of twelve lights: "Sanctuary was only one light among many."
+ *          — flicker → shatter → four ruins → particle rain → the Wardens' vigil
+ *          — single warm glow: "Sanctuary." → watchers sent out, not all came home
+ * ~163 s   — "And you are its last hope." → fade to black → TitleScene
  */
 export class IntroScene extends Phaser.Scene {
   private done = false;
@@ -137,7 +136,26 @@ export class IntroScene extends Phaser.Scene {
       },
     });
 
-    this.after(3200, () => this.seq1_crystal());
+    this.after(2600, () => this.seqColdOpen());
+  }
+
+  // ── Cold open: set the stakes in two lines, then meet the heroes ──────────
+
+  private seqColdOpen() {
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
+    const t1 = this.caption('The world was going dark, its lights going out one by one.', CY + 60, '#c9cee8', '12px');
+    objs.push(t1);
+    this.fadeIn(t1, 900);
+    this.after(3600, () => this.fadeOut(t1, 500));
+
+    this.after(4400, () => {
+      const t2 = this.caption('But three did not turn away.', CY + 60, '#dfe4f5', '13px');
+      objs.push(t2);
+      this.fadeIn(t2, 900);
+      this.after(3200, () => this.fadeOut(t2, 500));
+    });
+
+    this.after(8400, () => this.sweep(objs, () => this.seq6a_kael()));
   }
 
   // ── Phase 1: crystal forms, first text ───────────────────────────────────
@@ -454,7 +472,7 @@ export class IntroScene extends Phaser.Scene {
         this.fadeIn(t2, 900);
         this.after(3400, () => {
           this.fadeOut(t2, 500);
-          this.after(700, () => this.seq6a_kael());
+          this.after(700, () => this.seqClose());
         });
       });
     });
@@ -695,6 +713,7 @@ export class IntroScene extends Phaser.Scene {
   // ── Phase 6: three silhouettes converge + call to arms ────────────────────
 
   private seq6_heroes() {
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
     const targetX = [CX - 48, CX, CX + 48];
     const startPos = [
       { x: -40, y: CY + 30 },
@@ -703,13 +722,15 @@ export class IntroScene extends Phaser.Scene {
     ];
     const colors = [0x6cf0c2, 0x8a6cf0, 0xf0d36c];
 
-    const bridge = this.caption('Three roads. Three wounds. One light left to guard.', CY + 90, '#c9cee8', '12px');
+    const bridge = this.caption('Three roads. Three wounds. One place left worth defending.', CY + 90, '#c9cee8', '12px');
+    objs.push(bridge);
     this.after(600, () => this.fadeIn(bridge, 900));
-    this.after(2600, () => this.fadeOut(bridge, 500));
+    this.after(3400, () => this.fadeOut(bridge, 500));
 
     targetX.forEach((tx, i) => {
       const g = this.drawHero(colors[i]);
       const figure = this.add.container(startPos[i].x, startPos[i].y, [g]).setDepth(10).setAlpha(0);
+      objs.push(figure);
       this.tweens.add({ targets: figure, alpha: 1, duration: 500, delay: i * 260, ease: 'Sine.easeOut' });
 
       // Footstep bob while walking in
@@ -744,38 +765,39 @@ export class IntroScene extends Phaser.Scene {
       const haloColors = [0xf0d36c, 0xfff0aa];
       for (let i = 0; i < 2; i++) {
         const halo = this.add.circle(CX, CY + 12, 22 + i * 22, haloColors[i], 0).setDepth(8);
+        objs.push(halo);
         this.tweens.add({ targets: halo, alpha: 0.1 - i * 0.03, scale: { from: 0.7, to: 1 }, duration: 1500, ease: 'Sine.easeOut' });
         this.tweens.add({ targets: halo, alpha: { from: 0.1 - i * 0.03, to: 0.04 }, duration: 2200, yoyo: true, repeat: -1, delay: 1500, ease: 'Sine.easeInOut' });
       }
     });
 
-    const lines: Array<{ text: string; color: string }> = [
-      { text: 'A blade still bound to an old watch-line, its oath unfinished.', color: '#6cf0c2' },
-      { text: 'A hexweaver who has already watched one anchor die.', color: '#8a6cf0' },
-      { text: 'A dawnkeeper sworn not to lose this one.', color: '#f0d36c' },
-    ];
+    // They have come together. Pivot from who they are to what they are up
+    // against — the world's story, told as the flashback that follows.
+    this.after(4400, () => {
+      const t = this.caption('They gathered around the last light still burning — Sanctuary.', CY + 90, '#dfe4f5', '12px');
+      objs.push(t);
+      this.fadeIn(t, 900);
+      this.after(4200, () => this.fadeOut(t, 500));
+    });
+    this.after(9400, () => {
+      const t2 = this.caption('To know what they are fighting for, you have to know what was lost.', CY + 90, '#c9cee8', '11px');
+      objs.push(t2);
+      this.fadeIn(t2, 900);
+      this.after(4000, () => this.fadeOut(t2, 500));
+    });
 
-    const showLine = (i: number) => {
-      if (i >= lines.length) {
-        // A beat of near-silence before the last line lands.
-        const t6 = this.caption('And you are its last hope.', CY + 90, '#dfe4f5', '14px');
-        this.after(1200, () => this.fadeIn(t6, 1300));
-        this.after(5600, () => {
-          this.fadeOut(t6, 600);
-          this.after(1000, () => this.seq7_end());
-        });
-        return;
-      }
-      const line = lines[i];
-      const t = this.caption(line.text, CY + 90, line.color, '12px');
-      this.fadeIn(t, 800);
-      this.after(3000, () => {
-        this.fadeOut(t, 500);
-        this.after(500, () => showLine(i + 1));
-      });
-    };
+    this.after(14400, () => this.sweep(objs, () => this.seq1_crystal()));
+  }
 
-    this.after(3200, () => showLine(0));
+  // ── Closing beat: the call to arms, after the world's story ──────────────
+
+  private seqClose() {
+    const t = this.caption('And you are its last hope.', CY + 40, '#dfe4f5', '15px');
+    this.after(400, () => this.fadeIn(t, 1300));
+    this.after(5200, () => {
+      this.fadeOut(t, 600);
+      this.after(1000, () => this.seq7_end());
+    });
   }
 
   // ── Phase 7: fade to title ─────────────────────────────────────────────────
