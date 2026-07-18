@@ -375,9 +375,9 @@ export class Battle {
 
   // --- Attacks and Spells -----------------------------------------------------
 
-  /** Basic attack. Element comes from the weapon (default phys). */
+  /** Basic attack. Element comes from the weapon (default physical). */
   private strike(actor: Combatant, target: Combatant, spell: Spell | null, events: BattleEvent[]): void {
-    const element = actor.attackElement ?? 'phys';
+    const element = actor.attackElement ?? 'physical';
     const base = actor.stats.str * 1.6 - target.stats.vit * 0.6;
     const hit = this.computeHit(actor, target, base, element);
     this.applyDamage(target, hit.dmg);
@@ -437,12 +437,12 @@ export class Battle {
 
   private castDamage(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
     const enemySide = actor.side === 'party' ? 'enemy' : 'party';
-    if (spell.element === 'phys' && spell.target !== 'all-enemies') {
+    if (spell.element === 'physical' && spell.target !== 'all-enemies') {
       // Physical skills (Crush) behave like boosted attacks with guard chip.
       const target = this.aliveTargetOr(targetId, enemySide);
       if (!target) return;
       const base = spell.power + actor.stats.str * 1.2 - target.stats.vit * 0.5;
-      const hit = this.computeHit(actor, target, base, 'phys');
+      const hit = this.computeHit(actor, target, base, 'physical');
       this.applyDamage(target, hit.dmg);
       this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
       this.maybeGainMomentum(actor, hit.weak);
@@ -464,7 +464,7 @@ export class Battle {
 
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
-      const basePower = spell.element === 'phys'
+      const basePower = spell.element === 'physical'
         ? spell.power + actor.stats.str * 1.0 - target.stats.vit * 0.4
         : spell.power + actor.stats.int * 0.8 - target.stats.int * 0.2;
       const hit = this.computeHit(actor, target, basePower, spell.element);
@@ -642,7 +642,7 @@ export class Battle {
     }
     // Prism ward: this element barely scratches it — switch to another school.
     if (target.wardElement && element !== 'none' && element === target.wardElement) dmg *= WARD_MULT;
-    if (target.defending) dmg *= element === 'phys' ? 0.5 : 0.75;
+    if (target.defending) dmg *= element === 'physical' ? 0.5 : 0.75;
     return { dmg: Math.max(1, Math.round(dmg)), crit, weak };
   }
 

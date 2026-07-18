@@ -58,7 +58,7 @@ export const BOONS: Record<string, Boon> = {
   keen_edge: {
     id: 'keen_edge', rarity: 'common',
     name: 'Keen Edge', desc: 'Physical damage +30%.',
-    elementBoost: { element: 'phys', mult: 1.3 },
+    elementBoost: { element: 'physical', mult: 1.3 },
   },
   aether_flow: {
     id: 'aether_flow', rarity: 'common',

@@ -56,12 +56,12 @@ export const SPELLS: Record<string, Spell> = {
   // Kael — Aetherblade: fast physical pressure and guard breaking.
   bash: {
     id: 'bash', name: 'Guardbreak', cost: 3, kind: 'damage', power: 18,
-    element: 'phys', target: 'enemy', guardHit: 1,
+    element: 'physical', target: 'enemy', guardHit: 1,
     desc: 'Aetherblade strike. Always chips 1 guard pip.',
   },
   cleave: {
     id: 'cleave', name: 'Arc Sweep', cost: 4, kind: 'damage', power: 9,
-    element: 'phys', target: 'all-enemies', desc: 'Sweeping aether slash on all enemies.',
+    element: 'physical', target: 'all-enemies', desc: 'Sweeping aether slash on all enemies.',
   },
 };
 

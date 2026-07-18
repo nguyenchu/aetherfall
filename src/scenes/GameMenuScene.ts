@@ -1406,7 +1406,7 @@ const SLOT_COLOR: Record<EquipSlot, { fill: number; stroke: number; text: string
 
 // Mirrors BattleScene's ELEMENT_COLOR so spell info reads consistently across screens.
 const ELEMENT_COLOR: Record<string, string> = {
-  phys: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
+  physical: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
 
 /** Rows visible at once in the equip item list; more scrolls (▲/▼ markers). */

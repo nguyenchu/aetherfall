@@ -523,7 +523,7 @@ function prismSovereign(): Combatant {
   }, ['fire', 'holy'], 4);
 }
 
-// Crystal signature: shrugs off ice almost entirely — switch to fire/holy/phys
+// Crystal signature: shrugs off ice almost entirely — switch to fire/holy/physical
 // (its weaknesses) to break through, or your frost hexes fizzle. Paired with
 // Prism Sprite (weak to ice) it punishes blanket frost AoE from both ends.
 function wardPrism(id: string): Combatant {

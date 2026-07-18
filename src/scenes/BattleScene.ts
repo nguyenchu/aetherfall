@@ -50,9 +50,9 @@ interface PartyStatusRow {
   ailments: Record<Ailment, Phaser.GameObjects.Text>;
 }
 
-const ELEMENT_LETTER: Record<string, string> = { phys: 'P', fire: 'F', ice: 'I', holy: 'H' };
+const ELEMENT_LETTER: Record<string, string> = { physical: 'P', fire: 'F', ice: 'I', holy: 'H' };
 const ELEMENT_COLOR: Record<string, string> = {
-  phys: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
+  physical: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
 
 const AILMENT_ORDER: Ailment[] = ['burn', 'chill', 'venom'];
@@ -850,10 +850,10 @@ export class BattleScene extends Phaser.Scene {
         .setVisible(true);
     }
     // Hint the matchup: does the pending action hit a weakness?
-    // Attacks strike as the active member's weapon element (default phys).
+    // Attacks strike as the active member's weapon element (default physical).
     if (t.side === 'enemy' && this.pending) {
       const element: Element | undefined = this.pending.kind === 'attack'
-        ? this.activeActor.attackElement ?? 'phys'
+        ? this.activeActor.attackElement ?? 'physical'
         : this.pending.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id]?.element : undefined;
       if (element && element !== 'none' && t.weakness?.includes(element)) {
         this.promptText.setText(`Choose target  < >   ▶ ${t.name}: WEAK to this!`);
@@ -1154,7 +1154,7 @@ export class BattleScene extends Phaser.Scene {
       case 'fire':  return 0xff4422;
       case 'ice':   return 0x44aaff;
       case 'holy':  return 0xffe866;
-      case 'phys':  return 0xdfe4f5;
+      case 'physical': return 0xdfe4f5;
       default:      return 0x8a6cf0;
     }
   }
@@ -1241,7 +1241,7 @@ export class BattleScene extends Phaser.Scene {
         });
       },
     });
-    const slashColor = element && element !== 'phys' && element !== 'none'
+    const slashColor = element && element !== 'physical' && element !== 'none'
       ? BattleScene.spellColor(element)
       : 0xeef2ff;
     this.slashAt(target.x, target.y, slashColor);
@@ -1282,7 +1282,7 @@ export class BattleScene extends Phaser.Scene {
       case 'blizzard': this.icicleAnim(targetId); return;
       case 'smite':    this.holyBeamAnim(targetId); return;
       default:
-        if (element === 'phys') this.attackAnim(actorId, targetId, element);
+        if (element === 'physical') this.attackAnim(actorId, targetId, element);
         else this.projectileAnim(actorId, targetId, BattleScene.spellColor(element));
     }
   }
@@ -1290,7 +1290,7 @@ export class BattleScene extends Phaser.Scene {
   /** Guardbreak: a heavier lunge-strike than plain Attack — an expanding
    *  shockwave ring and an extra shake land on top of the impact. */
   private guardbreakAnim(actorId: string, targetId: string) {
-    this.attackAnim(actorId, targetId, 'phys');
+    this.attackAnim(actorId, targetId, 'physical');
     const target = this.sprites.get(targetId);
     if (!target) return;
     const ring = this.add.circle(target.x, target.y, 4, 0xdfe4f5, 0).setStrokeStyle(3, 0xdfe4f5, 0.85).setDepth(33);

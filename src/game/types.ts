@@ -2,7 +2,7 @@
 // logic can be tested and reused independently from presentation.
 
 export type Side = 'party' | 'enemy';
-export type Element = 'phys' | 'fire' | 'ice' | 'holy' | 'none';
+export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'none';
 
 // Status ailments. All tick down at the start of the afflicted combatant's
 // own next turn (CTB — see battle.ts):
@@ -104,7 +104,7 @@ export interface Combatant {
   // Basic attacks may also drag the target's turn-order speed down (e.g.
   // Tide Warden's Undertow, Sunken's Tomb Crawler) — mirrors attackInflict.
   attackSpeedDebuff?: { mult: number; turns: number };
-  // Basic attacks strike as this element (party: from weapon). Default phys.
+  // Basic attacks strike as this element (party: from weapon). Default physical.
   attackElement?: Element;
   // Enemy-only: escalates its own speedStatuses.haste by this much every one
   // of its own turns (Prism Sovereign's Overcharge, Ashen's Ember Hound).
