@@ -46,7 +46,7 @@ export function showBanterToast(scene: Phaser.Scene, lines: BanterLine[]): void 
     glow.setFillStyle(line.color, 0.3);
     ring.setStrokeStyle(2, line.color, 0.95);
     if (portraitImg && scene.textures.exists(line.portrait)) portraitImg.setTexture(line.portrait);
-    scene.time.delayedCall(i === lines.length - 1 ? 2200 : 1700, () => {
+    scene.time.delayedCall(i === lines.length - 1 ? 3400 : 2800, () => {
       if (i + 1 < lines.length) showLine(i + 1);
       else scene.tweens.add({ targets: box, y: restY + 14, alpha: 0, duration: 260, ease: 'Cubic.In', onComplete: () => box.destroy() });
     });
