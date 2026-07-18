@@ -108,7 +108,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private resetState() {
-    this.ui = 'menu';
+    // Non-interactive until advance()/openMenu() actually opens the first menu.
+    // Defaulting to 'menu' here advertised a menu whose `options` were still
+    // empty, so a confirm mashed during the battle entrance hit options[0] ===
+    // undefined and threw. 'busy' makes confirm() ignore input until ready.
+    this.ui = 'busy';
     this.isElite = false;
     this.menuIndex = 0;
     this.options = [];
@@ -587,7 +591,7 @@ export class BattleScene extends Phaser.Scene {
         const zone = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
-          if (!this.options[i].enabled) return;
+          if (!this.options[i]?.enabled) return;
           this.menuIndex = i;
           this.confirmMenu();
         });
@@ -726,7 +730,7 @@ export class BattleScene extends Phaser.Scene {
 
   private confirmMenu() {
     const opt = this.options[this.menuIndex];
-    if (!opt.enabled) return;
+    if (!opt || !opt.enabled) return;
     switch (opt.action) {
       case 'attack':
         this.pending = { kind: 'attack' };
