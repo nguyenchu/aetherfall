@@ -1082,6 +1082,9 @@ export class BattleScene extends Phaser.Scene {
       targets: img,
       x: home.x - 20,
       y: home.y - 3,
+      // alpha:1 in case this fires before the staggered entrance fade-in
+      // finished — killTweensOf above would otherwise freeze it half-faded.
+      alpha: 1,
       duration: 160,
       ease: 'Sine.easeOut',
     });
@@ -1097,8 +1100,10 @@ export class BattleScene extends Phaser.Scene {
       const home = this.spriteHome.get(c.id);
       if (!img || !home) continue;
       this.tweens.killTweensOf(img);
+      // alpha:1 heals a living member whose entrance fade-in was cut short when
+      // this ran during the staggered slide-in (otherwise it stays invisible).
       this.tweens.add({
-        targets: img, x: home.x, y: home.y, duration: 120, ease: 'Sine.easeOut',
+        targets: img, x: home.x, y: home.y, alpha: 1, duration: 120, ease: 'Sine.easeOut',
         onComplete: () => this.restartIdle(c.id),
       });
     }
@@ -1110,6 +1115,7 @@ export class BattleScene extends Phaser.Scene {
     const img = this.sprites.get(id);
     const home = this.spriteHome.get(id);
     if (!img || !home || !img.active) return;
+    img.setAlpha(1); // a settled, living hero is always fully visible
     this.tweens.killTweensOf(img);
     this.tweens.add({
       targets: img, y: { from: home.y - 2, to: home.y + 2 },
