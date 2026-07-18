@@ -8,9 +8,10 @@ const CX = GAME.width / 2;
 const CY = GAME.height / 2;
 
 interface ChapterClearData {
-  chapter: number;   // 1..4
+  chapter: number;   // chapter 1..4, or (rift) the tier just reached
   accent: number;    // area theme accent color
   areaName: string;  // e.g. "Ashenveil Forest"
+  rift?: boolean;    // a procedural Rift clear rather than a story chapter
   onDone: () => void;
 }
 
@@ -48,7 +49,8 @@ export class ChapterClearScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
 
     const accent = this.payload.accent;
-    const isFinal = this.payload.chapter >= 4;
+    const rift = this.payload.rift === true;
+    const isFinal = !rift && this.payload.chapter >= 4;
 
     // Drifting motes for atmosphere.
     for (let i = 0; i < 40; i++) {
@@ -94,22 +96,25 @@ export class ChapterClearScene extends Phaser.Scene {
 
     // Text beats.
     const hex = '#' + accent.toString(16).padStart(6, '0');
-    const kicker = this.add.text(CX, CY + 44, `CHAPTER ${this.payload.chapter} CLEARED`,
+    const kicker = this.add.text(CX, CY + 44, rift ? `TIER ${this.payload.chapter} REACHED` : `CHAPTER ${this.payload.chapter} CLEARED`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: '#8a93b8', align: 'center' }))
       .setOrigin(0.5).setDepth(30).setAlpha(0);
     this.tweens.add({ targets: kicker, alpha: 1, duration: 700, delay: 1700 });
 
-    const title = this.add.text(CX, CY + 66, isFinal ? 'THE LAST ANCHOR HOLDS' : 'THE ANCHOR HOLDS',
+    const title = this.add.text(CX, CY + 66, rift ? 'THE RIFT COLLAPSES' : isFinal ? 'THE LAST ANCHOR HOLDS' : 'THE ANCHOR HOLDS',
       sharpText({ fontFamily: FONT, fontSize: '18px', color: '#ffffff', strokeThickness: 3, align: 'center' }))
       .setOrigin(0.5).setDepth(30).setAlpha(0).setScale(1.25);
     this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 650, delay: 2200, ease: 'Back.easeOut' });
 
-    const place = this.add.text(CX, CY + 90, `${this.payload.areaName} — reclaimed from the dark`,
+    const place = this.add.text(CX, CY + 90, rift ? 'The Rift yields — for now.' : `${this.payload.areaName} — reclaimed from the dark`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: hex, align: 'center' }))
       .setOrigin(0.5).setDepth(30).setAlpha(0);
     this.tweens.add({ targets: place, alpha: 1, duration: 700, delay: 3000 });
 
-    const tease = this.add.text(CX, CY + 116, ChapterClearScene.TEASE[this.payload.chapter] ?? '',
+    const teaseText = rift
+      ? 'The Anchor will tear open again — deeper, and hungrier.'
+      : ChapterClearScene.TEASE[this.payload.chapter] ?? '';
+    const tease = this.add.text(CX, CY + 116, teaseText,
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8', align: 'center', wordWrap: { width: GAME.width - 80 } }))
       .setOrigin(0.5).setDepth(30).setAlpha(0);
     this.tweens.add({ targets: tease, alpha: 1, duration: 800, delay: 4000 });

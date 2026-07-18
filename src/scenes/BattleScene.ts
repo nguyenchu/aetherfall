@@ -3,8 +3,8 @@ import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
-import { getArea } from '../game/chapters';
-import { applyWipePenalty, completeQuest, getRun, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
+import { getArea, isRiftActive } from '../game/chapters';
+import { applyWipePenalty, ascend, completeQuest, getRun, getSave, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
 import { track, chapterOfDepth } from '../game/analytics';
@@ -966,6 +966,32 @@ export class BattleScene extends Phaser.Scene {
     const depth = run.depth;
     const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
+
+    // A Rift boss ends the procedural run: raise the tier and go home, skipping
+    // the chapter-completion flags/dialogue (those are for the fixed story).
+    if (boss && isRiftActive()) {
+      saveProgress();
+      music.fanfare('victory');
+      this.ui = 'over';
+      this.time.delayedCall(1000, () => {
+        const clearedTier = getSave().ngPlus + 1; // tier after this clear
+        const accent = getArea(depth).theme.accent; // Rift theme accent (still active)
+        ascend(); // ngPlus += 1, then returnToTown() restores the party and clears the Rift
+        this.scene.launch('ChapterClear', {
+          chapter: clearedTier,
+          accent,
+          areaName: 'The Rift',
+          rift: true,
+          onDone: () => {
+            this.scene.stop('Descent');
+            this.scene.start('Sanctuary');
+            this.scene.stop();
+          },
+        });
+      });
+      return;
+    }
+
     let firstClear = false;
     if (boss) {
       const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : depth <= 6 ? 'ch3_complete' : 'ch4_complete';

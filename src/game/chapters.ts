@@ -729,8 +729,15 @@ const AREA_8: AreaDef = {
 export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8];
 
 /** Returns the area for the given depth (1-based). */
+// When a Rift run is active (see rift.ts), it overrides the fixed chapter areas
+// so DescentScene/BattleScene render and fight it with no special cases.
+let activeRift: AreaDef | null = null;
+export function setRiftArea(area: AreaDef): void { activeRift = area; }
+export function clearRiftArea(): void { activeRift = null; }
+export function isRiftActive(): boolean { return activeRift !== null; }
+
 export function getArea(depth: number): AreaDef {
-  return ALL_AREAS[Math.min(depth - 1, ALL_AREAS.length - 1)];
+  return activeRift ?? ALL_AREAS[Math.min(depth - 1, ALL_AREAS.length - 1)];
 }
 
 // Ascension (New Game+) tuning: each tier scales enemy power and rewards up,

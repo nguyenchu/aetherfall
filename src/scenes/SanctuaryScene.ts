@@ -22,6 +22,8 @@ import {
   sellItem,
   setFlag,
 } from '../game/run';
+import { setRiftArea } from '../game/chapters';
+import { generateRift } from '../game/rift';
 import { sharpText, FONT } from '../ui/text';
 import { showQuestToast } from '../ui/questToast';
 import { showBanterToast } from '../ui/banterToast';
@@ -103,7 +105,7 @@ interface Npc {
   spriteKey: string;
   scale: number;
   name: string;
-  kind: 'dialogue' | 'vendor' | 'ascend';
+  kind: 'dialogue' | 'vendor' | 'rift';
   scriptId?: string;
   /** Shows a bouncing "!" above the figure while true — an unclaimed quest. */
   questActive?: boolean;
@@ -179,9 +181,10 @@ function npcs(): Record<string, Npc> {
       },
     } : {}),
     // Sanctuary's own Anchor — a shard of the one that shattered long ago
-    // (see IntroScene). An Ascension prompt, once the other anchors are restored.
+    // (see IntroScene). Once the other anchors are restored it tears open into a
+    // Rift: a procedural endgame dungeon that raises the tier each time cleared.
     ...(ch4Done ? {
-      A: { spriteKey: 'aether', scale: 0.9, name: 'the Anchor', kind: 'ascend' as const },
+      A: { spriteKey: 'aether', scale: 0.9, name: 'the Rift', kind: 'rift' as const },
     } : {}),
   };
 }
@@ -550,7 +553,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
       const live = this.liveNpcAt(nx, ny);
       if (live) {
-        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'ascend' ? 'ascend' : 'talk';
+        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'rift' ? 'enter' : 'talk';
         return {
           label: `Z / tap  ·  ${verb}`,
           run: () => this.interact(live),
@@ -616,14 +619,17 @@ export class SanctuaryScene extends Phaser.Scene {
     this.faceNpcTowardPlayer(live);
     const npc = live.def;
     if (npc.kind === 'vendor') this.openShop();
-    else if (npc.kind === 'ascend') this.openAscend();
+    else if (npc.kind === 'rift') this.enterRift();
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
-  private openAscend() {
+  /** Generates a fresh Rift floor for the current tier and descends into it. */
+  private enterRift() {
     this.state = 'busy';
+    setRiftArea(generateRift(getSave().ngPlus));
+    getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
     this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Ascend'));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
   // --- Dialog ---------------------------------------------------------------

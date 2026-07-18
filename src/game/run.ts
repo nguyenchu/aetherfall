@@ -4,7 +4,7 @@
 
 import { track } from './analytics';
 import { boonTotals, type BoonTotals } from './boons';
-import type { ChestContents } from './chapters';
+import { clearRiftArea, type ChestContents } from './chapters';
 import { ITEMS, SPELLS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
@@ -515,6 +515,7 @@ export function restoreParty(): void {
 
 /** Back to Sanctuary: full healing, reset depth/boons, roll new modifier. */
 export function returnToTown(): void {
+  clearRiftArea(); // any active Rift run ends the moment we're safely home
   restoreParty();
   state.depth = 1;
   state.modifier = rollModifier();
