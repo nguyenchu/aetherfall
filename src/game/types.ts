@@ -165,6 +165,7 @@ export interface BattleEvent {
   targetId?: string;
   amount?: number; // damage (positive) or healing (negative)
   element?: string; // for spell visual effects
+  spellId?: string; // for 'spell' events: which spell, so the scene can play a distinct animation per spell rather than one generic per-element effect
   crit?: boolean; // critical hit
   weak?: boolean; // hit a weakness
   ailment?: Ailment; // for 'ailment'/'dot' events: which status is involved

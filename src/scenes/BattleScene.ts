@@ -1167,15 +1167,10 @@ export class BattleScene extends Phaser.Scene {
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
       const isHeal = (ev.amount ?? 0) < 0;
       if (isHeal) {
-        this.healAnim(ev.targetId, 0x6cf0a0);
+        this.healAnim(ev.targetId, 0x6cf0a0, ev.spellId === 'cureall');
         this.floatNumber(ev.targetId, ev.amount ?? 0, ev);
       } else {
-        const color = BattleScene.spellColor(ev.element);
-        if (ev.element === 'phys') {
-          this.attackAnim(ev.actorId, ev.targetId, ev.element);
-        } else {
-          this.projectileAnim(ev.actorId, ev.targetId, color);
-        }
+        this.spellAnim(ev.spellId, ev.actorId, ev.targetId, ev.element);
         if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
       }
     } else if (ev.kind === 'item' && ev.targetId) {
@@ -1273,20 +1268,203 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  private healAnim(targetId: string, color: number) {
+  /** Routes a damaging spell to its own distinct animation by spell id, so
+   *  each attack in the Magic list reads differently rather than one
+   *  generic per-element projectile. Anything not listed here (a boss's
+   *  bespoke special move, say) falls back to the original generic effect. */
+  private spellAnim(spellId: string | undefined, actorId: string, targetId: string, element?: string) {
+    switch (spellId) {
+      case 'bash':     this.guardbreakAnim(actorId, targetId); return;
+      case 'cleave':   this.arcSweepAnim(actorId, targetId); return;
+      case 'fire':     this.fireballAnim(actorId, targetId); return;
+      case 'firewave': this.fireWaveAnim(targetId); return;
+      case 'frost':    this.iceShardAnim(actorId, targetId); return;
+      case 'blizzard': this.icicleAnim(targetId); return;
+      case 'smite':    this.holyBeamAnim(targetId); return;
+      default:
+        if (element === 'phys') this.attackAnim(actorId, targetId, element);
+        else this.projectileAnim(actorId, targetId, BattleScene.spellColor(element));
+    }
+  }
+
+  /** Guardbreak: a heavier lunge-strike than plain Attack — an expanding
+   *  shockwave ring and an extra shake land on top of the impact. */
+  private guardbreakAnim(actorId: string, targetId: string) {
+    this.attackAnim(actorId, targetId, 'phys');
+    const target = this.sprites.get(targetId);
+    if (!target) return;
+    const ring = this.add.circle(target.x, target.y, 4, 0xdfe4f5, 0).setStrokeStyle(3, 0xdfe4f5, 0.85).setDepth(33);
+    this.tweens.add({ targets: ring, scale: 5, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    this.time.delayedCall(70, () => this.cameras.main.shake(110, 0.007));
+  }
+
+  /** Arc Sweep: a wide crossing double-slash per enemy hit, reading as one
+   *  sweeping strike passing through the group rather than Attack's single
+   *  small slash repeated. */
+  private arcSweepAnim(actorId: string, targetId: string) {
+    const actor = this.sprites.get(actorId);
+    const target = this.sprites.get(targetId);
+    if (!actor || !target) return;
+    const home = this.spriteHome.get(actorId);
+    const sx = actor.x, sy = actor.y;
+    const restX = home?.x ?? sx, restY = home?.y ?? sy;
+    this.tweens.killTweensOf(actor);
+    const dx = Phaser.Math.Clamp((target.x - sx) * 0.16, -18, 18);
+    const dy = Phaser.Math.Clamp((target.y - sy) * 0.1, -8, 8);
+    this.tweens.add({
+      targets: actor, x: sx + dx, y: sy + dy, duration: 90, ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: actor, x: restX, y: restY, duration: 120, ease: 'Sine.easeIn', onComplete: () => this.restartIdle(actorId) });
+      },
+    });
+    const a = this.add.rectangle(target.x, target.y, 34, 3, 0xeef2ff, 0.9).setAngle(-30).setDepth(32);
+    const b = this.add.rectangle(target.x, target.y, 34, 3, 0xf0d36c, 0.85).setAngle(30).setDepth(32);
+    this.tweens.add({
+      targets: [a, b], alpha: 0, scaleX: 1.4, duration: 200, ease: 'Quad.easeOut',
+      onComplete: () => { a.destroy(); b.destroy(); },
+    });
+    this.cameras.main.shake(60, 0.003);
+  }
+
+  /** Ember Hex: a flickering fireball thrown at the target, bursting into
+   *  scattered embers on impact. */
+  private fireballAnim(actorId: string, targetId: string) {
+    const actor = this.sprites.get(actorId);
+    const target = this.sprites.get(targetId);
+    if (!actor || !target) return;
+    const orb = this.add.circle(actor.x, actor.y - 8, 5, 0xff8a3c, 0.95).setDepth(30);
+    const core = this.add.circle(actor.x, actor.y - 8, 2.5, 0xfff0aa, 0.95).setDepth(31);
+    const flicker = this.tweens.add({ targets: [orb, core], scale: { from: 0.85, to: 1.15 }, duration: 90, yoyo: true, repeat: -1 });
+    this.tweens.add({
+      targets: [orb, core], x: target.x, y: target.y, duration: 260, ease: 'Sine.easeIn',
+      onComplete: () => {
+        flicker.remove();
+        orb.destroy();
+        core.destroy();
+        this.fireBurstAt(target.x, target.y);
+      },
+    });
+  }
+
+  private fireBurstAt(x: number, y: number) {
+    this.cameras.main.shake(90, 0.005);
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8 + Phaser.Math.FloatBetween(-0.2, 0.2);
+      const p = this.add.circle(x, y, Phaser.Math.FloatBetween(1.5, 3), i % 2 === 0 ? 0xff8a3c : 0xffd34d, 0.9).setDepth(32);
+      this.tweens.add({
+        targets: p,
+        x: x + Math.cos(angle) * Phaser.Math.Between(14, 24),
+        y: y + Math.sin(angle) * Phaser.Math.Between(10, 20) - 6,
+        alpha: 0, duration: 380, ease: 'Quad.easeOut', onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  /** Hexstorm: fire erupts from the ground under each enemy rather than a
+   *  projectile from the caster — reads as an area hex, not a thrown attack. */
+  private fireWaveAnim(targetId: string) {
+    const target = this.sprites.get(targetId);
+    if (!target) return;
+    const baseY = target.y + target.displayHeight / 2 - 4;
+    for (let i = 0; i < 5; i++) {
+      const flame = this.add.circle(target.x + Phaser.Math.Between(-10, 10), baseY, Phaser.Math.FloatBetween(2, 4), i % 2 === 0 ? 0xff8a3c : 0xffd34d, 0.9).setDepth(30);
+      this.tweens.add({
+        targets: flame, y: baseY - Phaser.Math.Between(20, 34), alpha: 0, scale: 0.4,
+        duration: Phaser.Math.Between(300, 460), delay: i * 30, ease: 'Sine.easeOut', onComplete: () => flame.destroy(),
+      });
+    }
+    this.cameras.main.shake(80, 0.004);
+  }
+
+  /** Rime Hex: an angular ice shard thrown flat at the target, shattering
+   *  into frost on impact with a brief icy tint. */
+  private iceShardAnim(actorId: string, targetId: string) {
+    const actor = this.sprites.get(actorId);
+    const target = this.sprites.get(targetId);
+    if (!actor || !target) return;
+    const shard = this.add.rectangle(actor.x, actor.y - 8, 11, 3, 0xaad4ff, 0.95).setDepth(30);
+    shard.setAngle(Phaser.Math.RadToDeg(Phaser.Math.Angle.Between(actor.x, actor.y, target.x, target.y)));
+    this.tweens.add({
+      targets: shard, x: target.x, y: target.y, duration: 220, ease: 'Sine.easeIn',
+      onComplete: () => {
+        shard.destroy();
+        this.frostBurstAt(target.x, target.y);
+        target.setTintFill(0xaad4ff);
+        this.time.delayedCall(140, () => target.active && target.clearTint());
+      },
+    });
+  }
+
+  private frostBurstAt(x: number, y: number) {
+    this.cameras.main.shake(70, 0.003);
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 * i) / 6;
+      const shard = this.add.rectangle(x, y, 5, 2, 0xaad4ff, 0.9).setAngle(Phaser.Math.RadToDeg(angle)).setDepth(32);
+      this.tweens.add({
+        targets: shard, x: x + Math.cos(angle) * 16, y: y + Math.sin(angle) * 14, alpha: 0,
+        duration: 320, ease: 'Quad.easeOut', onComplete: () => shard.destroy(),
+      });
+    }
+  }
+
+  /** Winter Sigil: icicles drop from above onto each enemy — a falling motif
+   *  distinct from Rime Hex's flat thrown shard. */
+  private icicleAnim(targetId: string) {
     const target = this.sprites.get(targetId);
     if (!target) return;
     for (let i = 0; i < 3; i++) {
-      const ring = this.add.circle(target.x, target.y + 2, 7 + i * 4, color, 0).setStrokeStyle(2, color, 0.55).setDepth(31);
+      const startX = target.x + Phaser.Math.Between(-14, 14);
+      const icicle = this.add.rectangle(startX, target.y - 60, 4, 14, 0xaad4ff, 0.95).setDepth(30);
+      this.tweens.add({
+        targets: icicle, y: target.y, duration: 280, delay: i * 60, ease: 'Quad.easeIn',
+        onComplete: () => { this.frostBurstAt(icicle.x, target.y); icicle.destroy(); },
+      });
+    }
+  }
+
+  /** Dawnstrike: a column of holy light drops onto the target from above,
+   *  distinct from the horizontal fire/ice throws. */
+  private holyBeamAnim(targetId: string) {
+    const target = this.sprites.get(targetId);
+    if (!target) return;
+    const beam = this.add.rectangle(target.x, target.y - 48, 10, 0, 0xffe866, 0.85).setOrigin(0.5, 0).setDepth(30);
+    this.tweens.add({
+      targets: beam, height: 64, duration: 160, ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: beam, alpha: 0, duration: 220, ease: 'Sine.easeOut', onComplete: () => beam.destroy() });
+        this.burstAt(target.x, target.y, 0xffe866);
+        this.cameras.main.shake(80, 0.004);
+      },
+    });
+  }
+
+  /** Cure/Dawnmend gets modest rings; Sunward's party-wide heal gets bigger,
+   *  brighter rings plus a few rising sparkles so it reads as the grander cast. */
+  private healAnim(targetId: string, color: number, big = false) {
+    const target = this.sprites.get(targetId);
+    if (!target) return;
+    const rings = big ? 4 : 3;
+    for (let i = 0; i < rings; i++) {
+      const radius = (7 + i * (big ? 6 : 4)) * (big ? 1.15 : 1);
+      const ring = this.add.circle(target.x, target.y + 2, radius, color, 0).setStrokeStyle(big ? 3 : 2, color, big ? 0.7 : 0.55).setDepth(31);
       this.tweens.add({
         targets: ring,
-        scale: 1.35,
+        scale: big ? 1.6 : 1.35,
         alpha: 0,
-        y: target.y - 8 - i * 3,
-        duration: 420 + i * 90,
+        y: target.y - (big ? 12 : 8) - i * (big ? 4 : 3),
+        duration: (big ? 480 : 420) + i * 90,
         ease: 'Sine.easeOut',
         onComplete: () => ring.destroy(),
       });
+    }
+    if (big) {
+      for (let i = 0; i < 4; i++) {
+        const p = this.add.circle(target.x + Phaser.Math.Between(-8, 8), target.y + 6, 1.4, 0xeafff2, 0.9).setDepth(31);
+        this.tweens.add({
+          targets: p, y: p.y - Phaser.Math.Between(16, 26), alpha: 0,
+          duration: Phaser.Math.Between(400, 600), delay: i * 40, onComplete: () => p.destroy(),
+        });
+      }
     }
   }
 

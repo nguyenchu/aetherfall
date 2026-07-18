@@ -449,7 +449,7 @@ export class Battle {
       events.push({
         kind: 'spell',
         text: `${actor.name} uses ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
-        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
+        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.applyReflect(actor, target, hit, events);
@@ -474,7 +474,7 @@ export class Battle {
       events.push({
         kind: 'spell',
         text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
-        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, crit: hit.crit, weak: hit.weak,
+        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.applyReflect(actor, target, hit, events);
@@ -490,7 +490,7 @@ export class Battle {
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
-      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element });
+      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id });
       // Cleansing Light boon: healing also washes ailments away.
       if (actor.side === 'party' && this.bn.healsCure && target.ailments && Object.keys(target.ailments).length > 0) {
         target.ailments = undefined;
