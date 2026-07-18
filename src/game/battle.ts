@@ -45,6 +45,12 @@ const LAST_STAND_DMG_MULT = 1.4;
 const LAST_STAND_CRIT_BONUS = 0.15;
 const MOMENTUM_CRIT_PER_STACK = 0.1;
 const MOMENTUM_MAX_STACKS = 5;
+// Limit Break gauge (see types.ts Combatant.limit): fills from damage taken
+// (scaled by how much of max HP it cost) and a small flat amount for simply
+// acting, so a caster who dodges the enemy's attention still builds it up.
+const LIMIT_MAX = 100;
+const LIMIT_TAKEN_SCALE = 1.4;
+const LIMIT_ACT_GAIN = 4;
 
 // --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
 // Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
@@ -182,6 +188,11 @@ export class Battle {
     if (cmd.type === 'flee') {
       this.attemptFlee(events);
       return events;
+    }
+    // Acting builds the Limit Break gauge a little regardless of whether the
+    // actor gets hit — but using the Limit Break itself doesn't re-fill it.
+    if (actor.side === 'party' && cmd.type !== 'limit') {
+      actor.limit = Math.min(LIMIT_MAX, (actor.limit ?? 0) + LIMIT_ACT_GAIN);
     }
     this.execute(actor, cmd, events);
     // Guardian's Wrath: the buff persists through repeated defends, and is
@@ -367,6 +378,86 @@ export class Battle {
             text: had ? `${actor.name} uses ${item.name}; ${target.name} is cleansed of ailments.` : `${actor.name} uses ${item.name}, but ${target.name} has nothing to cure.`,
             actorId: actor.id, targetId: target.id,
           });
+        }
+        return;
+      }
+      case 'limit': {
+        if ((actor.limit ?? 0) < LIMIT_MAX) return; // menu shouldn't offer it otherwise
+        actor.limit = 0;
+        this.executeLimitBreak(actor, events);
+        return;
+      }
+    }
+  }
+
+  // --- Limit Breaks -----------------------------------------------------------
+
+  /** Ultimate move for a full gauge — ignores defending/ward mitigation (a
+   *  limit break cuts through guard by design) but still respects weakness
+   *  for flavor. One bespoke move per party member. */
+  private limitDamage(target: Combatant, base: number, element: Element): { dmg: number; weak: boolean } {
+    const weak = element !== 'none' && (target.weakness?.includes(element) ?? false);
+    let dmg = base * rnd(0.95, 1.08);
+    if (weak) dmg *= WEAK_MULT;
+    return { dmg: Math.max(1, Math.round(dmg)), weak };
+  }
+
+  private executeLimitBreak(actor: Combatant, events: BattleEvent[]): void {
+    switch (actor.id) {
+      case 'kael': {
+        const target = this.living('enemy')[0];
+        if (!target) return;
+        events.push({ kind: 'limit', text: `Kael unleashes AETHERBLADE REQUIEM!`, actorId: actor.id });
+        const hit = this.limitDamage(target, actor.stats.str * 4.2, 'physical');
+        this.applyDamage(target, hit.dmg);
+        if (target.side === 'enemy' && !target.broken && (target.guard ?? 0) > 0) {
+          target.guard = 0;
+          target.broken = true;
+          target.intent = undefined;
+          events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id });
+        }
+        events.push({
+          kind: 'spell', text: `${target.name} takes ${hit.dmg}!${hit.weak ? ' Weak!' : ''}`,
+          actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'physical', spellId: 'requiem', weak: hit.weak,
+        });
+        this.maybeKo(target, events);
+        return;
+      }
+      case 'lyra': {
+        events.push({ kind: 'limit', text: `Lyra unleashes CATACLYSM!`, actorId: actor.id });
+        for (const target of this.living('enemy')) {
+          const hit = this.limitDamage(target, actor.stats.int * 2.6, 'none');
+          this.applyDamage(target, hit.dmg);
+          events.push({
+            kind: 'spell', text: `${target.name} is engulfed! −${hit.dmg}`,
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'none', spellId: 'cataclysm',
+          });
+          this.maybeKo(target, events);
+        }
+        return;
+      }
+      case 'mira': {
+        events.push({ kind: 'limit', text: `Mira unleashes AEGIS OF DAWN!`, actorId: actor.id });
+        for (const t of this.party) {
+          if (t.stats.hp <= 0) {
+            t.stats.hp = Math.round(t.stats.maxHp * 0.5);
+            events.push({ kind: 'info', text: `${t.name} is revived!`, targetId: t.id, amount: -t.stats.hp });
+          } else {
+            const healAmt = t.stats.maxHp - t.stats.hp;
+            if (healAmt > 0) {
+              t.stats.hp = t.stats.maxHp;
+              events.push({
+                kind: 'spell', text: `${t.name} is bathed in dawnlight! +${healAmt} HP`,
+                actorId: actor.id, targetId: t.id, amount: -healAmt, element: 'holy', spellId: 'aegis',
+              });
+            }
+          }
+          // Cleansing applies whether they were healed or just revived — a
+          // freshly-revived ally shouldn't drop right back to venom ticking.
+          if (t.ailments && Object.keys(t.ailments).length > 0) {
+            t.ailments = undefined;
+            events.push({ kind: 'info', text: `${t.name} is cleansed of ailments.`, targetId: t.id });
+          }
         }
         return;
       }
@@ -672,6 +763,15 @@ export class Battle {
 
   private applyDamage(t: Combatant, dmg: number): void {
     t.stats.hp = Math.max(0, t.stats.hp - dmg);
+    if (t.side === 'party' && dmg > 0) this.gainLimit(t, dmg);
+  }
+
+  /** Limit Break gauge gain from taking a hit — a bigger fraction of max HP
+   *  lost fills it faster (see LIMIT_TAKEN_SCALE). */
+  private gainLimit(c: Combatant, dmgTaken: number): void {
+    const gain = Math.round((dmgTaken / c.stats.maxHp) * 100 * LIMIT_TAKEN_SCALE);
+    if (gain <= 0) return;
+    c.limit = Math.min(LIMIT_MAX, (c.limit ?? 0) + gain);
   }
 
   // --- Ailments ---------------------------------------------------------------

@@ -23,7 +23,7 @@ interface PendingAction {
 
 interface MenuOption {
   label: string;
-  action: 'attack' | 'magic' | 'item' | 'defend' | 'flee';
+  action: 'attack' | 'magic' | 'item' | 'defend' | 'flee' | 'limit';
   enabled: boolean;
 }
 
@@ -97,6 +97,7 @@ export class BattleScene extends Phaser.Scene {
   private enemyExtras = new Map<string, EnemyExtras>();
   private partyXpBars = new Map<string, BarSet>();
   private partyHpBars = new Map<string, BarSet>();
+  private partyLimitBars = new Map<string, BarSet>();
   private partyStatusRows = new Map<string, PartyStatusRow>();
   private turnChips: Phaser.GameObjects.GameObject[] = [];
   private log: string[] = [];
@@ -129,6 +130,7 @@ export class BattleScene extends Phaser.Scene {
     this.enemyExtras.clear();
     this.partyXpBars.clear();
     this.partyHpBars.clear();
+    this.partyLimitBars.clear();
     this.partyStatusRows.clear();
     this.turnChips = [];
     this.menuText = [];
@@ -419,6 +421,13 @@ export class BattleScene extends Phaser.Scene {
       const xpBg = this.add.rectangle(statusX + 126, barY, 50, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
       const xpFill = this.add.rectangle(statusX + 127, barY, 48, 3, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
       this.partyXpBars.set(c.id, { bg: xpBg, fill: xpFill });
+
+      // Limit Break gauge: a thin gold sliver in the gap between the name row
+      // and the HP/XP bars — glows and pulses once full (see refreshPartyBars).
+      const limitY = rowTop + 16;
+      const limitBg = this.add.rectangle(statusX + 5, limitY, 176, 3, 0x07060e, 0.85).setOrigin(0, 0.5).setDepth(16);
+      const limitFill = this.add.rectangle(statusX + 6, limitY, 174, 1.5, 0xb8923c, 0.9).setOrigin(0, 0.5).setDepth(17).setScale(0, 1);
+      this.partyLimitBars.set(c.id, { bg: limitBg, fill: limitFill });
     });
   }
 
@@ -563,6 +572,11 @@ export class BattleScene extends Phaser.Scene {
       { label: 'Defend', action: 'defend', enabled: true },
       { label: 'Flee', action: 'flee', enabled: true },
     ];
+    // A full gauge (see battle.ts LIMIT_MAX) surfaces the ultimate as the
+    // first, most prominent option rather than just another row at the end.
+    if ((m.limit ?? 0) >= 100) {
+      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}`, action: 'limit', enabled: true });
+    }
     this.renderMenu(`${m.name} - choose action`);
     this.stepActiveHeroForward(m.id);
   }
@@ -571,15 +585,21 @@ export class BattleScene extends Phaser.Scene {
     this.promptText.setText(prompt);
     this.logText.setVisible(false);
     this.clearMenuText();
+    // The Limit Break row only appears when the gauge is full, growing the
+    // list from 5 to 6 — tighten the pitch just enough to still fit the
+    // panel rather than changing spacing for the common 5-option case.
+    const pitch = this.options.length > 5 ? 15 : 18;
+    const rowH = this.options.length > 5 ? 14 : 16;
     this.options.forEach((o, i) => {
-      const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, i === this.menuIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
+      const isLimit = o.action === 'limit';
+      const bg = this.add.rectangle(8, GAME.height - 95 + i * pitch, GAME.width - 220, rowH, i === this.menuIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
         .setOrigin(0, 0)
         .setDepth(15);
-      bg.setStrokeStyle(1, i === this.menuIndex ? 0xf0d36c : 0x2f3658, o.enabled ? 0.95 : 0.45);
+      bg.setStrokeStyle(1, isLimit ? 0xf0d36c : i === this.menuIndex ? 0xf0d36c : 0x2f3658, isLimit || o.enabled ? 0.95 : 0.45);
       this.menuBacks.push(bg);
-      const color = !o.enabled ? '#5a6080' : i === this.menuIndex ? '#f0d36c' : '#c9cee8';
+      const color = isLimit ? '#ffe27a' : !o.enabled ? '#5a6080' : i === this.menuIndex ? '#f0d36c' : '#c9cee8';
       const prefix = i === this.menuIndex ? '▶ ' : '  ';
-      const t = this.add.text(16, GAME.height - 92 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      const t = this.add.text(16, GAME.height - 92 + i * pitch, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
     });
     this.cursor.setVisible(false);
@@ -588,7 +608,7 @@ export class BattleScene extends Phaser.Scene {
 
     if (isTouchDevice()) {
       this.options.forEach((_o, i) => {
-        const zone = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
+        const zone = this.add.rectangle(8, GAME.height - 95 + i * pitch, GAME.width - 220, rowH, 0xffffff, 0)
           .setOrigin(0, 0).setDepth(25).setInteractive();
         zone.on('pointerdown', () => {
           if (!this.options[i]?.enabled) return;
@@ -747,6 +767,9 @@ export class BattleScene extends Phaser.Scene {
         break;
       case 'flee':
         this.commit({ type: 'flee' });
+        break;
+      case 'limit':
+        this.commit({ type: 'limit' });
         break;
     }
   }
@@ -949,9 +972,112 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => this.playEvents(events, i + 1, onDone));
   }
 
+  /**
+   * Post-battle XP summary: a small overlay listing each living party member
+   * with a bar animating from their pre-battle fill to their post-battle one.
+   * Multiple level-ups in one battle play as successive full-then-reset
+   * segments (classic JRPG "bar fills, flashes LEVEL UP, continues" beat).
+   * Z/tap skips straight to the end state. Calls `onDone` once finished.
+   */
+  private showXpResults(snaps: { id: string; name: string; levelBefore: number; xpBefore: number }[], onDone: () => void): void {
+    if (snaps.length === 0) { onDone(); return; }
+    const W = 220;
+    const rowH = 28;
+    const padTop = 22;
+    const H = padTop + snaps.length * rowH + 14;
+    const x = GAME.width / 2 - W / 2;
+    const y = 50;
+
+    const objs: Phaser.GameObjects.GameObject[] = [];
+    const panel = this.add.rectangle(x, y, W, H, 0x0d1024, 0.95).setOrigin(0, 0).setDepth(70).setStrokeStyle(1, 0x2f3658, 0.95);
+    const title = this.add.text(x + W / 2, y + 9, 'EXPERIENCE', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5).setDepth(71);
+    const hint = this.add.text(x + W / 2, y + H - 9, 'Z / tap to skip', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })).setOrigin(0.5).setDepth(71);
+    objs.push(panel, title, hint);
+
+    const rows = snaps.map((s, i) => {
+      const ry = y + padTop + i * rowH;
+      const name = this.add.text(x + 10, ry, `${s.name}  Lv ${s.levelBefore}`, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2 })).setDepth(71);
+      const bg = this.add.rectangle(x + 10, ry + 14, W - 20, 6, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(71).setStrokeStyle(1, 0x2f3658, 0.9);
+      const fill = this.add.rectangle(x + 11, ry + 14, W - 22, 4, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(72).setScale(0, 1);
+      objs.push(name, bg, fill);
+      return { s, c: this.battle.byId(s.id), name, fill };
+    });
+
+    let skip = false;
+    const unsub = input.on('confirm', () => { skip = true; });
+
+    const runRow = (i: number, cb: () => void) => {
+      if (i >= rows.length) { cb(); return; }
+      const r = rows[i];
+      const c = r.c;
+      if (!c) { runRow(i + 1, cb); return; }
+      const levelAfter = c.level ?? r.s.levelBefore;
+      const levelsGained = levelAfter - r.s.levelBefore;
+
+      // One fill segment per level crossed: the first runs from the
+      // pre-battle amount up to that level's threshold (100%, a level-up),
+      // any full levels in between run 0 -> threshold, and the last segment
+      // is the partial fill remaining in the final level (no level-up flash).
+      const segments: { to: number; needed: number }[] = [];
+      if (levelsGained <= 0) {
+        segments.push({ to: c.xp ?? r.s.xpBefore, needed: xpForLevel(r.s.levelBefore) });
+      } else {
+        segments.push({ to: xpForLevel(r.s.levelBefore), needed: xpForLevel(r.s.levelBefore) });
+        for (let lv = 1; lv < levelsGained; lv++) {
+          segments.push({ to: xpForLevel(r.s.levelBefore + lv), needed: xpForLevel(r.s.levelBefore + lv) });
+        }
+        segments.push({ to: c.xp ?? 0, needed: xpForLevel(levelAfter) });
+      }
+      let fromPct = Phaser.Math.Clamp(r.s.xpBefore / segments[0].needed, 0, 1);
+      r.fill.setScale(fromPct, 1);
+
+      const runSeg = (si: number) => {
+        if (si >= segments.length || skip) {
+          r.name.setText(`${c.name}  Lv ${levelAfter}`);
+          r.fill.setScale(Phaser.Math.Clamp((c.xp ?? 0) / xpForLevel(levelAfter), 0, 1), 1);
+          runRow(i + 1, cb);
+          return;
+        }
+        const seg = segments[si];
+        const toPct = Phaser.Math.Clamp(seg.to / seg.needed, 0, 1);
+        this.tweens.add({
+          targets: r.fill, scaleX: toPct, duration: 260, ease: 'Sine.easeOut',
+          onComplete: () => {
+            if (si < segments.length - 1) {
+              // Crossed a level within this battle's XP gain.
+              r.name.setText(`${c.name}  Lv ${r.s.levelBefore + si + 1}  LEVEL UP!`).setColor('#ffe27a');
+              sfx.play('levelup');
+              r.fill.setScale(0, 1);
+              this.time.delayedCall(280, () => runSeg(si + 1));
+            } else {
+              runRow(i + 1, cb);
+            }
+          },
+        });
+      };
+      runSeg(0);
+    };
+
+    runRow(0, () => {
+      unsub();
+      this.time.delayedCall(350, () => {
+        objs.forEach((o) => o.destroy());
+        onDone();
+      });
+    });
+  }
+
   private onVictory() {
     const run = getRun();
     run.gold += this.battle.goldWon;
+
+    // Snapshot pre-XP level/xp for whoever's still standing, so the results
+    // overlay below can animate each bar from its old fill to its new one
+    // (including any level-ups) rather than just snapping to the end state.
+    const xpSnapshots = this.battle.party
+      .filter((c) => c.stats.hp > 0)
+      .map((c) => ({ id: c.id, name: c.name, levelBefore: c.level ?? 1, xpBefore: c.xp ?? 0 }));
+
     // Award XP and show level-up events in the log.
     const xpEvents = grantXp(run.party, this.battle.xpWon);
     for (const ev of xpEvents) this.pushLog(ev.text);
@@ -966,6 +1092,14 @@ export class BattleScene extends Phaser.Scene {
     const depth = run.depth;
     const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
+
+    // Show the XP-gain bars before doing anything else — boon pick, chapter
+    // clear, and the Rift tier-up all wait for this short beat to finish.
+    this.showXpResults(xpSnapshots, () => this.proceedAfterVictory(boss, depth));
+  }
+
+  private proceedAfterVictory(boss: boolean, depth: number): void {
+    const run = getRun();
 
     // A Rift boss ends the procedural run: raise the tier and go home, skipping
     // the chapter-completion flags/dialogue (those are for the fixed story).
@@ -1167,7 +1301,7 @@ export class BattleScene extends Phaser.Scene {
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
       const isHeal = (ev.amount ?? 0) < 0;
       if (isHeal) {
-        this.healAnim(ev.targetId, 0x6cf0a0, ev.spellId === 'cureall');
+        this.healAnim(ev.targetId, 0x6cf0a0, ev.spellId === 'cureall' || ev.spellId === 'aegis');
         this.floatNumber(ev.targetId, ev.amount ?? 0, ev);
       } else {
         this.spellAnim(ev.spellId, ev.actorId, ev.targetId, ev.element);
@@ -1181,6 +1315,10 @@ export class BattleScene extends Phaser.Scene {
     } else if (ev.kind === 'dot' && ev.targetId && ev.amount) {
       // Burn/venom end-of-round ticks.
       this.floatNumber(ev.targetId, ev.amount, ev);
+    } else if (ev.kind === 'limit') {
+      // Announcement only — the move's own damage/heal follow as normal
+      // events right after and play their own animation as usual.
+      this.playLimitBreak(ev.actorId);
     } else if (ev.kind === 'info' && ev.targetId && ev.amount) {
       // Lifesteal, thorns, revive — small floating numbers without an attack animation.
       this.floatNumber(ev.targetId, ev.amount, ev);
@@ -1281,6 +1419,8 @@ export class BattleScene extends Phaser.Scene {
       case 'frost':    this.iceShardAnim(actorId, targetId); return;
       case 'blizzard': this.icicleAnim(targetId); return;
       case 'smite':    this.holyBeamAnim(targetId); return;
+      case 'requiem':   this.requiemAnim(actorId, targetId); return;
+      case 'cataclysm': this.cataclysmAnim(targetId); return;
       default:
         if (element === 'physical') this.attackAnim(actorId, targetId, element);
         else this.projectileAnim(actorId, targetId, BattleScene.spellColor(element));
@@ -1436,6 +1576,71 @@ export class BattleScene extends Phaser.Scene {
         this.cameras.main.shake(80, 0.004);
       },
     });
+  }
+
+  /** Limit Break announcement: a bright screen flash, a heavy shake, and a
+   *  bold "LIMIT BREAK!" banner — plays once before the move's own damage/
+   *  heal events (which use their own spellId-keyed animation as usual). */
+  private playLimitBreak(actorId?: string) {
+    const actor = actorId ? this.sprites.get(actorId) : undefined;
+    const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xfff0aa, 0).setOrigin(0, 0).setDepth(60);
+    this.tweens.add({ targets: flash, alpha: 0.85, duration: 90, yoyo: true, onComplete: () => flash.destroy() });
+    this.cameras.main.shake(260, 0.01);
+    sfx.play('levelup');
+    const banner = this.add.text(GAME.width / 2, GAME.height / 2 - 20, 'LIMIT BREAK!', sharpText({
+      fontFamily: FONT, fontSize: '20px', color: '#fff0aa', strokeThickness: 5, align: 'center',
+    })).setOrigin(0.5).setDepth(61).setScale(1.6).setAlpha(0);
+    this.tweens.add({ targets: banner, alpha: 1, scale: 1, duration: 260, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: banner, alpha: 0, delay: 900, duration: 400, onComplete: () => banner.destroy() });
+    if (actor) {
+      const ring = this.add.circle(actor.x, actor.y, 6, 0xfff0aa, 0.6).setDepth(59);
+      this.tweens.add({ targets: ring, scale: 12, alpha: 0, duration: 500, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+    }
+  }
+
+  /** Aetherblade Requiem (Kael's Limit Break): a bigger, slower finishing
+   *  lunge than Guardbreak — a triple cross-slash and a large shockwave. */
+  private requiemAnim(actorId: string, targetId: string) {
+    const actor = this.sprites.get(actorId);
+    const target = this.sprites.get(targetId);
+    if (!actor || !target) return;
+    const home = this.spriteHome.get(actorId);
+    const sx = actor.x, sy = actor.y;
+    const restX = home?.x ?? sx, restY = home?.y ?? sy;
+    this.tweens.killTweensOf(actor);
+    const dx = Phaser.Math.Clamp((target.x - sx) * 0.3, -34, 34);
+    const dy = Phaser.Math.Clamp((target.y - sy) * 0.16, -14, 14);
+    this.tweens.add({
+      targets: actor, x: sx + dx, y: sy + dy, duration: 130, ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.tweens.add({ targets: actor, x: restX, y: restY, duration: 180, ease: 'Sine.easeIn', onComplete: () => this.restartIdle(actorId) });
+      },
+    });
+    for (let i = 0; i < 3; i++) {
+      const slash = this.add.rectangle(target.x, target.y, 44, 4, i % 2 === 0 ? 0xfff0aa : 0xeef2ff, 0.9).setAngle(-30 + i * 30).setDepth(33);
+      this.tweens.add({ targets: slash, alpha: 0, scaleX: 1.6, duration: 260, delay: i * 60, ease: 'Quad.easeOut', onComplete: () => slash.destroy() });
+    }
+    const ring = this.add.circle(target.x, target.y, 6, 0xfff0aa, 0).setStrokeStyle(4, 0xfff0aa, 0.9).setDepth(33);
+    this.tweens.add({ targets: ring, scale: 8, alpha: 0, duration: 380, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    this.cameras.main.shake(220, 0.012);
+  }
+
+  /** Cataclysm (Lyra's Limit Break): fire and ice bursts together on each
+   *  enemy — a combined-element read distinct from any single hex. */
+  private cataclysmAnim(targetId: string) {
+    const target = this.sprites.get(targetId);
+    if (!target) return;
+    this.fireBurstAt(target.x, target.y);
+    this.frostBurstAt(target.x, target.y);
+    for (let i = 0; i < 2; i++) {
+      const startX = target.x + Phaser.Math.Between(-12, 12);
+      const icicle = this.add.rectangle(startX, target.y - 50, 4, 12, 0xaad4ff, 0.95).setDepth(30);
+      this.tweens.add({
+        targets: icicle, y: target.y, duration: 240, delay: i * 70, ease: 'Quad.easeIn',
+        onComplete: () => icicle.destroy(),
+      });
+    }
+    this.cameras.main.shake(120, 0.007);
   }
 
   /** Cure/Dawnmend gets modest rings; Sunward's party-wide heal gets bigger,
@@ -1742,6 +1947,22 @@ export class BattleScene extends Phaser.Scene {
       const xpPct = Phaser.Math.Clamp((c.xp ?? 0) / needed, 0, 1);
       const xpBar = this.partyXpBars.get(c.id);
       if (xpBar) xpBar.fill.setScale(xpPct, 1);
+
+      const limitBar = this.partyLimitBars.get(c.id);
+      if (limitBar) {
+        const limitPct = Phaser.Math.Clamp((c.limit ?? 0) / 100, 0, 1);
+        const ready = limitPct >= 1 && hp > 0;
+        limitBar.fill.setScale(limitPct, 1);
+        if (ready) {
+          if (!this.tweens.isTweening(limitBar.fill)) {
+            limitBar.fill.setFillStyle(0xf0d36c, 1);
+            this.tweens.add({ targets: limitBar.fill, alpha: { from: 1, to: 0.5 }, duration: 380, yoyo: true, repeat: -1 });
+          }
+        } else if (this.tweens.isTweening(limitBar.fill)) {
+          this.tweens.killTweensOf(limitBar.fill);
+          limitBar.fill.setAlpha(0.9).setFillStyle(0xb8923c, 0.9);
+        }
+      }
     }
   }
 
@@ -1758,5 +1979,14 @@ function battleArtLabel(memberId: string): string {
     case 'lyra': return 'Hexes';
     case 'mira': return 'Prayers';
     default: return 'Magic';
+  }
+}
+
+function limitBreakName(memberId: string): string {
+  switch (memberId) {
+    case 'kael': return 'Aetherblade Requiem';
+    case 'lyra': return 'Cataclysm';
+    case 'mira': return 'Aegis of Dawn';
+    default: return 'Limit Break';
   }
 }

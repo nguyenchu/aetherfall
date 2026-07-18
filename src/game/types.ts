@@ -132,6 +132,12 @@ export interface Combatant {
   // CTB turn queue (battle.ts): count-time readiness and Haste/Slow stack.
   readiness?: number;
   speedStatuses?: Partial<Record<SpeedSource, SpeedStatus>>;
+  // Limit Break gauge (party only), 0..100. Rises from damage taken and from
+  // acting; at 100 a "Limit Break" command unlocks in the menu (see battle.ts
+  // executeLimitBreak). Persists across battles within a run — only reset at
+  // Sanctuary (run.ts restoreParty) — so it can be built up over a floor and
+  // unleashed on a tough fight.
+  limit?: number;
 }
 
 export type Command =
@@ -140,7 +146,8 @@ export type Command =
   | { type: 'item'; itemId: string; targetId: string }
   | { type: 'defend' }
   | { type: 'flee' }
-  | { type: 'phase' };
+  | { type: 'phase' }
+  | { type: 'limit' };
 
 export type EventKind =
   | 'attack'
@@ -155,7 +162,8 @@ export type EventKind =
   | 'break'
   | 'recover'
   | 'ailment' // an ailment was applied
-  | 'dot'; // end-of-round burn/venom damage tick
+  | 'dot' // end-of-round burn/venom damage tick
+  | 'limit'; // a party member's Limit Break was unleashed (announcement only; its actual damage/heal follow as normal events)
 
 /** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {

@@ -185,21 +185,21 @@ export function makeParty(): Combatant[] {
   return [
     {
       id: 'kael', name: 'Kael', side: 'party', spriteKey: 'c_kael',
-      color: C.warrior, size: 22, spells: ['bash'], level: 1, xp: 0,
+      color: C.warrior, size: 22, spells: ['bash'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 60, maxMp: 8, str: 14, agi: 8, vit: 10, int: 2 }),
       growth: { maxHp: 10, maxMp: 2, str: 2, vit: 2, agi: 1 },
       learnset: { 4: ['cleave'] },
     },
     {
       id: 'lyra', name: 'Lyra', side: 'party', spriteKey: 'c_lyra',
-      color: C.mage, size: 20, spells: ['fire', 'frost'], level: 1, xp: 0,
+      color: C.mage, size: 20, spells: ['fire', 'frost'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 36, maxMp: 18, str: 6, agi: 11, vit: 5, int: 14 }),
       growth: { maxHp: 5, maxMp: 4, int: 2, agi: 1, str: 1, vit: 1 },
       learnset: { 4: ['firewave'], 7: ['blizzard'] },
     },
     {
       id: 'mira', name: 'Mira', side: 'party', spriteKey: 'c_mira',
-      color: C.cleric, size: 21, spells: ['cure', 'smite'], level: 1, xp: 0,
+      color: C.cleric, size: 21, spells: ['cure', 'smite'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 44, maxMp: 14, str: 9, agi: 7, vit: 8, int: 11 }),
       growth: { maxHp: 7, maxMp: 3, int: 2, str: 1, vit: 1, agi: 1 },
       learnset: { 5: ['cureall'] },

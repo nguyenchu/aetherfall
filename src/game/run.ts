@@ -510,6 +510,7 @@ export function restoreParty(): void {
     c.defending = false;
     c.ailments = undefined;
     c.speedStatuses = undefined;
+    c.limit = 0;
   }
 }
 
