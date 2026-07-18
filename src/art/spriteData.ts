@@ -42,6 +42,9 @@ export const PALETTE: Record<string, number> = {
   n: 0x4b566c, // gray shadow
   D: 0x3b64a3, // boss deep blue
   d: 0x243f6d, // deep blue shadow
+  Y: 0x24352a, // shade base (mossy near-black green)
+  y: 0x152018, // shade shadow
+  I: 0xd8f5ff, // icy glow
 };
 
 // Each value is top-to-bottom rows. Width is the longest row.
@@ -276,14 +279,37 @@ export const SPRITES: Record<string, string[]> = {
     '..oo......oo..',
   ],
 
-  // --- Leviathan of the Deep (boss): finned maw with two rows of fangs ---
-  e_leviathan: [
+  // --- Forest Shade (Ch1 boss): finned maw shape recast as a mossy, near-black
+  // wraith with two glowing red eyes — the anchor guardian consumed by dark. ---
+  e_forestshade: [
+    '........oooo........',
+    '......ooYyYYoo......',
+    '.....oYYYYYYYYo.....',
+    '.oo.oYYyYYYYyYYo.oo.',
+    'oFYooYYYYYYYYYYooYFo',
+    'oYYoYYXXYYYYXXYyoYYo',
+    '.oYoYYYYYYYYYYYyoYo.',
+    '.oYoYYYyYYYYyYYYoYo.',
+    '..ooYYYYYYYYYYYYoo..',
+    '.oYYyYYYYYYYYYYyYYo.',
+    '.oFYFYFYFYFYFYFYFYo.',
+    '.oooooooooooooooooo.',
+    '..oYFYFYFYFYFYFYFo..',
+    '...oYYYYYYYYYYYYo...',
+    '....oYYyYYYYyYYo....',
+    '.....ooYYYYYYoo.....',
+    '.......oooooo.......',
+  ],
+
+  // --- Tide Warden (Ch2 boss): the deep-sea leviathan shape, eyes recast icy
+  // pale-cyan (its chill inflict) instead of a fire-boss's red glow. ---
+  e_tidewarden: [
     '........oooo........',
     '......ooDdDDoo......',
     '.....oDDDDDDDDo.....',
     '.oo.oDDdDDDDdDDo.oo.',
     'oVDooDDDDDDDDDDooDVo',
-    'oDDoDDXXDDDDXXDdoDDo',
+    'oDDoDDIIDDDDIIDdoDDo',
     '.oDoDDDDDDDDDDDdoDo.',
     '.oDoDDDdDDDDdDDDoDo.',
     '..ooDDDDDDDDDDDDoo..',
@@ -294,6 +320,50 @@ export const SPRITES: Record<string, string[]> = {
     '...oDDDDDDDDDDDDo...',
     '....oDDdDDDDdDDo....',
     '.....ooDDDDDDoo.....',
+    '.......oooooo.......',
+  ],
+
+  // --- Ashbrand (Ch3 boss): the same maw in the ember palette, molten cracks
+  // where the deep-sea boss had cold blue plating. ---
+  e_ashbrand: [
+    '........oooo........',
+    '......ooRrRRoo......',
+    '.....oRRRRRRRRo.....',
+    '.oo.oRRrRRRRrRRo.oo.',
+    'oJRooRRRRRRRRRRooRJo',
+    'oRRoRRXXRRRRXXRroRRo',
+    '.oRoRRRRRRRRRRRroRo.',
+    '.oRoRRRrRRRRrRRRoRo.',
+    '..ooRRRRRRRRRRRRoo..',
+    '.oRRrRRRRRRRRRRrRRo.',
+    '.oFRFRFRFRFRFRFRFRo.',
+    '.oooooooooooooooooo.',
+    '..oRFRFRFRFRFRFRFo..',
+    '...oRRRRRRRRRRRRo...',
+    '....oRRrRRRRrRRo....',
+    '.....ooRRRRRRoo.....',
+    '.......oooooo.......',
+  ],
+
+  // --- Prism Sovereign (Ch4 boss): the maw shape cut from crystal instead of
+  // flesh — purple facets, luminous white facet-eyes. ---
+  e_prismsovereign: [
+    '........oooo........',
+    '......ooPpPPoo......',
+    '.....oPPPPPPPPo.....',
+    '.oo.oPPpPPPPpPPo.oo.',
+    'oQPooPPPPPPPPPPooPQo',
+    'oPPoPPFFPPPPFFPpoPPo',
+    '.oPoPPPPPPPPPPPpoPo.',
+    '.oPoPPPpPPPPpPPPoPo.',
+    '..ooPPPPPPPPPPPPoo..',
+    '.oPPpPPPPPPPPPPpPPo.',
+    '.oFPFPFPFPFPFPFPFPo.',
+    '.oooooooooooooooooo.',
+    '..oPFPFPFPFPFPFPFo..',
+    '...oPPPPPPPPPPPPo...',
+    '....oPPpPPPPpPPo....',
+    '.....ooPPPPPPoo.....',
     '.......oooooo.......',
   ],
 

@@ -74,7 +74,7 @@ function alphaWolf(): Combatant {
 function forestShade(): Combatant {
   return armed({
     id: 'forest_shade', name: 'Forest Shade', side: 'enemy',
-    spriteKey: 'e_leviathan', color: 0x112233, size: 38,
+    spriteKey: 'e_forestshade', color: 0x112233, size: 38,
     spells: ['frost', 'fire'], goldReward: 85, xpReward: 100,
     isBoss: true,
     stats: s(260, 16, 9, 10, 18, 50),
@@ -284,7 +284,7 @@ function keepSentinel(): Combatant {
 function tideWarden(): Combatant {
   return armed({
     id: 'tide_warden', name: 'Tide Warden', side: 'enemy',
-    spriteKey: 'e_leviathan', color: 0x1a3a5a, size: 40,
+    spriteKey: 'e_tidewarden', color: 0x1a3a5a, size: 40,
     spells: ['frost', 'cure'], goldReward: 115, xpReward: 140,
     isBoss: true,
     attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
@@ -436,7 +436,7 @@ function pyreColossus(): Combatant {
 function ashbrand(): Combatant {
   return armed({
     id: 'ashbrand', name: 'Ashbrand', side: 'enemy',
-    spriteKey: 'e_leviathan', color: 0x881100, size: 42,
+    spriteKey: 'e_ashbrand', color: 0x881100, size: 42,
     spells: ['fire', 'smite'], goldReward: 125, xpReward: 180,
     isBoss: true,
     attackInflict: { ailment: 'burn', chance: 0.3, rounds: 2 },
@@ -515,7 +515,7 @@ function geodeWarden(): Combatant {
 function prismSovereign(): Combatant {
   return armed({
     id: 'prism_sovereign', name: 'Prism Sovereign', side: 'enemy',
-    spriteKey: 'e_leviathan', color: 0x9a3aff, size: 44,
+    spriteKey: 'e_prismsovereign', color: 0x9a3aff, size: 44,
     spells: ['frost', 'smite'], goldReward: 130, xpReward: 230,
     isBoss: true,
     attackInflict: { ailment: 'chill', chance: 0.3, rounds: 2 },
