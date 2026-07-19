@@ -1006,11 +1006,23 @@ export class BattleScene extends Phaser.Scene {
     let skip = false;
     const unsub = input.on('confirm', () => { skip = true; });
 
-    const runRow = (i: number, cb: () => void) => {
-      if (i >= rows.length) { cb(); return; }
-      const r = rows[i];
+    // All rows animate at once — everyone's bar moves together rather than
+    // waiting their turn — but each still plays its own level-up segment
+    // chain independently, so a double level-up doesn't hold up the others.
+    let remaining = rows.length;
+    const rowDone = () => {
+      remaining--;
+      if (remaining > 0) return;
+      unsub();
+      this.time.delayedCall(350, () => {
+        objs.forEach((o) => o.destroy());
+        onDone();
+      });
+    };
+
+    for (const r of rows) {
       const c = r.c;
-      if (!c) { runRow(i + 1, cb); return; }
+      if (!c) { rowDone(); continue; }
       const levelAfter = c.level ?? r.s.levelBefore;
       const levelsGained = levelAfter - r.s.levelBefore;
 
@@ -1028,14 +1040,14 @@ export class BattleScene extends Phaser.Scene {
         }
         segments.push({ to: c.xp ?? 0, needed: xpForLevel(levelAfter) });
       }
-      let fromPct = Phaser.Math.Clamp(r.s.xpBefore / segments[0].needed, 0, 1);
+      const fromPct = Phaser.Math.Clamp(r.s.xpBefore / segments[0].needed, 0, 1);
       r.fill.setScale(fromPct, 1);
 
       const runSeg = (si: number) => {
         if (si >= segments.length || skip) {
           r.name.setText(`${c.name}  Lv ${levelAfter}`);
           r.fill.setScale(Phaser.Math.Clamp((c.xp ?? 0) / xpForLevel(levelAfter), 0, 1), 1);
-          runRow(i + 1, cb);
+          rowDone();
           return;
         }
         const seg = segments[si];
@@ -1050,21 +1062,13 @@ export class BattleScene extends Phaser.Scene {
               r.fill.setScale(0, 1);
               this.time.delayedCall(280, () => runSeg(si + 1));
             } else {
-              runRow(i + 1, cb);
+              rowDone();
             }
           },
         });
       };
       runSeg(0);
-    };
-
-    runRow(0, () => {
-      unsub();
-      this.time.delayedCall(350, () => {
-        objs.forEach((o) => o.destroy());
-        onDone();
-      });
-    });
+    }
   }
 
   private onVictory() {
