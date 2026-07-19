@@ -471,33 +471,52 @@ export class DescentScene extends Phaser.Scene {
     });
   }
 
-  /** Battle used to cut in with zero warning — a flash, a burst of light from
-   *  the player, and a fade to black now bridges the two scenes. Battle's own
-   *  fadeIn(400,...) picks up from black, so the handoff reads as one beat. */
+  /** Battle used to cut in with zero warning — a flash, a burst of light
+   *  filling the screen, and a fade to black now bridges the two scenes.
+   *  Battle's own fadeIn(400,...) picks up from black, so the handoff reads
+   *  as one beat.
+   *
+   *  The burst visuals are drawn on the DescentHud scene, not this one:
+   *  DescentScene's own camera runs at renderScale*WORLD_ZOOM_BONUS zoom to
+   *  give it room to scroll/follow the player, so GAME.width/height
+   *  coordinates here don't land where you'd expect on screen even with
+   *  setScrollFactor(0) — zoom still warps them. DescentHudScene's camera is
+   *  the plain renderScale-only, scroll-locked one every other full-screen
+   *  overlay in this game already uses (banter toasts, the gold counter),
+   *  so GAME.width/height there really do map to the visible screen. */
   private playBattleTransition(onDone: () => void) {
     const cam = this.cameras.main;
-    const px = this.player.x;
-    const py = this.player.y;
+    const hud = this.hud;
+    const cx = GAME.width / 2;
+    const cy = GAME.height / 2;
+    // Far enough from center that every ray/ring clears all four screen
+    // corners rather than just a small halo around the middle.
+    const reach = Math.hypot(GAME.width, GAME.height);
 
-    const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0).setOrigin(0, 0).setDepth(200);
-    this.tweens.add({ targets: flash, alpha: 0.8, duration: 70, yoyo: true, onComplete: () => flash.destroy() });
-    cam.shake(180, 0.01);
+    const flash = hud.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0).setOrigin(0, 0).setDepth(200);
+    hud.tweens.add({ targets: flash, alpha: 0.9, duration: 90, yoyo: true, onComplete: () => flash.destroy() });
+    cam.shake(200, 0.014);
 
-    for (let i = 0; i < 8; i++) {
-      const angle = (Math.PI * 2 * i) / 8;
-      const line = this.add.rectangle(px, py, 3, 14, 0xffe27a, 0.95).setDepth(199).setAngle(Phaser.Math.RadToDeg(angle));
-      this.tweens.add({
+    for (let i = 0; i < 12; i++) {
+      const angle = (Math.PI * 2 * i) / 12;
+      const line = hud.add.rectangle(cx, cy, 3, 20, 0xffe27a, 0.95).setDepth(199).setAngle(Phaser.Math.RadToDeg(angle));
+      hud.tweens.add({
         targets: line,
-        x: px + Math.cos(angle) * 42,
-        y: py + Math.sin(angle) * 42,
+        x: cx + Math.cos(angle) * reach,
+        y: cy + Math.sin(angle) * reach,
         alpha: 0,
-        duration: 260,
+        duration: 320,
         ease: 'Quad.easeOut',
         onComplete: () => line.destroy(),
       });
     }
 
-    this.time.delayedCall(160, () => {
+    // An expanding ring sweeping out past every edge reinforces the "impact
+    // spreading across the whole screen" read, rather than a small local burst.
+    const ring = hud.add.circle(cx, cy, 4, 0xffe27a, 0).setStrokeStyle(3, 0xffe27a, 0.9).setDepth(198);
+    hud.tweens.add({ targets: ring, scale: reach / 4, alpha: 0, duration: 380, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
+
+    this.time.delayedCall(200, () => {
       cam.fadeOut(220, 7, 6, 14);
       cam.once('camerafadeoutcomplete', onDone);
     });
