@@ -135,7 +135,14 @@ export class DescentScene extends Phaser.Scene {
       // Only give a grace period after an actual fight (win or flee) — resuming
       // from the menu or a dialogue shouldn't cost the player their progress
       // toward the next random encounter.
-      if (data?.fromBattle) this.randomBattleSteps = 0;
+      if (data?.fromBattle) {
+        this.randomBattleSteps = 0;
+        // Battle entry faded us to black (see playBattleTransition); fade back
+        // in now. The pause-menu resume path never faded out, so it's not
+        // touched here — fading in on top of an already-visible camera would
+        // just flash black for no reason.
+        this.cameras.main.fadeIn(250, 7, 6, 14);
+      }
       if (data?.won && this.pendingEncounterKey) {
         const key = this.pendingEncounterKey;
         setFlag(`enc_${getRun().depth}_${key}`);
@@ -458,8 +465,42 @@ export class DescentScene extends Phaser.Scene {
     const group = area.encounters[tileKey] ?? (isBoss ? 'boss' : 'elite');
     this.busy = true;
     this.pendingEncounterKey = tileKey;
-    this.scene.pause();
-    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus), elite: isElite });
+    this.playBattleTransition(() => {
+      this.scene.pause();
+      this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus), elite: isElite });
+    });
+  }
+
+  /** Battle used to cut in with zero warning — a flash, a burst of light from
+   *  the player, and a fade to black now bridges the two scenes. Battle's own
+   *  fadeIn(400,...) picks up from black, so the handoff reads as one beat. */
+  private playBattleTransition(onDone: () => void) {
+    const cam = this.cameras.main;
+    const px = this.player.x;
+    const py = this.player.y;
+
+    const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0).setOrigin(0, 0).setDepth(200);
+    this.tweens.add({ targets: flash, alpha: 0.8, duration: 70, yoyo: true, onComplete: () => flash.destroy() });
+    cam.shake(180, 0.01);
+
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const line = this.add.rectangle(px, py, 3, 14, 0xffe27a, 0.95).setDepth(199).setAngle(Phaser.Math.RadToDeg(angle));
+      this.tweens.add({
+        targets: line,
+        x: px + Math.cos(angle) * 42,
+        y: py + Math.sin(angle) * 42,
+        alpha: 0,
+        duration: 260,
+        ease: 'Quad.easeOut',
+        onComplete: () => line.destroy(),
+      });
+    }
+
+    this.time.delayedCall(160, () => {
+      cam.fadeOut(220, 7, 6, 14);
+      cam.once('camerafadeoutcomplete', onDone);
+    });
   }
 
   private openChestAt(tileKey: string) {
@@ -538,8 +579,10 @@ export class DescentScene extends Phaser.Scene {
     this.busy = true;
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
-    this.scene.pause();
-    this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus) });
+    this.playBattleTransition(() => {
+      this.scene.pause();
+      this.scene.launch('Battle', { enemies: makeEncounterForArea(area, group, getSave().ngPlus) });
+    });
   }
 
   private triggerStory(tileKey: string) {

@@ -313,6 +313,12 @@ export class BattleScene extends Phaser.Scene {
         duration: 550,
         delay: 150 + i * 140,
         ease: 'Back.easeOut',
+        // Enemies' HP bar/pips/badges are separate objects positioned off the
+        // sprite (see layoutEnemyBar) — without this they'd snapshot the
+        // sprite's off-screen starting spot (built after this tween is
+        // already queued) and then jump to catch up whenever the next
+        // refreshStatus() happened to fire, instead of sliding in with it.
+        onUpdate: c.side === 'enemy' ? () => this.layoutEnemyBar(c.id) : undefined,
         onComplete: () => this.startIdleMotion(img, c, i),
       });
     });
