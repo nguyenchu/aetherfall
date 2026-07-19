@@ -722,7 +722,7 @@ export class BattleScene extends Phaser.Scene {
   private navTarget(dir: number) {
     if (this.ui !== 'target' && this.ui !== 'subtarget') return;
     this.targetIndex = this.wrap(this.targetIndex, dir, this.targets.length);
-    this.pointCursorAtTarget();
+    this.renderTargetModal();
   }
 
   private wrap(idx: number, dir: number, len: number): number {
@@ -852,10 +852,10 @@ export class BattleScene extends Phaser.Scene {
     }
     this.targetIndex = 0;
     this.ui = state;
-    this.clearMenuText();
-    this.promptText.setText(isTouchDevice() ? 'Choose target - tap or use < >' : 'Choose target  < >');
-    this.pointCursorAtTarget();
+    this.renderTargetModal();
 
+    // Tapping the actual sprite on the battlefield still works too — the
+    // modal list below is the primary way in, not the only one.
     if (isTouchDevice()) {
       this.targets.forEach((t, i) => {
         const img = this.sprites.get(t.id);
@@ -868,28 +868,70 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** Which element the pending action would strike with — attacks use the
+   *  actor's own weapon, spells their own — for the per-row weakness badge. */
+  private pendingElement(): Element | undefined {
+    if (!this.pending) return undefined;
+    if (this.pending.kind === 'attack') return this.activeActor.attackElement ?? 'physical';
+    if (this.pending.kind === 'spell' && this.pending.id) return SPELLS[this.pending.id]?.element;
+    return undefined;
+  }
+
+  /** Boxed target-selection list — same panel chrome as the command/spell
+   *  menus, sharing their menuText/menuBacks cleanup — replacing the old
+   *  bare-cursor floating over the battlefield. Still rings the selected
+   *  target's actual sprite (targetFrame) so the on-field context stays
+   *  visible alongside the list. */
+  private renderTargetModal() {
+    this.promptText.setText(isTouchDevice() ? 'Choose target — tap a row or the field' : 'Choose target');
+    this.logText.setVisible(false);
+    this.clearMenuText();
+    this.cursor.setVisible(false);
+
+    const element = this.pendingElement();
+    this.targets.forEach((t, i) => {
+      const hp = Math.round(this.hpDisplay.get(t.id) ?? t.stats.hp);
+      const weak = t.side === 'enemy' && !!element && element !== 'none' && (t.weakness?.includes(element) ?? false);
+      const selected = i === this.targetIndex;
+      const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, selected ? 0x1e2746 : 0x11172b, 0.92)
+        .setOrigin(0, 0).setDepth(15);
+      bg.setStrokeStyle(1, selected ? 0xf0d36c : 0x2f3658, selected ? 0.95 : 0.45);
+      this.menuBacks.push(bg);
+      const color = selected ? '#f0d36c' : '#c9cee8';
+      const prefix = selected ? '▶ ' : '  ';
+      const label = this.add.text(16, GAME.height - 92 + i * 18, `${prefix}${t.name}   ${hp}/${t.stats.maxHp}`, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
+      this.menuText.push(label);
+      if (weak) {
+        const badge = this.add.text(GAME.width - 232, GAME.height - 91 + i * 18, '✦ WEAK', sharpText({
+          fontFamily: FONT, fontSize: '9px', color: '#f0d36c', strokeThickness: 3,
+        })).setOrigin(1, 0).setDepth(16);
+        this.menuText.push(badge);
+      }
+    });
+
+    this.pointCursorAtTarget();
+
+    if (isTouchDevice()) {
+      this.targets.forEach((_t, i) => {
+        const zone = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, 0xffffff, 0)
+          .setOrigin(0, 0).setDepth(25).setInteractive();
+        zone.on('pointerdown', () => { this.targetIndex = i; this.confirmTarget(); });
+        this.touchCleanups.push(() => zone.destroy());
+      });
+    }
+  }
+
+  /** Rings the selected target's actual sprite on the battlefield, so the
+   *  boxed list above always stays tied to what you're looking at. */
   private pointCursorAtTarget() {
     const t = this.targets[this.targetIndex];
     const img = this.sprites.get(t.id);
     if (img) {
-      this.cursor.setPosition(img.x - img.displayWidth / 2 - 8, img.y - 4).setVisible(true);
       this.targetFrame
         .setPosition(img.x, img.y)
         .setSize(img.displayWidth + 16, img.displayHeight + 16)
         .setVisible(true);
     }
-    // Hint the matchup: does the pending action hit a weakness?
-    // Attacks strike as the active member's weapon element (default physical).
-    if (t.side === 'enemy' && this.pending) {
-      const element: Element | undefined = this.pending.kind === 'attack'
-        ? this.activeActor.attackElement ?? 'physical'
-        : this.pending.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id]?.element : undefined;
-      if (element && element !== 'none' && t.weakness?.includes(element)) {
-        this.promptText.setText(`Choose target  < >   ▶ ${t.name}: WEAK to this!`);
-        return;
-      }
-    }
-    this.promptText.setText(isTouchDevice() ? 'Choose target - tap or use < >' : 'Choose target  < >');
   }
 
   private confirmTarget() {
