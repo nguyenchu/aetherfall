@@ -66,10 +66,13 @@ export interface Item {
   name: string;
   // heal/mp restore `power` as a flat amount; revive restores `power` as a
   // fraction of max HP (e.g. 0.4 = 40%); cure clears all ailments and
-  // ignores `power`; sell has no field use beyond trading it in.
-  kind: 'heal' | 'mp' | 'sell' | 'cure' | 'revive';
+  // ignores `power`; sell has no field use beyond trading it in; damage
+  // deals `power` flat damage to one enemy (a throwable, battle-only).
+  kind: 'heal' | 'mp' | 'sell' | 'cure' | 'revive' | 'damage';
   power: number;
-  target: 'ally' | 'none';
+  target: 'ally' | 'enemy' | 'none';
+  // damage-kind only: a chance to also apply an ailment on hit.
+  inflict?: Inflict;
   buyPrice?: number;
   sellPrice: number;
   description: string;

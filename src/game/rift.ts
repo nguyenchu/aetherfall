@@ -9,6 +9,7 @@
 
 import Phaser from 'phaser';
 import { THEMES, type AreaDef, type AreaTheme, type ChestContents } from './chapters';
+import { RIFT_EQUIPMENT } from './equipment';
 
 interface RiftConfig {
   theme: AreaTheme;
@@ -101,13 +102,19 @@ export function generateRift(tier: number): AreaDef {
   const springRoom = rooms[Math.max(1, Math.floor(rooms.length / 2))];
   placeInRoom(grid, springRoom, 'H');
 
-  // One or two chests in the intermediate rooms; gold scales with tier.
+  // One or two chests in the intermediate rooms; gold scales with tier, and
+  // each has a chance to also carry a piece of the Rift's own gear tier
+  // (RIFT_EQUIPMENT) — found nowhere else in the game.
   const chests: Record<string, ChestContents> = {};
   const between = Phaser.Utils.Array.Shuffle(rooms.slice(1, -1));
   const chestCount = Math.min(between.length, Phaser.Math.Between(1, 2));
   for (let i = 0; i < chestCount; i++) {
     const pos = placeInRoom(grid, between[i], 'T');
-    if (pos) chests[`${pos.x},${pos.y}`] = { gold: 60 + tier * 25 };
+    if (!pos) continue;
+    const gold = 60 + tier * 25;
+    chests[`${pos.x},${pos.y}`] = Math.random() < 0.45
+      ? { gold, equipment: Phaser.Utils.Array.GetRandom(RIFT_EQUIPMENT) }
+      : { gold };
   }
 
   // Boss group keyed to the B tile; trash groups seed the random-encounter pool

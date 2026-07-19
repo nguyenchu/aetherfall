@@ -809,7 +809,7 @@ export class BattleScene extends Phaser.Scene {
     this.subIndex = 0;
     this.subItems = Object.entries(inv)
       .filter(([, n]) => n > 0)
-      .filter(([id]) => ITEMS[id]?.target === 'ally')
+      .filter(([id]) => ITEMS[id]?.target === 'ally' || ITEMS[id]?.target === 'enemy')
       .map(([id, n]) => ({ id, label: `${ITEMS[id]?.name ?? id}  x${n}`, desc: ITEMS[id]?.description, enabled: true }));
     if (this.subItems.length === 0) {
       this.openMenu();
@@ -839,7 +839,7 @@ export class BattleScene extends Phaser.Scene {
     } else if (this.pending?.kind === 'item') {
       this.pending.id = sel.id;
       const item = ITEMS[sel.id];
-      this.beginTargeting('party', 'subtarget', item?.kind === 'revive');
+      this.beginTargeting(item?.target === 'enemy' ? 'enemy' : 'party', 'subtarget', item?.kind === 'revive');
     }
   }
 

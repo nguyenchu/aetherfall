@@ -384,7 +384,68 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { critBonus: 0.06 },
     icon: { kind: 'orb', base: 0x8a93b8, accent: 0xdfe4f5 },
   },
+
+  // --- Rift tier: found only in the Rift's own chests, past chapter 4 ----------
+  rift_edge: {
+    id: 'rift_edge',
+    name: 'Rift Edge',
+    slot: 'weapon',
+    users: ['kael'],
+    bonus: { str: 8, agi: 2 },
+    trait: 'Unstable edge',
+    description: 'Cut from something that shouldn\'t exist outside the Rift. Strikes carry no element — nothing to ward against.',
+    effects: { attackElement: 'none' },
+    icon: { kind: 'blade', base: 0x2a1f3a, accent: 0xc78aff },
+  },
+  rift_lens: {
+    id: 'rift_lens',
+    name: 'Rift Lens',
+    slot: 'weapon',
+    users: ['lyra'],
+    bonus: { int: 9, maxMp: 10 },
+    trait: 'Fractured focus',
+    description: 'A lens that shows the same enemy weak from every angle.',
+    effects: { critBonus: 0.08 },
+    icon: { kind: 'staff', base: 0x2a1f3a, accent: 0xc78aff },
+  },
+  rift_scepter: {
+    id: 'rift_scepter',
+    name: 'Rift Scepter',
+    slot: 'weapon',
+    users: ['mira'],
+    bonus: { str: 5, int: 8 },
+    trait: 'Devourer\'s mercy',
+    description: 'Drawn from the same hunger that carved the Rift. Heals as fiercely as it burns.',
+    effects: { attackElement: 'holy', healBonus: 14 },
+    icon: { kind: 'mace', base: 0x2a1f3a, accent: 0xc78aff },
+  },
+  rift_core: {
+    id: 'rift_core',
+    name: 'Rift Core',
+    slot: 'armor',
+    users: ['kael', 'mira'],
+    bonus: { maxHp: 26, vit: 6 },
+    trait: 'Collapsed matter',
+    description: 'Armor grown from matter the Rift couldn\'t finish consuming. Attacks feed you 10% of the damage.',
+    effects: { lifesteal: 0.1 },
+    icon: { kind: 'armor', base: 0x2a1f3a, accent: 0x8a5ad0 },
+  },
+  rift_ward: {
+    id: 'rift_ward',
+    name: 'Rift Ward',
+    slot: 'charm',
+    users: ['kael', 'lyra', 'mira'],
+    bonus: { maxHp: 10, vit: 2 },
+    trait: 'Rift-tempered',
+    description: 'Tempered in a place that shouldn\'t hold shape. Cannot be burned, chilled, or poisoned.',
+    effects: { resist: ['burn', 'chill', 'venom'] },
+    icon: { kind: 'orb', base: 0x2a1f3a, accent: 0xc78aff },
+  },
 };
+
+/** Rift chests (see rift.ts) draw from this pool instead of the fixed
+ *  chapter tiers — the Rift's own gear, found nowhere else. */
+export const RIFT_EQUIPMENT = ['rift_edge', 'rift_lens', 'rift_scepter', 'rift_core', 'rift_ward'];
 
 export const STARTING_EQUIPMENT = ['slender_blade', 'ember_staff', 'dawn_mace', 'scout_vest', 'aether_robe', 'sun_charm'];
 

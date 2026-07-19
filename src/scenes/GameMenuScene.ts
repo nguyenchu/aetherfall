@@ -381,7 +381,11 @@ export class GameMenuScene extends Phaser.Scene {
     if (!fieldUsable(id)) {
       this.menuNotice = item.kind === 'sell'
         ? `Sell ${item.name} at the Sanctuary merchant (${item.sellPrice ?? 0}g).`
-        : `${item.name} — use it in battle to cure ailments.`;
+        : item.kind === 'cure'
+        ? `${item.name} — use it in battle to cure ailments.`
+        : item.kind === 'damage'
+        ? `${item.name} — a thrown weapon. Use it in battle against an enemy.`
+        : `${item.name} — use it in battle.`;
       this.selectionAnchor = this.centerOf(this.selectables[this.selected]);
       this.renderContent();
       return;
@@ -1432,6 +1436,7 @@ function itemTag(id: string): string {
     case 'mp': return `+${item.power} MP`;
     case 'revive': return 'Revive';
     case 'cure': return 'Battle only';
+    case 'damage': return `Dmg ${item.power}`;
     case 'sell': return `Sells ${item.sellPrice ?? 0}g`;
     default: return '';
   }

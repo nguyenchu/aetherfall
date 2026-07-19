@@ -58,8 +58,12 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
 const SHOP_ITEMS: Array<{ id: string; flag: string; hint: string }> = [
   { id: 'hi_potion', flag: 'ch1_complete', hint: '+65 HP' },
   { id: 'hi_tonic', flag: 'ch1_complete', hint: '+24 MP' },
+  { id: 'aether_bomb', flag: 'ch1_complete', hint: 'throw for 45 dmg' },
   { id: 'purifying_draught', flag: 'ch2_complete', hint: 'cures ailments' },
+  { id: 'frost_vial', flag: 'ch2_complete', hint: 'throw for 30 dmg, may Chill' },
   { id: 'phoenix_down', flag: 'ch3_complete', hint: 'revives at 40%' },
+  { id: 'mega_potion', flag: 'ch3_complete', hint: '+100 HP' },
+  { id: 'mega_tonic', flag: 'ch3_complete', hint: '+40 MP' },
 ];
 
 /** Rows visible per shop column before scrolling (▲/▼ markers). */
@@ -143,25 +147,27 @@ function npcs(): Record<string, Npc> {
       scriptId: ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
       // eda_watchline is the ch4 payoff to her "I served with Kael's
       // watch-line" hint — same one-off-then-chained pattern as the Stranger.
-      questActive: isQuestActive(ch4Done ? 'eda_watchline' : 'speak_eda'),
-      questId: ch4Done ? 'eda_watchline' : 'speak_eda',
+      // eda_sunken/eda_hollow are the ch2/ch3 check-ins in between.
+      questActive: isQuestActive(ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda'),
+      questId: ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda',
       wander: true,
     },
     L: {
       spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
       // voss_hollow is the ch4 payoff to the "Twisting Hollow" reveal from
-      // npc_scholar_after3.
-      questActive: isQuestActive(ch4Done ? 'voss_hollow' : 'learn_of_anchors'),
-      questId: ch4Done ? 'voss_hollow' : 'learn_of_anchors',
+      // npc_scholar_after3. voss_peaks/voss_texts are the ch2/ch3 check-ins.
+      questActive: isQuestActive(ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors'),
+      questId: ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors',
       wander: true,
     },
     C: {
       spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
       scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
       // pip_digging is the ch4 payoff — the sigil Pip digs up by the well.
-      questActive: ch1Done && isQuestActive(ch4Done ? 'pip_digging' : 'find_pip'),
-      questId: ch4Done ? 'pip_digging' : 'find_pip',
+      // child_current/child_stars are the ch2/ch3 check-ins.
+      questActive: ch1Done && isQuestActive(ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip'),
+      questId: ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
       wander: true,
     },
     V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
@@ -174,9 +180,10 @@ function npcs(): Record<string, Npc> {
         // (completes on first talk after ch1); stranger_truth is the real
         // payoff, gated on ch4 so it can't complete until the after4 tier —
         // completeQuest() no-ops on an already-complete id, so this switch is
-        // what makes the second quest ever fire at all.
-        questActive: isQuestActive(ch4Done ? 'stranger_truth' : 'heed_the_stranger'),
-        questId: ch4Done ? 'stranger_truth' : 'heed_the_stranger',
+        // what makes the second quest ever fire at all. stranger_warning/
+        // stranger_hollow are the ch2/ch3 check-ins in between.
+        questActive: isQuestActive(ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger'),
+        questId: ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger',
         wander: true,
       },
     } : {}),

@@ -346,7 +346,7 @@ export class Battle {
       }
       case 'item': {
         const item = ITEMS[cmd.itemId];
-        if (!item || item.target !== 'ally' || (this.inventory[item.id] ?? 0) <= 0) return;
+        if (!item || item.target === 'none' || (this.inventory[item.id] ?? 0) <= 0) return;
         // Revive is the one item kind that targets a fallen ally directly —
         // aliveTargetOr would just redirect it to someone still standing.
         if (item.kind === 'revive') {
@@ -358,6 +358,22 @@ export class Battle {
             kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} returns to the fight!`,
             actorId: actor.id, targetId: target.id, amount: -target.stats.hp,
           });
+          return;
+        }
+        // Throwables (kind: 'damage') hit the opposing side; every other
+        // kind supports the actor's own side.
+        if (item.kind === 'damage') {
+          const enemySide = actor.side === 'party' ? 'enemy' : 'party';
+          const target = this.aliveTargetOr(cmd.targetId, enemySide);
+          if (!target) return;
+          this.inventory[item.id]--;
+          this.applyDamage(target, item.power);
+          events.push({
+            kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} takes ${item.power}.`,
+            actorId: actor.id, targetId: target.id, amount: item.power,
+          });
+          if (item.inflict) this.applyAilment(target, item.inflict, events);
+          this.maybeKo(target, events);
           return;
         }
         this.inventory[item.id]--;
