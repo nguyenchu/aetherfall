@@ -317,18 +317,41 @@ const VICTORY: StingNote[] = [
   { midi: 84, t: 3.30, dur: 0.95, wave: 'square', vol: 0.15 }, // C6 final
 ];
 
-// Defeat: somber, slowly falling A minor ending on a low minor chord.
+// Defeat: a full four-phrase fanfare in A minor (~4.9s, up from a single
+// ~2.0s falling chord) — mirrors VICTORY's four-phrase shape but inverted:
+// a descending call instead of a rising one, a classic lament-bass descent
+// (i-VII-VI-v) instead of a building I-IV-V, a low held chord instead of a
+// bright one, and a hollow tolling fade instead of a triumphant "ta-da".
+// Every voice stays triangle — no square/sawtooth brightness anywhere.
 const DEFEAT: StingNote[] = [
-  { midi: 76, t: 0.0, dur: 0.34, wave: 'triangle', vol: 0.18 }, // E5
-  { midi: 74, t: 0.34, dur: 0.34, wave: 'triangle', vol: 0.18 }, // D5
-  { midi: 72, t: 0.68, dur: 0.34, wave: 'triangle', vol: 0.18 }, // C5
-  { midi: 69, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.18 }, // A4 (held)
-  { midi: 57, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.14 }, // A3
-  { midi: 60, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.11 }, // C4
-  { midi: 64, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.11 }, // E4
-  { midi: 45, t: 0.0, dur: 0.68, wave: 'triangle', vol: 0.2 }, // A2
-  { midi: 40, t: 0.68, dur: 0.34, wave: 'triangle', vol: 0.2 }, // E2
-  { midi: 45, t: 1.02, dur: 0.95, wave: 'triangle', vol: 0.2 }, // A2
+  // Phrase A — descending call over a tonic drone.
+  { midi: 45, t: 0.00, dur: 0.70, wave: 'triangle', vol: 0.2 }, // A2 drone
+  { midi: 76, t: 0.00, dur: 0.22, wave: 'triangle', vol: 0.17 }, // E5
+  { midi: 74, t: 0.22, dur: 0.22, wave: 'triangle', vol: 0.16 }, // D5
+  { midi: 72, t: 0.44, dur: 0.26, wave: 'triangle', vol: 0.16 }, // C5
+
+  // Phrase B — lament-bass descent (i-VII-VI-v), sparser and lower with
+  // every step, like the strength draining out of the room.
+  { midi: 45, t: 0.70, dur: 0.34, wave: 'triangle', vol: 0.19 }, // A2
+  { midi: 69, t: 0.70, dur: 0.30, wave: 'triangle', vol: 0.13 }, // A4
+  { midi: 43, t: 1.04, dur: 0.34, wave: 'triangle', vol: 0.19 }, // G2
+  { midi: 67, t: 1.04, dur: 0.30, wave: 'triangle', vol: 0.12 }, // G4
+  { midi: 41, t: 1.38, dur: 0.34, wave: 'triangle', vol: 0.19 }, // F2
+  { midi: 65, t: 1.38, dur: 0.30, wave: 'triangle', vol: 0.11 }, // F4
+  { midi: 40, t: 1.72, dur: 0.38, wave: 'triangle', vol: 0.2 }, // E2
+  { midi: 64, t: 1.72, dur: 0.34, wave: 'triangle', vol: 0.1 }, // E4
+
+  // Phrase C — the weight lands: a low, held A minor chord (not a bright one).
+  { midi: 33, t: 2.10, dur: 1.10, wave: 'triangle', vol: 0.22 }, // A1
+  { midi: 45, t: 2.10, dur: 1.10, wave: 'triangle', vol: 0.18 }, // A2
+  { midi: 57, t: 2.10, dur: 1.10, wave: 'triangle', vol: 0.13 }, // A3
+  { midi: 60, t: 2.10, dur: 1.10, wave: 'triangle', vol: 0.1 }, // C4
+
+  // Phrase D — hollow tolling fade: the same low note struck three times,
+  // each quieter and further apart, trailing into near-silence.
+  { midi: 45, t: 3.30, dur: 0.50, wave: 'triangle', vol: 0.14 }, // A2
+  { midi: 45, t: 3.80, dur: 0.50, wave: 'triangle', vol: 0.09 }, // A2, quieter
+  { midi: 45, t: 4.30, dur: 0.60, wave: 'triangle', vol: 0.06 }, // A2, faintest
 ];
 
 const STINGS: Record<StingName, StingNote[]> = { victory: VICTORY, defeat: DEFEAT };
