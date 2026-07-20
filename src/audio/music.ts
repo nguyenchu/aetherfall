@@ -277,61 +277,67 @@ const ENCOUNTER: StingNote[] = [
   { midi: 36, t: 0.41, dur: 0.20, wave: 'triangle', vol: 0.2 }, // C2 (low punch)
 ];
 
-// Victory: a full four-phrase fanfare in C major (~4.3s, up from a single
-// ~1.1s chord landing) — a herald call, a rising I-IV-V development that
-// builds tension, a big tonic-chord landing with a sparkling flourish, and a
-// classic "ta-da" double-stab into the final held chord.
+// Victory: a brass-fanfare-style jingle in C major (~4.0s), built around a
+// dotted-rhythm horn-call motif — three short repeated calls leaping to a
+// held note — answered a step higher, rather than a smooth rising arpeggio.
+// That repeated-note "call" rhythm (not the harmony) is the signature move
+// of the classic PS1-era JRPG victory jingle this is modeled after; the
+// actual notes/progression here are original. Lead voices use sawtooth
+// (mellowed by the engine's 2.2kHz low-pass into something closer to brass
+// than raw chiptune buzz) over a triangle bass/pedal, with square filling
+// the open-fifth harmony stacked under each call.
 const VICTORY: StingNote[] = [
-  // Phrase A — herald call: rising C major arpeggio over a I-I-V-I bass pulse.
-  { midi: 48, t: 0.00, dur: 0.18, wave: 'triangle', vol: 0.22 }, // C3
-  { midi: 72, t: 0.00, dur: 0.16, wave: 'square', vol: 0.17 }, // C5
-  { midi: 48, t: 0.18, dur: 0.18, wave: 'triangle', vol: 0.22 }, // C3
-  { midi: 76, t: 0.18, dur: 0.16, wave: 'square', vol: 0.17 }, // E5
-  { midi: 43, t: 0.36, dur: 0.18, wave: 'triangle', vol: 0.22 }, // G2
-  { midi: 79, t: 0.36, dur: 0.16, wave: 'square', vol: 0.18 }, // G5
-  { midi: 48, t: 0.54, dur: 0.30, wave: 'triangle', vol: 0.24 }, // C3
-  { midi: 84, t: 0.54, dur: 0.28, wave: 'square', vol: 0.2 }, // C6 (peak of the call)
+  // Motif A — dotted horn-call: "ta-ta-ta-TAA" on the dominant, leaping to
+  // the tonic. This rhythmic cell is the whole piece's hook.
+  { midi: 43, t: 0.00, dur: 0.36, wave: 'triangle', vol: 0.22 }, // G2 pedal
+  { midi: 67, t: 0.00, dur: 0.09, wave: 'sawtooth', vol: 0.17 }, // G4
+  { midi: 62, t: 0.00, dur: 0.09, wave: 'square', vol: 0.1 }, // D4 (open 5th)
+  { midi: 67, t: 0.10, dur: 0.09, wave: 'sawtooth', vol: 0.17 }, // G4
+  { midi: 62, t: 0.10, dur: 0.09, wave: 'square', vol: 0.1 }, // D4
+  { midi: 67, t: 0.20, dur: 0.14, wave: 'sawtooth', vol: 0.18 }, // G4
+  { midi: 62, t: 0.20, dur: 0.14, wave: 'square', vol: 0.11 }, // D4
+  { midi: 48, t: 0.36, dur: 0.34, wave: 'triangle', vol: 0.24 }, // C3 (bass resolves)
+  { midi: 72, t: 0.36, dur: 0.32, wave: 'sawtooth', vol: 0.22 }, // C5 (call lands)
+  { midi: 67, t: 0.36, dur: 0.32, wave: 'square', vol: 0.14 }, // G4 (open 5th under)
 
-  // Phrase B — development through IV and V, building energy toward the
-  // resolution (ends on a D6/G2 suspension for a little extra pull).
-  { midi: 41, t: 0.84, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
-  { midi: 77, t: 0.84, dur: 0.12, wave: 'square', vol: 0.16 }, // F5
-  { midi: 41, t: 0.98, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
-  { midi: 81, t: 0.98, dur: 0.12, wave: 'square', vol: 0.16 }, // A5
-  { midi: 41, t: 1.12, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
-  { midi: 84, t: 1.12, dur: 0.12, wave: 'square', vol: 0.17 }, // C6
-  { midi: 43, t: 1.26, dur: 0.14, wave: 'triangle', vol: 0.21 }, // G2
-  { midi: 79, t: 1.26, dur: 0.12, wave: 'square', vol: 0.17 }, // G5
-  { midi: 43, t: 1.40, dur: 0.14, wave: 'triangle', vol: 0.21 }, // G2
-  { midi: 83, t: 1.40, dur: 0.12, wave: 'square', vol: 0.18 }, // B5
-  { midi: 43, t: 1.54, dur: 0.24, wave: 'triangle', vol: 0.22 }, // G2
-  { midi: 86, t: 1.54, dur: 0.22, wave: 'square', vol: 0.19 }, // D6
+  // Motif B — the answer: same rhythm cell, a step higher, landing on a
+  // bigger peak — classic call-and-response.
+  { midi: 48, t: 0.72, dur: 0.36, wave: 'triangle', vol: 0.22 }, // C3 pedal
+  { midi: 72, t: 0.72, dur: 0.09, wave: 'sawtooth', vol: 0.18 }, // C5
+  { midi: 67, t: 0.72, dur: 0.09, wave: 'square', vol: 0.11 }, // G4
+  { midi: 72, t: 0.82, dur: 0.09, wave: 'sawtooth', vol: 0.18 }, // C5
+  { midi: 67, t: 0.82, dur: 0.09, wave: 'square', vol: 0.11 }, // G4
+  { midi: 72, t: 0.92, dur: 0.14, wave: 'sawtooth', vol: 0.19 }, // C5
+  { midi: 67, t: 0.92, dur: 0.14, wave: 'square', vol: 0.12 }, // G4
+  { midi: 43, t: 1.08, dur: 0.42, wave: 'triangle', vol: 0.24 }, // G2 (V under the peak)
+  { midi: 79, t: 1.08, dur: 0.40, wave: 'sawtooth', vol: 0.23 }, // G5 (peak)
+  { midi: 76, t: 1.08, dur: 0.40, wave: 'square', vol: 0.15 }, // E5
 
-  // Phrase C — the big resolution: full tonic chord, held, then a bright
-  // descending flourish trailing off it.
-  { midi: 48, t: 1.80, dur: 0.62, wave: 'triangle', vol: 0.26 }, // C3
-  { midi: 60, t: 1.80, dur: 0.62, wave: 'triangle', vol: 0.16 }, // C4
-  { midi: 72, t: 1.80, dur: 0.62, wave: 'square', vol: 0.2 }, // C5
-  { midi: 76, t: 1.80, dur: 0.62, wave: 'square', vol: 0.16 }, // E5
-  { midi: 79, t: 1.80, dur: 0.62, wave: 'square', vol: 0.14 }, // G5
-  { midi: 84, t: 1.80, dur: 0.62, wave: 'square', vol: 0.14 }, // C6
-  { midi: 84, t: 2.42, dur: 0.08, wave: 'triangle', vol: 0.15 }, // C6 flourish
-  { midi: 83, t: 2.50, dur: 0.08, wave: 'triangle', vol: 0.14 }, // B5
-  { midi: 79, t: 2.58, dur: 0.08, wave: 'triangle', vol: 0.14 }, // G5
-  { midi: 76, t: 2.66, dur: 0.08, wave: 'triangle', vol: 0.13 }, // E5
-  { midi: 72, t: 2.74, dur: 0.14, wave: 'triangle', vol: 0.13 }, // C5
+  // Development — a quick rising run bridging to the finale, energy building.
+  { midi: 41, t: 1.56, dur: 0.13, wave: 'triangle', vol: 0.19 }, // F2
+  { midi: 77, t: 1.56, dur: 0.11, wave: 'square', vol: 0.16 }, // F5
+  { midi: 41, t: 1.69, dur: 0.13, wave: 'triangle', vol: 0.19 }, // F2
+  { midi: 81, t: 1.69, dur: 0.11, wave: 'square', vol: 0.16 }, // A5
+  { midi: 43, t: 1.82, dur: 0.13, wave: 'triangle', vol: 0.2 }, // G2
+  { midi: 84, t: 1.82, dur: 0.11, wave: 'square', vol: 0.17 }, // C6
+  { midi: 43, t: 1.95, dur: 0.13, wave: 'triangle', vol: 0.2 }, // G2
+  { midi: 86, t: 1.95, dur: 0.11, wave: 'square', vol: 0.18 }, // D6
+  { midi: 43, t: 2.08, dur: 0.24, wave: 'triangle', vol: 0.21 }, // G2
+  { midi: 88, t: 2.08, dur: 0.22, wave: 'square', vol: 0.19 }, // E6 (leading-tone push)
 
-  // Phrase D — final "ta-da": two quick stabs, then the last sustained chord.
-  { midi: 43, t: 2.94, dur: 0.10, wave: 'triangle', vol: 0.2 }, // G2 stab
-  { midi: 79, t: 2.94, dur: 0.10, wave: 'square', vol: 0.16 }, // G5 stab
-  { midi: 48, t: 3.10, dur: 0.10, wave: 'triangle', vol: 0.2 }, // C3 stab
-  { midi: 84, t: 3.10, dur: 0.10, wave: 'square', vol: 0.16 }, // C6 stab
-  { midi: 48, t: 3.30, dur: 0.95, wave: 'triangle', vol: 0.26 }, // C3 final
-  { midi: 60, t: 3.30, dur: 0.95, wave: 'triangle', vol: 0.17 }, // C4 final
-  { midi: 72, t: 3.30, dur: 0.95, wave: 'square', vol: 0.21 }, // C5 final
-  { midi: 76, t: 3.30, dur: 0.95, wave: 'square', vol: 0.17 }, // E5 final
-  { midi: 79, t: 3.30, dur: 0.95, wave: 'square', vol: 0.15 }, // G5 final
-  { midi: 84, t: 3.30, dur: 0.95, wave: 'square', vol: 0.15 }, // C6 final
+  // Grand finale — brass-stab rhythm (short-short-long) landing on the full
+  // sustained tonic chord, doubled across three octaves.
+  { midi: 48, t: 2.32, dur: 0.10, wave: 'triangle', vol: 0.22 }, // C3 stab
+  { midi: 84, t: 2.32, dur: 0.10, wave: 'sawtooth', vol: 0.18 }, // C6 stab
+  { midi: 48, t: 2.48, dur: 0.10, wave: 'triangle', vol: 0.22 }, // C3 stab
+  { midi: 84, t: 2.48, dur: 0.10, wave: 'sawtooth', vol: 0.18 }, // C6 stab
+  { midi: 36, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.26 }, // C2 final
+  { midi: 48, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.2 }, // C3 final
+  { midi: 60, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.16 }, // C4 final
+  { midi: 72, t: 2.64, dur: 1.35, wave: 'sawtooth', vol: 0.2 }, // C5 final
+  { midi: 76, t: 2.64, dur: 1.35, wave: 'square', vol: 0.15 }, // E5 final
+  { midi: 79, t: 2.64, dur: 1.35, wave: 'square', vol: 0.13 }, // G5 final
+  { midi: 84, t: 2.64, dur: 1.35, wave: 'sawtooth', vol: 0.15 }, // C6 final
 ];
 
 // Defeat: a full four-phrase fanfare in A minor (~4.9s, up from a single
