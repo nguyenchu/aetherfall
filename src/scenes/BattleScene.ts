@@ -580,11 +580,73 @@ export class BattleScene extends Phaser.Scene {
     ];
     // A full gauge (see battle.ts LIMIT_MAX) surfaces the ultimate as the
     // first, most prominent option rather than just another row at the end.
-    if ((m.limit ?? 0) >= 100) {
+    const limitReady = (m.limit ?? 0) >= 100;
+    if (limitReady) {
       this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}`, action: 'limit', enabled: true });
+    }
+    // The very first time any gauge fills, explain the mechanic before the
+    // menu opens — otherwise it's just a glowing row with no introduction.
+    // Gated by a save flag so this plays once ever, not once per battle.
+    if (limitReady && !hasFlag('seen_limit_break')) {
+      setFlag('seen_limit_break');
+      // Suspend menu input while the intro is up — this.ui is already 'menu'
+      // at this point (set at the top of this method), and confirm/cancel are
+      // shared-bus events: without this, dismissing the intro would also
+      // fire confirmMenu() on whatever this.menuIndex currently points at
+      // (index 0, the Limit Break option itself, since it was just unshifted).
+      this.ui = 'busy';
+      this.showLimitBreakIntro(m, () => {
+        this.ui = 'menu';
+        this.renderMenu(`${m.name} - choose action`);
+        this.stepActiveHeroForward(m.id);
+      });
+      return;
     }
     this.renderMenu(`${m.name} - choose action`);
     this.stepActiveHeroForward(m.id);
+  }
+
+  /** One-time explanation the first time a Limit Break gauge fills. Confirm
+   *  or cancel (keyboard or the shared touch OK/Back pill) dismisses it. */
+  private showLimitBreakIntro(actor: Combatant, onDone: () => void) {
+    const W = 260;
+    const H = 158;
+    const x = GAME.width / 2 - W / 2;
+    const y = GAME.height / 2 - H / 2 - 16;
+    const objs: Array<Phaser.GameObjects.GameObject & { alpha: number }> = [];
+
+    const flash = this.add.circle(GAME.width / 2, y + 20, 4, 0xf0d36c, 0.6).setDepth(80);
+    this.tweens.add({ targets: flash, scale: 12, alpha: 0, duration: 550, ease: 'Cubic.easeOut', onComplete: () => flash.destroy() });
+    this.cameras.main.shake(180, 0.006);
+    sfx.play('levelup');
+
+    const panel = this.add.rectangle(x, y, W, H, 0x0d1024, 0.97).setOrigin(0, 0).setDepth(80).setStrokeStyle(1, 0xf0d36c, 0.9).setAlpha(0);
+    const title = this.add.text(x + W / 2, y + 16, 'LIMIT BREAK READY!', sharpText({
+      fontFamily: FONT, fontSize: '13px', color: '#ffe27a', strokeThickness: 4, align: 'center',
+    })).setOrigin(0.5).setDepth(81).setScale(1.3).setAlpha(0);
+    const body = this.add.text(x + W / 2, y + 42,
+      `${actor.name} has weathered enough to unleash ${limitBreakName(actor.id)} — free of MP cost. Taking damage (and fighting on) fills the gauge; watch for the gold bar under each ally's name.`,
+      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2, align: 'center', lineSpacing: 4, wordWrap: { width: W - 34 } }),
+    ).setOrigin(0.5, 0).setDepth(81).setAlpha(0);
+    const hint = this.add.text(x + W / 2, y + H - 14, 'Z / tap to continue', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2,
+    })).setOrigin(0.5).setDepth(81).setAlpha(0);
+    objs.push(panel, title, body, hint);
+
+    this.tweens.add({ targets: objs, alpha: 1, duration: 260, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: title, scale: 1, duration: 320, ease: 'Back.easeOut' });
+
+    let done = false;
+    const unsubs: Array<() => void> = [];
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unsubs.forEach((u) => u());
+      objs.forEach((o) => o.destroy());
+      onDone();
+    };
+    unsubs.push(input.on('confirm', finish));
+    unsubs.push(input.on('cancel', finish));
   }
 
   private renderMenu(prompt: string) {
