@@ -260,19 +260,61 @@ interface StingNote {
   vol: number;
 }
 
-// Victory: bright C major, rising arpeggio landing on a full chord,
-// with a V-I bass motion (G to C) for resolution.
+// Victory: a full four-phrase fanfare in C major (~4.3s, up from a single
+// ~1.1s chord landing) — a herald call, a rising I-IV-V development that
+// builds tension, a big tonic-chord landing with a sparkling flourish, and a
+// classic "ta-da" double-stab into the final held chord.
 const VICTORY: StingNote[] = [
-  { midi: 43, t: 0.0, dur: 0.54, wave: 'triangle', vol: 0.22 }, // G2 (dominant)
-  { midi: 48, t: 0.54, dur: 0.62, wave: 'triangle', vol: 0.24 }, // C3 (tonic)
-  { midi: 72, t: 0.0, dur: 0.12, wave: 'square', vol: 0.18 }, // C5
-  { midi: 76, t: 0.12, dur: 0.12, wave: 'square', vol: 0.18 }, // E5
-  { midi: 79, t: 0.24, dur: 0.12, wave: 'square', vol: 0.18 }, // G5
-  { midi: 84, t: 0.36, dur: 0.12, wave: 'square', vol: 0.18 }, // C6
-  { midi: 83, t: 0.48, dur: 0.06, wave: 'square', vol: 0.17 }, // B5 (small tug)
-  { midi: 84, t: 0.54, dur: 0.6, wave: 'square', vol: 0.18 }, // C6 (final chord)
-  { midi: 79, t: 0.54, dur: 0.6, wave: 'square', vol: 0.13 }, // G5
-  { midi: 76, t: 0.54, dur: 0.6, wave: 'square', vol: 0.12 }, // E5
+  // Phrase A — herald call: rising C major arpeggio over a I-I-V-I bass pulse.
+  { midi: 48, t: 0.00, dur: 0.18, wave: 'triangle', vol: 0.22 }, // C3
+  { midi: 72, t: 0.00, dur: 0.16, wave: 'square', vol: 0.17 }, // C5
+  { midi: 48, t: 0.18, dur: 0.18, wave: 'triangle', vol: 0.22 }, // C3
+  { midi: 76, t: 0.18, dur: 0.16, wave: 'square', vol: 0.17 }, // E5
+  { midi: 43, t: 0.36, dur: 0.18, wave: 'triangle', vol: 0.22 }, // G2
+  { midi: 79, t: 0.36, dur: 0.16, wave: 'square', vol: 0.18 }, // G5
+  { midi: 48, t: 0.54, dur: 0.30, wave: 'triangle', vol: 0.24 }, // C3
+  { midi: 84, t: 0.54, dur: 0.28, wave: 'square', vol: 0.2 }, // C6 (peak of the call)
+
+  // Phrase B — development through IV and V, building energy toward the
+  // resolution (ends on a D6/G2 suspension for a little extra pull).
+  { midi: 41, t: 0.84, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
+  { midi: 77, t: 0.84, dur: 0.12, wave: 'square', vol: 0.16 }, // F5
+  { midi: 41, t: 0.98, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
+  { midi: 81, t: 0.98, dur: 0.12, wave: 'square', vol: 0.16 }, // A5
+  { midi: 41, t: 1.12, dur: 0.14, wave: 'triangle', vol: 0.2 }, // F2
+  { midi: 84, t: 1.12, dur: 0.12, wave: 'square', vol: 0.17 }, // C6
+  { midi: 43, t: 1.26, dur: 0.14, wave: 'triangle', vol: 0.21 }, // G2
+  { midi: 79, t: 1.26, dur: 0.12, wave: 'square', vol: 0.17 }, // G5
+  { midi: 43, t: 1.40, dur: 0.14, wave: 'triangle', vol: 0.21 }, // G2
+  { midi: 83, t: 1.40, dur: 0.12, wave: 'square', vol: 0.18 }, // B5
+  { midi: 43, t: 1.54, dur: 0.24, wave: 'triangle', vol: 0.22 }, // G2
+  { midi: 86, t: 1.54, dur: 0.22, wave: 'square', vol: 0.19 }, // D6
+
+  // Phrase C — the big resolution: full tonic chord, held, then a bright
+  // descending flourish trailing off it.
+  { midi: 48, t: 1.80, dur: 0.62, wave: 'triangle', vol: 0.26 }, // C3
+  { midi: 60, t: 1.80, dur: 0.62, wave: 'triangle', vol: 0.16 }, // C4
+  { midi: 72, t: 1.80, dur: 0.62, wave: 'square', vol: 0.2 }, // C5
+  { midi: 76, t: 1.80, dur: 0.62, wave: 'square', vol: 0.16 }, // E5
+  { midi: 79, t: 1.80, dur: 0.62, wave: 'square', vol: 0.14 }, // G5
+  { midi: 84, t: 1.80, dur: 0.62, wave: 'square', vol: 0.14 }, // C6
+  { midi: 84, t: 2.42, dur: 0.08, wave: 'triangle', vol: 0.15 }, // C6 flourish
+  { midi: 83, t: 2.50, dur: 0.08, wave: 'triangle', vol: 0.14 }, // B5
+  { midi: 79, t: 2.58, dur: 0.08, wave: 'triangle', vol: 0.14 }, // G5
+  { midi: 76, t: 2.66, dur: 0.08, wave: 'triangle', vol: 0.13 }, // E5
+  { midi: 72, t: 2.74, dur: 0.14, wave: 'triangle', vol: 0.13 }, // C5
+
+  // Phrase D — final "ta-da": two quick stabs, then the last sustained chord.
+  { midi: 43, t: 2.94, dur: 0.10, wave: 'triangle', vol: 0.2 }, // G2 stab
+  { midi: 79, t: 2.94, dur: 0.10, wave: 'square', vol: 0.16 }, // G5 stab
+  { midi: 48, t: 3.10, dur: 0.10, wave: 'triangle', vol: 0.2 }, // C3 stab
+  { midi: 84, t: 3.10, dur: 0.10, wave: 'square', vol: 0.16 }, // C6 stab
+  { midi: 48, t: 3.30, dur: 0.95, wave: 'triangle', vol: 0.26 }, // C3 final
+  { midi: 60, t: 3.30, dur: 0.95, wave: 'triangle', vol: 0.17 }, // C4 final
+  { midi: 72, t: 3.30, dur: 0.95, wave: 'square', vol: 0.21 }, // C5 final
+  { midi: 76, t: 3.30, dur: 0.95, wave: 'square', vol: 0.17 }, // E5 final
+  { midi: 79, t: 3.30, dur: 0.95, wave: 'square', vol: 0.15 }, // G5 final
+  { midi: 84, t: 3.30, dur: 0.95, wave: 'square', vol: 0.15 }, // C6 final
 ];
 
 // Defeat: somber, slowly falling A minor ending on a low minor chord.
