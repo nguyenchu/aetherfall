@@ -249,7 +249,7 @@ function trackKey(name: TrackName, theme: AreaThemeId): string {
   return name === 'explore' || name === 'battle' ? `${name}_${theme}` : name;
 }
 
-export type StingName = 'victory' | 'defeat';
+export type StingName = 'victory' | 'defeat' | 'encounter';
 
 // One-shot fanfares, not looped. Absolute start times (t) and duration in sec.
 interface StingNote {
@@ -259,6 +259,23 @@ interface StingNote {
   wave: OscillatorType;
   vol: number;
 }
+
+// Encounter: a short, sharp "heads up!" sting (~0.6s) played the instant a
+// fight triggers (DescentScene's screen-filling flash), well before the
+// chapter's own battle theme has had a chance to start. A tense semitone
+// clash for the alert, then a quick rising run landing on a bright high note
+// over a low punch — distinct from both looping themes and from the victory/
+// defeat bookends, which play at the other end of a fight, not the start.
+const ENCOUNTER: StingNote[] = [
+  { midi: 48, t: 0.00, dur: 0.10, wave: 'sawtooth', vol: 0.22 }, // C3
+  { midi: 49, t: 0.00, dur: 0.10, wave: 'sawtooth', vol: 0.18 }, // C#3 (clash)
+  { midi: 60, t: 0.00, dur: 0.10, wave: 'square', vol: 0.16 }, // C4
+  { midi: 60, t: 0.14, dur: 0.09, wave: 'square', vol: 0.18 }, // C4
+  { midi: 63, t: 0.23, dur: 0.09, wave: 'square', vol: 0.18 }, // D#4
+  { midi: 67, t: 0.32, dur: 0.09, wave: 'square', vol: 0.19 }, // G4
+  { midi: 72, t: 0.41, dur: 0.20, wave: 'square', vol: 0.22 }, // C5 (landing high)
+  { midi: 36, t: 0.41, dur: 0.20, wave: 'triangle', vol: 0.2 }, // C2 (low punch)
+];
 
 // Victory: a full four-phrase fanfare in C major (~4.3s, up from a single
 // ~1.1s chord landing) — a herald call, a rising I-IV-V development that
@@ -354,7 +371,7 @@ const DEFEAT: StingNote[] = [
   { midi: 45, t: 4.30, dur: 0.60, wave: 'triangle', vol: 0.06 }, // A2, faintest
 ];
 
-const STINGS: Record<StingName, StingNote[]> = { victory: VICTORY, defeat: DEFEAT };
+const STINGS: Record<StingName, StingNote[]> = { victory: VICTORY, defeat: DEFEAT, encounter: ENCOUNTER };
 
 function midiToFreq(m: number): number {
   return 440 * Math.pow(2, (m - 69) / 12);

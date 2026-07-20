@@ -496,6 +496,7 @@ export class DescentScene extends Phaser.Scene {
     const flash = hud.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0).setOrigin(0, 0).setDepth(200);
     hud.tweens.add({ targets: flash, alpha: 0.9, duration: 90, yoyo: true, onComplete: () => flash.destroy() });
     cam.shake(200, 0.014);
+    music.fanfare('encounter'); // stops the explore loop; BattleScene starts its own theme once it loads
 
     for (let i = 0; i < 12; i++) {
       const angle = (Math.PI * 2 * i) / 12;
