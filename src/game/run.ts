@@ -166,6 +166,29 @@ export function isQuestActive(id: string): boolean {
   return (save.quests[id] ?? 'active') === 'active';
 }
 
+/** Milestone/delivery quests have no NPC or boss to trigger them — call
+ * this whenever the player is somewhere safe to check in (Sanctuary) and
+ * complete anything whose condition is now met. Returns whichever quests
+ * completed just now, so the caller can show a notice. */
+export function checkMilestoneQuests(): QuestDef[] {
+  const completed: QuestDef[] = [];
+  const tryComplete = (id: string, met: boolean) => {
+    if (!met || !isQuestActive(id)) return;
+    const q = completeQuest(id);
+    if (q) completed.push(q);
+  };
+  tryComplete('milestone_level10', state.party.some((c) => (c.level ?? 1) >= 10));
+  tryComplete('milestone_boons', state.boons.length >= 6);
+  tryComplete('milestone_gold', state.gold >= 500);
+  tryComplete('milestone_depth9', state.depth >= 9);
+  if (isQuestActive('bounty_sigils') && (state.inventory.warden_sigils ?? 0) >= 5) {
+    state.inventory.warden_sigils -= 5;
+    const q = completeQuest('bounty_sigils');
+    if (q) completed.push(q);
+  }
+  return completed;
+}
+
 // --- Sanctuary Economy ------------------------------------------------------
 
 export function hpBlessingCost(): number {

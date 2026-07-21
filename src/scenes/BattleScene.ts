@@ -52,6 +52,12 @@ const ELEMENT_LABEL: Record<string, string> = { physical: 'Physical', fire: 'Fir
 const ELEMENT_COLOR: Record<string, string> = {
   physical: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
+// Heal/buff spells have no element (they never show the badge above), so
+// without this they read identically to a plain no-effect row — distinct
+// from each other and from the weakness-match gold (#f0d36c) and damage
+// colors above.
+const SPELL_KIND_LABEL: Partial<Record<'damage' | 'heal' | 'buff', string>> = { heal: 'Heal', buff: 'Buff' };
+const SPELL_KIND_COLOR: Partial<Record<'damage' | 'heal' | 'buff', string>> = { heal: '#6cf0a0', buff: '#7dc8f0' };
 // Fixed slot width wide enough for the longest label ("Physical") at the
 // badges' small font size, so positions stay simple/order-independent
 // instead of needing to pack around each other's actual text width.
@@ -80,7 +86,7 @@ export class BattleScene extends Phaser.Scene {
   private menuIndex = 0;
   private options: MenuOption[] = [];
   private subIndex = 0;
-  private subItems: { id: string; label: string; desc?: string; enabled: boolean; element?: Element; weak?: boolean }[] = [];
+  private subItems: { id: string; label: string; desc?: string; enabled: boolean; element?: Element; weak?: boolean; kind?: 'damage' | 'heal' | 'buff' }[] = [];
   private pending: PendingAction | null = null;
   private targets: Combatant[] = [];
   private targetIndex = 0;
@@ -143,6 +149,26 @@ export class BattleScene extends Phaser.Scene {
     this.touchCleanups = [];
   }
 
+  /** Two Shadow Wolves or three Corrupted Sprites in one fight are otherwise
+   *  identical everywhere that just prints `.name` — the HP bars, the target
+   *  list, the combat log, and especially the turn-order queue (which has no
+   *  battlefield position to fall back on, unlike the sprites themselves).
+   *  Appends a letter suffix once at battle start so "which one's up next?"
+   *  has an answer everywhere for free. Leaves solo names (bosses, elites,
+   *  mixed single-of-each groups) untouched. */
+  private disambiguateEnemyNames(enemies: Combatant[]) {
+    const groups = new Map<string, Combatant[]>();
+    for (const e of enemies) {
+      const group = groups.get(e.name) ?? [];
+      group.push(e);
+      groups.set(e.name, group);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      group.forEach((e, i) => { e.name = `${e.name} ${String.fromCharCode(65 + i)}`; });
+    }
+  }
+
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale).setScroll(0, 0);
     this.cameras.main.fadeIn(400, 7, 6, 14);
@@ -152,6 +178,7 @@ export class BattleScene extends Phaser.Scene {
     const run = getRun();
     const data = this.scene.settings.data as { enemies: Combatant[]; elite?: boolean };
     this.isElite = data.elite === true || data.enemies.some((e) => e.isElite);
+    this.disambiguateEnemyNames(data.enemies);
     this.battle = new Battle(run.party, data.enemies, run.inventory);
 
     this.buildBackground();
@@ -568,7 +595,7 @@ export class BattleScene extends Phaser.Scene {
     // from anywhere in this menu (see bindKeys' 'right' handler).
     const limitReady = (m.limit ?? 0) >= 100;
     if (limitReady) {
-      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}  ▶`, action: 'limit', enabled: true });
+      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}`, action: 'limit', enabled: true });
       this.menuIndex = 1;
     }
     // The very first time any gauge fills, explain the mechanic before the
@@ -679,6 +706,15 @@ export class BattleScene extends Phaser.Scene {
     this.promptText.setText(prompt);
     this.logText.setVisible(false);
     this.clearMenuText();
+    // Every other list in the game (Sanctuary's shop, GameMenu's item tab)
+    // shows which buttons do what; this one never has, keyboard-only since
+    // touch already has its own OK/Back pills and tap-to-select rows.
+    if (!isTouchDevice()) {
+      const hint = this.add.text(428, this.promptText.y, 'Z: select  X: back  ↑↓: browse', sharpText({
+        fontFamily: FONT, fontSize: '8px', color: '#5a6080', strokeThickness: 2,
+      })).setOrigin(1, 0).setDepth(16);
+      this.menuText.push(hint);
+    }
     this.subItems.forEach((o, i) => {
       const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, i === this.subIndex ? 0x1e2746 : 0x11172b, o.enabled ? 0.92 : 0.55)
         .setOrigin(0, 0)
@@ -697,6 +733,11 @@ export class BattleScene extends Phaser.Scene {
         const badgeText = (o.weak ? '✦' : '') + (ELEMENT_LABEL[o.element] ?? '?');
         const badge = this.add.text(178, GAME.height - 91 + i * 18, badgeText, sharpText({
           fontFamily: FONT, fontSize: '8px', color: badgeColor, strokeThickness: 2,
+        })).setDepth(16);
+        this.menuText.push(badge);
+      } else if (o.kind && SPELL_KIND_LABEL[o.kind]) {
+        const badge = this.add.text(178, GAME.height - 91 + i * 18, SPELL_KIND_LABEL[o.kind]!, sharpText({
+          fontFamily: FONT, fontSize: '8px', color: SPELL_KIND_COLOR[o.kind] ?? '#dfe4f5', strokeThickness: 2,
         })).setDepth(16);
         this.menuText.push(badge);
       }
@@ -858,7 +899,7 @@ export class BattleScene extends Phaser.Scene {
       const ok = m.stats.mp >= s.cost;
       const element = s.element && s.element !== 'none' ? s.element : undefined;
       const weak = element ? livingEnemies.some((e) => e.weakness?.includes(element)) : false;
-      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok, element, weak };
+      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok, element, weak, kind: s.kind };
     });
     if (this.subItems.length === 0) {
       this.openMenu();
@@ -942,21 +983,41 @@ export class BattleScene extends Phaser.Scene {
     return undefined;
   }
 
+  /** What's actually about to happen, for the target-select prompt — a
+   *  mixed kit like Mira's (heal one, heal all, damage, haste) otherwise
+   *  lands on the same generic "Choose target" regardless of which one was
+   *  just picked, so nothing on screen confirms the choice before it fires. */
+  private pendingLabel(): string {
+    if (!this.pending) return '';
+    if (this.pending.kind === 'attack') return 'Attack';
+    if (this.pending.kind === 'spell' && this.pending.id) return SPELLS[this.pending.id]?.name ?? '';
+    if (this.pending.kind === 'item' && this.pending.id) return ITEMS[this.pending.id]?.name ?? '';
+    return '';
+  }
+
   /** Boxed target-selection list — same panel chrome as the command/spell
    *  menus, sharing their menuText/menuBacks cleanup — replacing the old
    *  bare-cursor floating over the battlefield. Still rings the selected
    *  target's actual sprite (targetFrame) so the on-field context stays
    *  visible alongside the list. */
   private renderTargetModal() {
-    this.promptText.setText(isTouchDevice() ? 'Choose target — tap a row or the field' : 'Choose target');
+    const actionLabel = this.pendingLabel();
+    const base = actionLabel ? `${actionLabel} — choose target` : 'Choose target';
+    this.promptText.setText(isTouchDevice() ? `${base} (tap a row or the field)` : base);
     this.logText.setVisible(false);
     this.clearMenuText();
     this.cursor.setVisible(false);
 
     const element = this.pendingElement();
+    // Recasting Dawnrush-style haste on someone who already has it just
+    // refreshes the duration — not wrong, but worth flagging so it reads as
+    // a choice instead of a guess, the same way the weakness star does for attacks.
+    const pendingSpell = this.pending?.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id] : undefined;
+    const showsHasteTag = pendingSpell?.kind === 'buff' && !!pendingSpell.haste;
     this.targets.forEach((t, i) => {
       const hp = Math.round(this.hpDisplay.get(t.id) ?? t.stats.hp);
       const weak = t.side === 'enemy' && !!element && element !== 'none' && (t.weakness?.includes(element) ?? false);
+      const alreadyHasted = showsHasteTag && !!t.speedStatuses?.haste;
       const selected = i === this.targetIndex;
       const bg = this.add.rectangle(8, GAME.height - 95 + i * 18, GAME.width - 220, 16, selected ? 0x1e2746 : 0x11172b, 0.92)
         .setOrigin(0, 0).setDepth(15);
@@ -969,6 +1030,11 @@ export class BattleScene extends Phaser.Scene {
       if (weak) {
         const badge = this.add.text(GAME.width - 232, GAME.height - 91 + i * 18, '✦ WEAK', sharpText({
           fontFamily: FONT, fontSize: '9px', color: '#f0d36c', strokeThickness: 3,
+        })).setOrigin(1, 0).setDepth(16);
+        this.menuText.push(badge);
+      } else if (alreadyHasted) {
+        const badge = this.add.text(GAME.width - 232, GAME.height - 91 + i * 18, '⚡ HASTED', sharpText({
+          fontFamily: FONT, fontSize: '9px', color: '#7dc8f0', strokeThickness: 3,
         })).setOrigin(1, 0).setDepth(16);
         this.menuText.push(badge);
       }

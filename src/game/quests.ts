@@ -195,6 +195,49 @@ export const QUESTS: QuestDef[] = [
     unlockFlag: 'ch5_complete',
     rewards: { gold: 30, items: { potion: 1 } },
   },
+  // Milestone quests: no NPC or boss to trigger them — they complete on
+  // their own once their condition is met (checkMilestoneQuests(), run.ts),
+  // checked whenever the player is back in Sanctuary. A different shape of
+  // "complex" than the talk-to/defeat quests above: a threshold to work
+  // toward over several fights or floors rather than a single action.
+  {
+    id: 'milestone_level10',
+    title: 'A Seasoned Line',
+    text: 'Bring any one of your party to level 10.',
+    rewards: { gold: 60, items: { hi_potion: 1 } },
+  },
+  {
+    id: 'milestone_boons',
+    title: 'Blessed Sixfold',
+    text: 'Carry six Boons at once.',
+    unlockFlag: 'ch1_complete',
+    rewards: { gold: 50, items: { tonic: 2 } },
+  },
+  {
+    id: 'milestone_gold',
+    title: 'A Fat Purse',
+    text: 'Hold 500 gold at once — spend it too soon and you\'ll have to build back up.',
+    unlockFlag: 'ch2_complete',
+    rewards: { gold: 75 },
+  },
+  {
+    id: 'milestone_depth9',
+    title: 'Deep Beneath',
+    text: 'Descend to depth 9 — the storm-wracked cliffs of the Tempest Anchor.',
+    unlockFlag: 'ch3_complete',
+    rewards: { gold: 80, items: { hi_tonic: 1 } },
+  },
+  // Delivery quest: reuses Warden Sigils — otherwise pure resale junk — as
+  // a tribute cost instead of a talk/defeat trigger. Consumed on completion
+  // (see checkMilestoneQuests()), so it's a real spend-vs-sell choice, not
+  // just another number to watch climb.
+  {
+    id: 'bounty_sigils',
+    title: 'A Warden\'s Due',
+    text: 'Warden Eda asked for five Warden Sigils, no questions asked, for reasons of her own.',
+    unlockFlag: 'ch3_complete',
+    rewards: { gold: 90, equipment: ['fracture_band'] },
+  },
 ];
 
 export function questRewardText(q: QuestDef): string {

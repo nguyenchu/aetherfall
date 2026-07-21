@@ -607,7 +607,8 @@ export function equipmentEffectText(item: Equipment): string[] {
   const fx = item.effects;
   if (!fx) return [];
   const parts: string[] = [];
-  if (fx.attackElement) parts.push(`Attacks strike as ${fx.attackElement.toUpperCase()}`);
+  if (fx.attackElement === 'none') parts.push('Attacks carry no element — bypasses elemental wards');
+  else if (fx.attackElement) parts.push(`Attacks strike as ${fx.attackElement.toUpperCase()}`);
   if (fx.attackInflict) parts.push(`${Math.round(fx.attackInflict.chance * 100)}% to ${AILMENT_VERB[fx.attackInflict.ailment]} on hit`);
   if (fx.critInflict) parts.push(`Critical hits also ${AILMENT_VERB[fx.critInflict.ailment]}${fx.critInflict.chance < 1 ? ` (${Math.round(fx.critInflict.chance * 100)}%)` : ''}`);
   if (fx.critBonus) parts.push(`+${Math.round(fx.critBonus * 100)}% crit`);

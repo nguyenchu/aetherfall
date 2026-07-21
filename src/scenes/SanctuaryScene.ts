@@ -9,6 +9,7 @@ import {
   buyHpBlessing,
   buyItem,
   canSellEquipment,
+  checkMilestoneQuests,
   completeQuest,
   equipmentPrice,
   equippedFor,
@@ -297,6 +298,10 @@ export class SanctuaryScene extends Phaser.Scene {
       setFlag('intro_seen');
       this.openDialogue('intro');
     }
+
+    // Milestone/delivery quests have no NPC or boss to trigger them — check
+    // in every time the player is back in town, same as a real turn-in.
+    for (const quest of checkMilestoneQuests()) showQuestToast(this, quest);
   }
 
   // --- Map and figures ------------------------------------------------------

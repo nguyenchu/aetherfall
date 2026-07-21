@@ -537,26 +537,26 @@ export class Battle {
   /** Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang. Covers
    * physical damage only — plain attacks and physical-element skills — not
    * elemental magic (see castDamage's callers). */
-  private applyLifesteal(actor: Combatant, dmg: number, events: BattleEvent[]): void {
+  private applyLifesteal(actor: Combatant, dmg: number, events: BattleEvent[], parallel = false): void {
     const lifesteal = (actor.side === 'party' ? this.bn.lifesteal : 0) + (actor.gear?.lifesteal ?? 0);
     if (lifesteal <= 0) return;
     const heal = Math.round(dmg * lifesteal);
     if (heal > 0 && actor.stats.hp > 0 && actor.stats.hp < actor.stats.maxHp) {
       actor.stats.hp = Math.min(actor.stats.maxHp, actor.stats.hp + heal);
-      events.push({ kind: 'info', text: `${actor.name} drains ${heal} HP.`, actorId: actor.id, targetId: actor.id, amount: -heal });
+      events.push({ kind: 'info', text: `${actor.name} drains ${heal} HP.`, actorId: actor.id, targetId: actor.id, amount: -heal, parallel });
     }
   }
 
   /** Prism Sprite's reflect: a non-weakness hit bounces part of its damage
    * back at the attacker. Hitting the actual weakness bypasses it entirely,
    * rewarding correct play. */
-  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[]): void {
+  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[], parallel = false): void {
     if (!target.reflectFrac || hit.weak || actor.stats.hp <= 0) return;
     const reflect = Math.round(hit.dmg * target.reflectFrac);
     if (reflect <= 0) return;
     this.applyDamage(actor, reflect);
-    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect });
-    this.maybeKo(actor, events);
+    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect, parallel });
+    this.maybeKo(actor, events, parallel);
   }
 
   private castDamage(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
@@ -603,8 +603,8 @@ export class Battle {
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak, parallel: isAoe,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
-      if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events);
-      this.applyReflect(actor, target, hit, events);
+      if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
+      this.applyReflect(actor, target, hit, events, isAoe);
       this.maybeKo(target, events, isAoe);
     }
   }
