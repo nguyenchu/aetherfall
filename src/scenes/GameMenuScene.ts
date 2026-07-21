@@ -451,10 +451,17 @@ export class GameMenuScene extends Phaser.Scene {
     });
 
     const spells = member.spells.map((id) => SPELLS[id]).filter((s) => s != null);
-    const allyHeals = spells.filter((s) => s.kind === 'heal' && s.target === 'ally');
-    this.magicSpellId = allyHeals.length > 0
-      ? (allyHeals.some((s) => s.id === this.magicSpellId) ? this.magicSpellId : allyHeals[0].id)
-      : undefined;
+    // Only healing spells work outside battle — everything else is grouped
+    // into a compact "battle-only" line below instead of cluttering the
+    // castable list with rows the player can never actually use here.
+    const castable = spells.filter((s) => s.kind === 'heal');
+    const battleOnly = spells.filter((s) => s.kind !== 'heal');
+    // Don't default to the first castable spell — the target portraits stay
+    // hidden until the player actually focuses or picks one, instead of
+    // showing up immediately whenever this tab has a healer selected.
+    if (this.magicSpellId && !castable.some((s) => s.id === this.magicSpellId)) {
+      this.magicSpellId = undefined;
+    }
     const selectedSpell = this.magicSpellId ? SPELLS[this.magicSpellId] : undefined;
 
     box.add(this.add.text(46, 168, `${member.name}   MP ${member.stats.mp}/${member.stats.maxMp}`,
@@ -469,40 +476,63 @@ export class GameMenuScene extends Phaser.Scene {
       return;
     }
 
-    box.add(this.add.text(46, 184, 'Only healing magic works outside battle.',
-      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })));
+    let y = 186;
+    if (castable.length === 0) {
+      box.add(this.add.text(46, y, `${member.name} has no magic that works outside battle.`,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8', strokeThickness: 2, wordWrap: { width: 400 } })));
+      y += 20;
+    } else {
+      box.add(this.add.text(46, y, 'CASTABLE HERE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+      y += 14;
+      castable.forEach((spell) => {
+        const rowY = y;
+        const cost = effectiveSpellCost(spell.id);
+        const afford = member.stats.mp >= cost;
+        const subColor = afford ? '#7df0a0' : '#ff8a8a';
+        if (spell.target === 'ally') {
+          const b = this.button(46, rowY, 156, `${spell.name}  ${cost}MP`, () => {
+            this.magicSpellId = spell.id;
+            this.menuNotice = 'Choose a target portrait.';
+            this.renderContent();
+          }, box, '8px');
+          b.chosen = spell.id === this.magicSpellId;
+          b.onFocus = () => {
+            if (this.magicSpellId === spell.id) return;
+            this.magicSpellId = spell.id;
+            this.menuNotice = 'Choose a target portrait.';
+            this.renderContent();
+          };
+          box.add(this.add.text(46, rowY + 22, afford ? `Heals ${this.spellHealAmount(member, spell)} HP` : `Needs ${cost} MP`,
+            sharpText({ fontFamily: FONT, fontSize: '7px', color: subColor, strokeThickness: 2 })));
+        } else {
+          this.button(46, rowY, 156, `${spell.name}  ${cost}MP`, () => this.castFieldPartyHeal(member, spell.id), box, '8px');
+          box.add(this.add.text(46, rowY + 22, afford ? `Heals the whole party ~${this.spellHealAmount(member, spell)} HP each` : `Needs ${cost} MP`,
+            sharpText({ fontFamily: FONT, fontSize: '7px', color: subColor, strokeThickness: 2, wordWrap: { width: 220 } })));
+        }
+        y += 32;
+      });
+    }
 
-    spells.forEach((spell, i) => {
-      const y = 202 + i * 32;
-      const cost = effectiveSpellCost(spell.id);
-      const elementColor = ELEMENT_COLOR[spell.element] ?? '#dfe4f5';
-      if (spell.kind === 'heal' && spell.target === 'ally') {
-        const b = this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => {
-          this.magicSpellId = spell.id;
-          this.menuNotice = 'Choose a target portrait.';
-          this.renderContent();
-        }, box, '8px');
-        b.chosen = spell.id === this.magicSpellId;
-        b.onFocus = () => {
-          if (this.magicSpellId === spell.id) return;
-          this.magicSpellId = spell.id;
-          this.menuNotice = 'Choose a target portrait.';
-          this.renderContent();
-        };
-        box.add(this.add.text(46, y + 22, `Heals ${this.spellHealAmount(member, spell)} HP`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2 })));
-      } else if (spell.kind === 'heal' && spell.target === 'party') {
-        this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => this.castFieldPartyHeal(member, spell.id), box, '8px');
-        box.add(this.add.text(46, y + 22, `Heals the whole party ~${this.spellHealAmount(member, spell)} HP each`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2, wordWrap: { width: 220 } })));
-      } else {
-        // Not a button: this spell can't be cast here, so it shouldn't look clickable.
-        box.add(this.add.text(46, y + 2, `${spell.name}  ${cost}MP`,
-          sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
-        box.add(this.add.text(46, y + 15, `${spell.desc ?? 'Battle only.'}  (battle only)`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: elementColor, strokeThickness: 2, wordWrap: { width: 220 } })));
-      }
-    });
+    if (battleOnly.length > 0) {
+      y += 6;
+      box.add(this.add.text(46, y, 'BATTLE-ONLY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080', strokeThickness: 2 })));
+      y += 12;
+      // Wrapping row of spell names, each colored by its element (mirrors
+      // BattleScene's element badges) so the list still reads at a glance
+      // even though none of these can be cast from here.
+      let x = 46;
+      const rowStart = x;
+      const maxX = 446;
+      battleOnly.forEach((spell, i) => {
+        const label = i < battleOnly.length - 1 ? `${spell.name}, ` : spell.name;
+        const t = this.add.text(x, y, label, sharpText({
+          fontFamily: FONT, fontSize: '8px', color: ELEMENT_COLOR[spell.element] ?? '#5a6080', strokeThickness: 2,
+        }));
+        box.add(t);
+        x += t.width;
+        if (x > maxX) { x = rowStart; y += 12; t.setPosition(x, y); x += t.width; }
+      });
+    }
 
     if (!selectedSpell) return;
     box.add(this.add.text(294, 184, 'TARGET', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));

@@ -13,6 +13,10 @@ import { DescentHudScene } from './DescentHudScene';
 import { pickBanter, DESCENT_BANTER } from '../game/banter';
 import { showBanterToast } from '../ui/banterToast';
 
+const GUST_DIR: Record<'up' | 'down' | 'left' | 'right', [number, number]> = {
+  up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
+};
+
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
@@ -266,6 +270,11 @@ export class DescentScene extends Phaser.Scene {
             .setOrigin(0, 0).setTint(0xc78aff).setAlpha(0.8).setDepth(2);
           this.tweens.add({ targets: img, alpha: { from: 0.5, to: 0.95 }, duration: 550, yoyo: true, repeat: -1 });
         }
+        if (ch === 'G') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0x9fc8e0).setAlpha(0.5).setDepth(1);
+          this.tweens.add({ targets: img, alpha: { from: 0.3, to: 0.65 }, duration: 450, yoyo: true, repeat: -1 });
+        }
       }
     }
   }
@@ -443,6 +452,24 @@ export class DescentScene extends Phaser.Scene {
         this.player.setPosition(this.tileCenter(this.px), this.tileCenter(this.py));
         this.playerShadow.setPosition(this.tileCenter(this.px), this.tileCenter(this.py) + 8);
         this.floatText('The prism light bends around you...', '#c78aff', 0);
+      }
+      return;
+    }
+    if (ch === 'G') {
+      const gust = getArea(depth).gusts?.[tileKey];
+      if (gust) {
+        const [gx, gy] = GUST_DIR[gust];
+        const nx = this.px + gx;
+        const ny = this.py + gy;
+        const nch = this.map[ny]?.[nx];
+        if (nch && nch !== '#') {
+          this.px = nx;
+          this.py = ny;
+          this.tweens.killTweensOf(this.player);
+          this.tweens.killTweensOf(this.playerShadow);
+          this.walkPlayerTo(this.tileCenter(this.px), this.tileCenter(this.py));
+          this.floatText('A gust of wind shoves you sideways!', '#9fc8e0', 0);
+        }
       }
       return;
     }

@@ -158,6 +158,43 @@ export const QUESTS: QuestDef[] = [
     unlockFlag: 'ch4_complete',
     rewards: { gold: 25, items: { potion: 1 } },
   },
+  {
+    id: 'defeat_galebrand',
+    title: 'Ground the Storm',
+    text: 'Defeat Galebrand, the storm spirit unraveling atop the Tempest Anchor.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 210, equipment: ['stormward_mace'], items: { warden_sigils: 2 } },
+  },
+  // Fifth-tier NPC check-ins, unlocked once Chapter 5 is clear — the same
+  // four NPCs' existing after5 dialogue.
+  {
+    id: 'eda_orders',
+    title: 'The Unsigned Order',
+    text: 'Warden Eda found a name on Kael\'s old deployment orders that shouldn\'t exist. Hear what she\'s found.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 55, items: { tonic: 1 } },
+  },
+  {
+    id: 'voss_twelve',
+    title: 'The Line Before the Line',
+    text: 'Scholar Voss believes the twelve anchors were first raised by twelve wardens older than Sanctuary itself. Hear her theory.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 55, items: { warden_sigils: 1 } },
+  },
+  {
+    id: 'stranger_witness',
+    title: 'Someone Who Was There',
+    text: 'The Stranger claims they were present when Kael\'s watch-line first deployed. Press them for what they remember.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 45, items: { tonic: 1 } },
+  },
+  {
+    id: 'pip_wont_settle',
+    title: 'Pip Won\'t Settle',
+    text: 'The digging under the city has Pip spooked. The child wants you to see for yourself.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 30, items: { potion: 1 } },
+  },
 ];
 
 export function questRewardText(q: QuestDef): string {

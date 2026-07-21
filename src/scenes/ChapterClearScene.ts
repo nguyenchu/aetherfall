@@ -3,6 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { input } from '../game/input';
 import { sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
+import { TOTAL_CHAPTERS } from '../game/chapters';
 
 const CX = GAME.width / 2;
 const CY = GAME.height / 2;
@@ -35,7 +36,8 @@ export class ChapterClearScene extends Phaser.Scene {
     1: 'North of the forest, the Sunken City lies drowned and waiting.',
     2: 'Past the water, the Ashen Wastes still burn.',
     3: 'Only the Crystal Depths remain between you and the dark.',
-    4: 'The last anchor is yours to hold.',
+    4: 'Past the crystal, the storm-wracked heights await.',
+    5: 'Seven anchors remain, scattered and waiting.',
   };
 
   create() {
@@ -50,7 +52,7 @@ export class ChapterClearScene extends Phaser.Scene {
 
     const accent = this.payload.accent;
     const rift = this.payload.rift === true;
-    const isFinal = !rift && this.payload.chapter >= 4;
+    const isFinal = !rift && this.payload.chapter >= TOTAL_CHAPTERS;
 
     // Drifting motes for atmosphere.
     for (let i = 0; i < 40; i++) {

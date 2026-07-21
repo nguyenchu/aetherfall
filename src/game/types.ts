@@ -35,6 +35,7 @@ export interface GearEffects {
   healBonus: number; // flat bonus to healing spells cast
   resist: Ailment[]; // ailments this member is immune to
   speedMult?: number; // permanent turn-order speed multiplier (unused so far)
+  breakBonusDmg?: number; // extra damage multiplier against broken (staggered) enemies
 }
 
 export interface Stats {
@@ -52,12 +53,13 @@ export interface Spell {
   id: string;
   name: string;
   cost: number;
-  kind: 'damage' | 'heal';
+  kind: 'damage' | 'heal' | 'buff';
   power: number;
   element: Element;
   target: 'enemy' | 'ally' | 'all-enemies' | 'party';
   guardHit?: number; // extra guard chip even without hitting a weakness
   inflict?: Inflict; // chance to apply an ailment to damaged targets
+  haste?: { mult: number; turns: number }; // buff-kind only: CTB speed boost applied to the target
   desc?: string;
 }
 
@@ -104,6 +106,10 @@ export interface Combatant {
   ailments?: Partial<Record<Ailment, number>>;
   // Basic attacks may inflict an ailment (enemy nature or party weapon).
   attackInflict?: Inflict;
+  // Basic attacks that land as a critical hit may also inflict an ailment
+  // (party weapon only, e.g. Consecrated Censer) — distinct from
+  // attackInflict, which rolls on every hit regardless of crit.
+  critInflict?: Inflict;
   // Basic attacks may also drag the target's turn-order speed down (e.g.
   // Tide Warden's Undertow, Sunken's Tomb Crawler) — mirrors attackInflict.
   attackSpeedDebuff?: { mult: number; turns: number };
@@ -180,6 +186,11 @@ export interface BattleEvent {
   crit?: boolean; // critical hit
   weak?: boolean; // hit a weakness
   ailment?: Ailment; // for 'ailment'/'dot' events: which status is involved
+  // True for events that are one of several simultaneous hits from a single
+  // multi-target action (a boss's AoE phase move, an AoE spell, a party-wide
+  // limit break) — the scene plays a consecutive run of these together
+  // instead of one at a time, so every target reacts at once.
+  parallel?: boolean;
 }
 
 export type BattlePhase = 'input' | 'won' | 'lost' | 'fled';

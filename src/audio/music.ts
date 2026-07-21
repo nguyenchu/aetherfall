@@ -8,8 +8,8 @@
 // Replace with recorded tracks later by swapping this module while keeping
 // the play/stop/toggle API stable.
 
-export type TrackName = 'explore' | 'battle' | 'sanctuary' | 'title';
-export type AreaThemeId = 'forest' | 'sunken' | 'ashen' | 'crystal';
+export type TrackName = 'explore' | 'battle' | 'boss' | 'sanctuary' | 'title';
+export type AreaThemeId = 'forest' | 'sunken' | 'ashen' | 'crystal' | 'tempest';
 
 interface TrackDef {
   bpm: number;
@@ -19,6 +19,11 @@ interface TrackDef {
   bassWave: OscillatorType;
   melodyVol: number;
   bassVol: number;
+  // Optional third voice: a sustained low drone, used only by BOSS so a boss
+  // fight has more harmonic weight under it than the two-voice chapter themes.
+  pad?: number[];
+  padWave?: OscillatorType;
+  padVol?: number;
 }
 
 // Helpers for compact patterns.
@@ -95,6 +100,29 @@ const EXPLORE_CRYSTAL: TrackDef = {
   bassWave: 'sine',
   melodyVol: 0.12,
   bassVol: 0.16,
+};
+
+// Tempest Anchor (Ch5): eerie and windswept, Bm - G - D - F#m. A high
+// whistling square lead over an eighth-note-pulse "driving" bass (unlike the
+// other explore themes' sustained pedal) evokes a wind that never lets up.
+const EXPLORE_TEMPEST: TrackDef = {
+  bpm: 78,
+  melody: flat([
+    q(71), q(74), q(78), q(74), // Bm: B4 D5 F#5 D5
+    q(67), q(71), q(74), q(71), // G:  G4 B4 D5 B4
+    q(74), q(78), q(81), q(78), // D:  D5 F#5 A5 F#5
+    q(66), q(69), q(73), q(69), // F#m: F#4 A4 C#5 A4
+  ]),
+  bass: [
+    47, 47, 47, 47, 47, 47, 47, 47, // B2 driving pulse
+    43, 43, 43, 43, 43, 43, 43, 43, // G2
+    50, 50, 50, 50, 50, 50, 50, 50, // D3
+    42, 42, 42, 42, 42, 42, 42, 42, // F#2
+  ],
+  melodyWave: 'square',
+  bassWave: 'triangle',
+  melodyVol: 0.13,
+  bassVol: 0.2,
 };
 
 // --- Battle themes: one per chapter, sharing the galloping
@@ -187,6 +215,61 @@ const BATTLE_CRYSTAL: TrackDef = {
   bassVol: 0.18,
 };
 
+// Tempest Anchor (Ch5): the fastest theme yet (fitting Galebrand's own
+// unmatched AGI), Bm - G - F#m - A. Rests fall at irregular points within
+// each bar instead of the other battle themes' even gallop, reading as
+// gusting rather than a steady charge.
+const BATTLE_TEMPEST: TrackDef = {
+  bpm: 174,
+  melody: [
+    71, p, 74, 78, 71, p, p, 78, // Bm: B4 . D5 F#5 B4 . . F#5
+    67, p, 71, 74, 67, p, p, 74, // G:  G4 . B4 D5 G4 . . D5
+    66, p, 69, 73, 66, p, p, 73, // F#m: F#4 . A4 C#5 F#4 . . C#5
+    69, p, 73, 76, 69, p, p, 76, // A:  A4 . C#5 E5 A4 . . E5
+  ],
+  bass: [
+    47, 47, 47, 47, 47, 47, 47, 47, // B2
+    43, 43, 43, 43, 43, 43, 43, 43, // G2
+    42, 42, 42, 42, 42, 42, 42, 42, // F#2
+    45, 45, 45, 45, 45, 45, 45, 45, // A2
+  ],
+  melodyWave: 'sawtooth',
+  bassWave: 'square',
+  melodyVol: 0.16,
+  bassVol: 0.19,
+};
+
+// --- Boss: one shared theme for every boss fight regardless of chapter, so
+// a boss reveal always feels like a step up from whatever regional battle
+// track was just playing. Cm - Ab - Eb - G(dominant, raised 3rd for a harder
+// cadence back to the top of the loop) — a full step darker than any chapter
+// theme's key, and the only track with a third voice: a sustained sub-bass
+// drone under the usual melody/bass pair for real harmonic weight instead of
+// just more speed. Sawtooth lead + square bass (the harshest combo any
+// chapter uses) and louder than every other track on purpose.
+const BOSS: TrackDef = {
+  bpm: 162,
+  melody: [
+    72, p, 75, 72, 79, p, 75, 72, // Cm:  C5 . Eb5 C5 G5 . Eb5 C5
+    68, p, 72, 68, 75, p, 72, 68, // Ab:  Ab4 . C5 Ab4 Eb5 . C5 Ab4
+    75, p, 79, 75, 82, p, 79, 75, // Eb:  Eb5 . G5 Eb5 Bb5 . G5 Eb5
+    67, p, 71, 67, 74, p, 71, 67, // G:   G4 . B4 G4 D5 . B4 G4 (raised 3rd, dominant tension)
+  ],
+  bass: [
+    48, 48, 48, 48, 48, 48, 48, 48, // C3
+    44, 44, 44, 44, 44, 44, 44, 44, // Ab2
+    51, 51, 51, 51, 51, 51, 51, 51, // Eb3
+    43, 43, 43, 43, 43, 43, 43, 43, // G2
+  ],
+  pad: flat([bar(36), bar(32), bar(39), bar(31)]), // C2, Ab1, Eb2, G1 — held whole bars
+  melodyWave: 'sawtooth',
+  bassWave: 'square',
+  padWave: 'sine',
+  melodyVol: 0.18,
+  bassVol: 0.21,
+  padVol: 0.11,
+};
+
 // --- Sanctuary: warm hub theme, F - Dm - Bb - C — a different loop from the
 //     original C - Am - F - G both in key and bass timbre (rounder sine
 //     instead of double-triangle) while keeping the same gentle register.
@@ -234,14 +317,17 @@ const TITLE: TrackDef = {
 const TRACKS: Record<string, TrackDef> = {
   sanctuary: SANCTUARY,
   title: TITLE,
+  boss: BOSS,
   explore_forest: EXPLORE_FOREST,
   explore_sunken: EXPLORE_SUNKEN,
   explore_ashen: EXPLORE_ASHEN,
   explore_crystal: EXPLORE_CRYSTAL,
+  explore_tempest: EXPLORE_TEMPEST,
   battle_forest: BATTLE_FOREST,
   battle_sunken: BATTLE_SUNKEN,
   battle_ashen: BATTLE_ASHEN,
   battle_crystal: BATTLE_CRYSTAL,
+  battle_tempest: BATTLE_TEMPEST,
 };
 
 /** explore/battle are keyed per chapter theme; sanctuary and title are single tracks. */
@@ -277,75 +363,81 @@ const ENCOUNTER: StingNote[] = [
   { midi: 36, t: 0.41, dur: 0.20, wave: 'triangle', vol: 0.2 }, // C2 (low punch)
 ];
 
-// Victory: a brass-fanfare-style jingle in C major (~4.0s), built around a
-// dotted-rhythm horn-call motif — three short repeated calls leaping to a
-// held note — answered a step higher, rather than a smooth rising arpeggio.
-// That repeated-note "call" rhythm (not the harmony) is the signature move
-// of the classic PS1-era JRPG victory jingle this is modeled after; the
-// actual notes/progression here are original. Lead voices use sawtooth
-// (mellowed by the engine's 2.2kHz low-pass into something closer to brass
-// than raw chiptune buzz) over a triangle bass/pedal, with square filling
-// the open-fifth harmony stacked under each call.
+// Victory: a sweeping, legato fanfare in C major (~5.3s) leaning toward the
+// more melodic, orchestral-leaning style of Final Fantasy VIII's victory
+// theme rather than the earlier version's punchy dotted-horn-call "classic
+// Fanfare" motif — a flowing, singable melodic line over a moving I-vi-IV-V-I
+// chord progression instead of repeated short stabs on I-V. The actual
+// notes/melody here are original, not transcribed from any existing game.
+// Melody stays on triangle throughout (smoother/rounder than sawtooth, closer
+// to a legato lead than a chiptune blare); sine fills soft sustained pad
+// chords underneath for a string-like wash, with a triangle bass pedal
+// anchoring each chord change.
 const VICTORY: StingNote[] = [
-  // Motif A — dotted horn-call: "ta-ta-ta-TAA" on the dominant, leaping to
-  // the tonic. This rhythmic cell is the whole piece's hook.
-  { midi: 43, t: 0.00, dur: 0.36, wave: 'triangle', vol: 0.22 }, // G2 pedal
-  { midi: 67, t: 0.00, dur: 0.09, wave: 'sawtooth', vol: 0.17 }, // G4
-  { midi: 62, t: 0.00, dur: 0.09, wave: 'square', vol: 0.1 }, // D4 (open 5th)
-  { midi: 67, t: 0.10, dur: 0.09, wave: 'sawtooth', vol: 0.17 }, // G4
-  { midi: 62, t: 0.10, dur: 0.09, wave: 'square', vol: 0.1 }, // D4
-  { midi: 67, t: 0.20, dur: 0.14, wave: 'sawtooth', vol: 0.18 }, // G4
-  { midi: 62, t: 0.20, dur: 0.14, wave: 'square', vol: 0.11 }, // D4
-  { midi: 48, t: 0.36, dur: 0.34, wave: 'triangle', vol: 0.24 }, // C3 (bass resolves)
-  { midi: 72, t: 0.36, dur: 0.32, wave: 'sawtooth', vol: 0.22 }, // C5 (call lands)
-  { midi: 67, t: 0.36, dur: 0.32, wave: 'square', vol: 0.14 }, // G4 (open 5th under)
+  // Intro — a soft rising arpeggio (not an immediate blast) builds
+  // anticipation before the main melody enters.
+  { midi: 36, t: 0.00, dur: 0.65, wave: 'triangle', vol: 0.10 }, // C2 pedal, soft
+  { midi: 60, t: 0.02, dur: 0.18, wave: 'sine', vol: 0.09 }, // C4
+  { midi: 64, t: 0.14, dur: 0.18, wave: 'sine', vol: 0.10 }, // E4
+  { midi: 67, t: 0.26, dur: 0.20, wave: 'sine', vol: 0.11 }, // G4
+  { midi: 72, t: 0.38, dur: 0.28, wave: 'sine', vol: 0.13 }, // C5
+  { midi: 76, t: 0.50, dur: 0.20, wave: 'sine', vol: 0.13 }, // E5
 
-  // Motif B — the answer: same rhythm cell, a step higher, landing on a
-  // bigger peak — classic call-and-response.
-  { midi: 48, t: 0.72, dur: 0.36, wave: 'triangle', vol: 0.22 }, // C3 pedal
-  { midi: 72, t: 0.72, dur: 0.09, wave: 'sawtooth', vol: 0.18 }, // C5
-  { midi: 67, t: 0.72, dur: 0.09, wave: 'square', vol: 0.11 }, // G4
-  { midi: 72, t: 0.82, dur: 0.09, wave: 'sawtooth', vol: 0.18 }, // C5
-  { midi: 67, t: 0.82, dur: 0.09, wave: 'square', vol: 0.11 }, // G4
-  { midi: 72, t: 0.92, dur: 0.14, wave: 'sawtooth', vol: 0.19 }, // C5
-  { midi: 67, t: 0.92, dur: 0.14, wave: 'square', vol: 0.12 }, // G4
-  { midi: 43, t: 1.08, dur: 0.42, wave: 'triangle', vol: 0.24 }, // G2 (V under the peak)
-  { midi: 79, t: 1.08, dur: 0.40, wave: 'sawtooth', vol: 0.23 }, // G5 (peak)
-  { midi: 76, t: 1.08, dur: 0.40, wave: 'square', vol: 0.15 }, // E5
+  // Phrase A — C (I): the main melody enters, legato, arcing up then settling.
+  { midi: 48, t: 0.65, dur: 0.74, wave: 'triangle', vol: 0.16 }, // C3 pedal
+  { midi: 64, t: 0.65, dur: 0.74, wave: 'sine', vol: 0.07 }, // E4 pad
+  { midi: 67, t: 0.65, dur: 0.74, wave: 'sine', vol: 0.07 }, // G4 pad
+  { midi: 76, t: 0.65, dur: 0.34, wave: 'triangle', vol: 0.20 }, // E5
+  { midi: 79, t: 0.95, dur: 0.22, wave: 'triangle', vol: 0.20 }, // G5
+  { midi: 77, t: 1.15, dur: 0.12, wave: 'triangle', vol: 0.19 }, // F5 (passing tone)
+  { midi: 76, t: 1.25, dur: 0.14, wave: 'triangle', vol: 0.19 }, // E5
 
-  // Development — a quick rising run bridging to the finale, energy building.
-  { midi: 41, t: 1.56, dur: 0.13, wave: 'triangle', vol: 0.19 }, // F2
-  { midi: 77, t: 1.56, dur: 0.11, wave: 'square', vol: 0.16 }, // F5
-  { midi: 41, t: 1.69, dur: 0.13, wave: 'triangle', vol: 0.19 }, // F2
-  { midi: 81, t: 1.69, dur: 0.11, wave: 'square', vol: 0.16 }, // A5
-  { midi: 43, t: 1.82, dur: 0.13, wave: 'triangle', vol: 0.2 }, // G2
-  { midi: 84, t: 1.82, dur: 0.11, wave: 'square', vol: 0.17 }, // C6
-  { midi: 43, t: 1.95, dur: 0.13, wave: 'triangle', vol: 0.2 }, // G2
-  { midi: 86, t: 1.95, dur: 0.11, wave: 'square', vol: 0.18 }, // D6
-  { midi: 43, t: 2.08, dur: 0.24, wave: 'triangle', vol: 0.21 }, // G2
-  { midi: 88, t: 2.08, dur: 0.22, wave: 'square', vol: 0.19 }, // E6 (leading-tone push)
+  // Phrase B — Am (vi): a touch of bittersweet color before opening back up.
+  { midi: 45, t: 1.45, dur: 0.70, wave: 'triangle', vol: 0.15 }, // A2 pedal
+  { midi: 60, t: 1.45, dur: 0.70, wave: 'sine', vol: 0.07 }, // C4 pad
+  { midi: 64, t: 1.45, dur: 0.70, wave: 'sine', vol: 0.07 }, // E4 pad
+  { midi: 74, t: 1.45, dur: 0.30, wave: 'triangle', vol: 0.19 }, // D5
+  { midi: 76, t: 1.72, dur: 0.20, wave: 'triangle', vol: 0.19 }, // E5
+  { midi: 79, t: 1.90, dur: 0.28, wave: 'triangle', vol: 0.21 }, // G5
 
-  // Grand finale — brass-stab rhythm (short-short-long) landing on the full
-  // sustained tonic chord, doubled across three octaves.
-  { midi: 48, t: 2.32, dur: 0.10, wave: 'triangle', vol: 0.22 }, // C3 stab
-  { midi: 84, t: 2.32, dur: 0.10, wave: 'sawtooth', vol: 0.18 }, // C6 stab
-  { midi: 48, t: 2.48, dur: 0.10, wave: 'triangle', vol: 0.22 }, // C3 stab
-  { midi: 84, t: 2.48, dur: 0.10, wave: 'sawtooth', vol: 0.18 }, // C6 stab
-  { midi: 36, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.26 }, // C2 final
-  { midi: 48, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.2 }, // C3 final
-  { midi: 60, t: 2.64, dur: 1.35, wave: 'triangle', vol: 0.16 }, // C4 final
-  { midi: 72, t: 2.64, dur: 1.35, wave: 'sawtooth', vol: 0.2 }, // C5 final
-  { midi: 76, t: 2.64, dur: 1.35, wave: 'square', vol: 0.15 }, // E5 final
-  { midi: 79, t: 2.64, dur: 1.35, wave: 'square', vol: 0.13 }, // G5 final
-  { midi: 84, t: 2.64, dur: 1.35, wave: 'sawtooth', vol: 0.15 }, // C6 final
+  // Phrase C — F (IV): brightening, the melody's highest reach yet.
+  { midi: 41, t: 2.25, dur: 0.70, wave: 'triangle', vol: 0.16 }, // F2 pedal
+  { midi: 57, t: 2.25, dur: 0.70, wave: 'sine', vol: 0.07 }, // A3 pad
+  { midi: 60, t: 2.25, dur: 0.70, wave: 'sine', vol: 0.08 }, // C4 pad
+  { midi: 77, t: 2.25, dur: 0.26, wave: 'triangle', vol: 0.21 }, // F5
+  { midi: 81, t: 2.50, dur: 0.24, wave: 'triangle', vol: 0.22 }, // A5
+  { midi: 79, t: 2.73, dur: 0.28, wave: 'triangle', vol: 0.21 }, // G5
+
+  // Phrase D — G (V): the melody eases back down toward home, setting up
+  // the landing rather than leaping into it.
+  { midi: 43, t: 3.05, dur: 0.70, wave: 'triangle', vol: 0.17 }, // G2 pedal
+  { midi: 59, t: 3.05, dur: 0.70, wave: 'sine', vol: 0.08 }, // B3 pad
+  { midi: 62, t: 3.05, dur: 0.70, wave: 'sine', vol: 0.08 }, // D4 pad
+  { midi: 79, t: 3.05, dur: 0.22, wave: 'triangle', vol: 0.21 }, // G5
+  { midi: 77, t: 3.27, dur: 0.18, wave: 'triangle', vol: 0.20 }, // F5
+  { midi: 76, t: 3.45, dur: 0.16, wave: 'triangle', vol: 0.20 }, // E5
+  { midi: 74, t: 3.61, dur: 0.22, wave: 'triangle', vol: 0.20 }, // D5
+
+  // Finale — a warm sustained C major chord across four octaves (not a sharp
+  // stab), with two soft high sparkle accents as it settles and fades.
+  { midi: 36, t: 3.85, dur: 1.45, wave: 'triangle', vol: 0.24 }, // C2
+  { midi: 48, t: 3.85, dur: 1.45, wave: 'triangle', vol: 0.20 }, // C3
+  { midi: 60, t: 3.85, dur: 1.45, wave: 'sine', vol: 0.16 }, // C4
+  { midi: 64, t: 3.85, dur: 1.45, wave: 'sine', vol: 0.14 }, // E4
+  { midi: 67, t: 3.85, dur: 1.45, wave: 'sine', vol: 0.14 }, // G4
+  { midi: 72, t: 3.85, dur: 1.45, wave: 'triangle', vol: 0.20 }, // C5
+  { midi: 76, t: 3.85, dur: 1.45, wave: 'sine', vol: 0.13 }, // E5
+  { midi: 79, t: 3.85, dur: 1.45, wave: 'sine', vol: 0.12 }, // G5
+  { midi: 84, t: 4.05, dur: 0.45, wave: 'sine', vol: 0.10 }, // C6 sparkle
+  { midi: 91, t: 4.30, dur: 0.55, wave: 'sine', vol: 0.09 }, // G6 sparkle
 ];
 
 // Defeat: a full four-phrase fanfare in A minor (~4.9s, up from a single
-// ~2.0s falling chord) — mirrors VICTORY's four-phrase shape but inverted:
-// a descending call instead of a rising one, a classic lament-bass descent
-// (i-VII-VI-v) instead of a building I-IV-V, a low held chord instead of a
-// bright one, and a hollow tolling fade instead of a triumphant "ta-da".
-// Every voice stays triangle — no square/sawtooth brightness anywhere.
+// ~2.0s falling chord) — answers VICTORY's rising, legato arc with a
+// descending, mournful one: a classic lament-bass descent (i-VII-VI-v)
+// instead of a rising chord progression, a low held chord instead of a
+// bright one, and a hollow tolling fade instead of a warm settling glow.
+// Every voice stays triangle — no square/sawtooth/sine brightness anywhere.
 const DEFEAT: StingNote[] = [
   // Phrase A — descending call over a tonic drone.
   { midi: 45, t: 0.00, dur: 0.70, wave: 'triangle', vol: 0.2 }, // A2 drone
@@ -533,6 +625,9 @@ class MusicEngine {
   private scheduleStep(track: TrackDef, i: number, time: number, sec8: number): void {
     this.scheduleVoice(track.melody, i, time, sec8, track.melodyWave, track.melodyVol);
     this.scheduleVoice(track.bass, i, time, sec8, track.bassWave, track.bassVol);
+    if (track.pad && track.padWave != null && track.padVol != null) {
+      this.scheduleVoice(track.pad, i, time, sec8, track.padWave, track.padVol);
+    }
   }
 
   private scheduleVoice(pattern: number[], i: number, time: number, sec8: number, wave: OscillatorType, vol: number): void {

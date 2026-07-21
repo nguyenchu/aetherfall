@@ -26,6 +26,7 @@ const CONFIGS: RiftConfig[] = [
   { theme: THEMES.sunken,  idPrefix: 'sunken',  trash: ['soldiers', 'soldier_sprite', 'crawlers', 'sprites'], boss: 'ch2_boss', name: 'Drowned Rift' },
   { theme: THEMES.ashen,   idPrefix: 'ashen',   trash: ['hounds', 'hound_wraith', 'golems', 'wraiths'], boss: 'ch3_boss', name: 'Ember Rift' },
   { theme: THEMES.crystal, idPrefix: 'crystal', trash: ['wisps', 'wisp_stalker', 'stalkers', 'prisms'], boss: 'ch4_boss', name: 'Prism Rift' },
+  { theme: THEMES.tempest, idPrefix: 'tempest', trash: ['harriers', 'harrier_stalker', 'stalker_sentry', 'squalls'], boss: 'ch5_boss', name: 'Squall Rift' },
 ];
 
 const W = 24;

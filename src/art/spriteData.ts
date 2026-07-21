@@ -45,6 +45,8 @@ export const PALETTE: Record<string, number> = {
   Y: 0x24352a, // shade base (mossy near-black green)
   y: 0x152018, // shade shadow
   I: 0xd8f5ff, // icy glow
+  Z: 0x4a6a8a, // storm slate-blue base
+  z: 0x2a3a4e, // storm slate-blue shadow
 };
 
 // Each value is top-to-bottom rows. Width is the longest row.
@@ -364,6 +366,29 @@ export const SPRITES: Record<string, string[]> = {
     '...oPPPPPPPPPPPPo...',
     '....oPPpPPPPpPPo....',
     '.....ooPPPPPPoo.....',
+    '.......oooooo.......',
+  ],
+
+  // --- Galebrand (Ch5 boss): the same maw shape in storm slate-blue, eyes
+  // recast lightning-white/icy (its own storm turned wild) instead of a
+  // crafted boss's clean facet glow. ---
+  e_galebrand: [
+    '........oooo........',
+    '......ooZzZZoo......',
+    '.....oZZZZZZZZo.....',
+    '.oo.oZZzZZZZzZZo.oo.',
+    'oFZooZZZZZZZZZZooZFo',
+    'oZZoZZIIZZZZIIZzoZZo',
+    '.oZoZZZZZZZZZZZzoZo.',
+    '.oZoZZZzZZZZzZZZoZo.',
+    '..ooZZZZZZZZZZZZoo..',
+    '.oZZzZZZZZZZZZZzZZo.',
+    '.oFZFZFZFZFZFZFZFZo.',
+    '.oooooooooooooooooo.',
+    '..oZFZFZFZFZFZFZFo..',
+    '...oZZZZZZZZZZZZo...',
+    '....oZZzZZZZzZZo....',
+    '.....ooZZZZZZoo.....',
     '.......oooooo.......',
   ],
 

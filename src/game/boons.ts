@@ -82,7 +82,7 @@ export const BOONS: Record<string, Boon> = {
   },
   vampiric_edge: {
     id: 'vampiric_edge', rarity: 'rare',
-    name: 'Vampiric Edge', desc: 'Attacks heal the attacker for 25% of damage dealt.',
+    name: 'Vampiric Edge', desc: 'Physical damage heals the attacker for 25% of damage dealt.',
     lifesteal: 0.25,
   },
   deadly_precision: {

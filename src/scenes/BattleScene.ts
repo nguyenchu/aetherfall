@@ -3,7 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, SPELLS } from '../game/content';
-import { getArea, isRiftActive } from '../game/chapters';
+import { getArea, isRiftActive, TOTAL_CHAPTERS } from '../game/chapters';
 import { applyWipePenalty, ascend, completeQuest, getRun, getSave, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
@@ -36,8 +36,6 @@ interface BarSet {
 interface EnemyExtras {
   weakBadges: Phaser.GameObjects.Text[];
   pips: Phaser.GameObjects.Rectangle[];
-  intentBg: Phaser.GameObjects.Rectangle;
-  intentText: Phaser.GameObjects.Text;
   breakLabel: Phaser.GameObjects.Text;
   ailmentBadges: Record<Ailment, Phaser.GameObjects.Text>;
 }
@@ -50,13 +48,18 @@ interface PartyStatusRow {
   ailments: Record<Ailment, Phaser.GameObjects.Text>;
 }
 
-const ELEMENT_LETTER: Record<string, string> = { physical: 'P', fire: 'F', ice: 'I', holy: 'H' };
+const ELEMENT_LABEL: Record<string, string> = { physical: 'Physical', fire: 'Fire', ice: 'Ice', holy: 'Holy' };
 const ELEMENT_COLOR: Record<string, string> = {
   physical: '#e8ecff', fire: '#ff8a5a', ice: '#6cb8ff', holy: '#ffe07a',
 };
+// Fixed slot width wide enough for the longest label ("Physical") at the
+// badges' small font size, so positions stay simple/order-independent
+// instead of needing to pack around each other's actual text width.
+const ELEMENT_BADGE_SLOT = 40;
+const AILMENT_BADGE_SLOT = 32;
 
 const AILMENT_ORDER: Ailment[] = ['burn', 'chill', 'venom'];
-const AILMENT_LETTER: Record<Ailment, string> = { burn: 'B', chill: 'C', venom: 'V' };
+const AILMENT_LABEL: Record<Ailment, string> = { burn: 'Burn', chill: 'Chill', venom: 'Venom' };
 const AILMENT_COLOR: Record<Ailment, string> = { burn: '#ff8a5a', chill: '#6cb8ff', venom: '#8aff6c' };
 const AILMENT_TINT: Record<Ailment, number> = { burn: 0xff8a5a, chill: 0x6cb8ff, venom: 0x8aff6c };
 const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILLED!', venom: 'POISONED!' };
@@ -163,12 +166,14 @@ export class BattleScene extends Phaser.Scene {
 
     this.bindKeys();
     this.syncDisplay();
-    music.play('battle', getArea(run.depth).theme.id as AreaThemeId);
 
     // Bosses get a cinematic reveal before the battle proper begins; the CTB
     // loop is held (ui = 'busy' blocks input) until the reveal finishes so no
-    // turn resolves behind the overlay.
+    // turn resolves behind the overlay. They also get their own shared music
+    // track instead of the regional battle theme, so the fight itself reads
+    // as a step up the moment the reveal ends.
     const bossC = this.battle.enemies.find((e) => e.isBoss);
+    music.play(bossC ? 'boss' : 'battle', getArea(run.depth).theme.id as AreaThemeId);
     if (bossC) {
       this.ui = 'busy';
       this.playBossReveal(bossC, getArea(run.depth).theme.accent, () => {
@@ -189,6 +194,20 @@ export class BattleScene extends Phaser.Scene {
     tide_warden: 'Keeper of the Drowned Keep',
     ashbrand: 'The Ember That Will Not Die',
     prism_sovereign: 'Sovereign of the Shattered Depths',
+    galebrand: 'The Gale Undone',
+  };
+
+  /** Per-chapter flag/quest/win-script lookups, keyed by chapterOfDepth() —
+   * a single table instead of a hardcoded depth-ternary chain repeated at
+   * every call site, so it self-extends as chapters are added. */
+  private static readonly CHAPTER_FLAG: Record<number, string> = {
+    1: 'ch1_complete', 2: 'ch2_complete', 3: 'ch3_complete', 4: 'ch4_complete', 5: 'ch5_complete',
+  };
+  private static readonly CHAPTER_QUEST: Record<number, string> = {
+    1: 'clear_ch1', 2: 'clear_ch2', 3: 'defeat_ashbrand', 4: 'defeat_prism_sovereign', 5: 'defeat_galebrand',
+  };
+  private static readonly CHAPTER_WIN_SCRIPT: Record<number, string> = {
+    1: 'ch1_win', 2: 'ch2_win', 3: 'ch3_win', 4: 'ch4_win', 5: 'ch5_win',
   };
 
   /**
@@ -371,7 +390,7 @@ export class BattleScene extends Phaser.Scene {
 
       // Weakness badges to the right of the HP bar.
       const weakBadges = (e.weakness ?? []).map((el, i) =>
-        this.add.text(0, 0, ELEMENT_LETTER[el] ?? '?', sharpText({
+        this.add.text(0, 0, ELEMENT_LABEL[el] ?? '?', sharpText({
           fontFamily: FONT, fontSize: '8px', color: ELEMENT_COLOR[el] ?? '#dfe4f5', strokeThickness: 3,
         })).setOrigin(0.5).setDepth(8).setData('slot', i),
       );
@@ -380,19 +399,16 @@ export class BattleScene extends Phaser.Scene {
       for (let i = 0; i < (e.maxGuard ?? 0); i++) {
         pips.push(this.add.rectangle(0, 0, 5, 5, 0x6cd8f0, 0.95).setDepth(8).setStrokeStyle(1, 0x07141c, 1));
       }
-      // Intent chip to the right of the sprite.
-      const intentBg = this.add.rectangle(0, 0, 26, 14, 0x0d1024, 0.92).setDepth(9).setStrokeStyle(1, 0x2f3658, 0.9).setVisible(false);
-      const intentText = this.add.text(0, 0, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#ff8a5a', strokeThickness: 2 })).setOrigin(0.5).setDepth(10).setVisible(false);
       // BREAK label over the sprite.
       const breakLabel = this.add.text(0, 0, 'BREAK', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#ff5a6a', strokeThickness: 4 })).setOrigin(0.5).setDepth(11).setVisible(false);
-      // Ailment badges: small letters left of the HP bar (weaknesses sit right).
+      // Ailment badges: spelled-out names left of the HP bar (weaknesses sit right).
       const ailmentBadges = {} as Record<Ailment, Phaser.GameObjects.Text>;
       for (const a of AILMENT_ORDER) {
-        ailmentBadges[a] = this.add.text(0, 0, AILMENT_LETTER[a], sharpText({
+        ailmentBadges[a] = this.add.text(0, 0, AILMENT_LABEL[a], sharpText({
           fontFamily: FONT, fontSize: '8px', color: AILMENT_COLOR[a], strokeThickness: 3,
         })).setOrigin(0.5).setDepth(9).setVisible(false);
       }
-      this.enemyExtras.set(e.id, { weakBadges, pips, intentBg, intentText, breakLabel, ailmentBadges });
+      this.enemyExtras.set(e.id, { weakBadges, pips, breakLabel, ailmentBadges });
       this.layoutEnemyBar(e.id);
     }
   }
@@ -411,10 +427,13 @@ export class BattleScene extends Phaser.Scene {
       const name = this.add.text(statusX + 5, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 3 })).setDepth(16);
       const hpText = this.add.text(statusX + 58, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0a0', strokeThickness: 3 })).setDepth(16);
       const mpText = this.add.text(statusX + 126, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 3 })).setDepth(16);
-      // Ailment badges in the free space left of the HP bar row.
+      // Ailment badges in the free space left of the HP bar row — too little
+      // room here for a spelled-out name, so a plain colored dot (an icon,
+      // not shorthand text) stands in; the AILMENT_STAMP banner already
+      // spells the ailment out in full the moment it's applied.
       const ailments = {} as Record<Ailment, Phaser.GameObjects.Text>;
       AILMENT_ORDER.forEach((a, k) => {
-        ailments[a] = this.add.text(statusX + 6 + k * 11, barY, AILMENT_LETTER[a], sharpText({
+        ailments[a] = this.add.text(statusX + 6 + k * 11, barY, '●', sharpText({
           fontFamily: FONT, fontSize: '8px', color: AILMENT_COLOR[a], strokeThickness: 3,
         })).setOrigin(0, 0.5).setDepth(17).setVisible(false);
       });
@@ -493,43 +512,6 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  /** Shows each living enemy's telegraphed action next to its sprite. */
-  private renderIntents() {
-    for (const e of this.battle.enemies) {
-      const ex = this.enemyExtras.get(e.id);
-      if (!ex) continue;
-      if (e.stats.hp <= 0 || e.broken || !e.intent) {
-        ex.intentBg.setVisible(false);
-        ex.intentText.setVisible(false);
-        continue;
-      }
-      const { glyph, color } = this.intentGlyph(e.intent);
-      ex.intentText.setText(glyph).setColor(color).setVisible(true);
-      ex.intentBg.setVisible(true);
-      ex.intentBg.width = ex.intentText.width + 10;
-    }
-    this.layoutAllEnemyUi();
-  }
-
-  private intentGlyph(cmd: Command): { glyph: string; color: string } {
-    switch (cmd.type) {
-      case 'attack': {
-        const target = this.battle.byId(cmd.targetId);
-        return { glyph: `⚔${target ? ' ' + target.name[0] : ''}`, color: '#ff8a5a' };
-      }
-      case 'spell': {
-        const spell = SPELLS[cmd.spellId];
-        if (spell?.kind === 'heal') return { glyph: '✚', color: '#7df0a0' };
-        const target = this.battle.byId(cmd.targetId);
-        return { glyph: `✦${target ? ' ' + target.name[0] : ''}`, color: '#b28cff' };
-      }
-      case 'phase':
-        return { glyph: '!!', color: '#ff4455' };
-      default:
-        return { glyph: '…', color: '#8a93b8' };
-    }
-  }
-
   // --- Command Phase --------------------------------------------------------
 
   /** Advances the CTB queue to the next actor and either opens their command
@@ -542,7 +524,6 @@ export class BattleScene extends Phaser.Scene {
       if (this.syncAndCheckEnd()) return;
       if (!needsCommand) { this.advance(); return; }
       this.renderQueue();
-      this.renderIntents();
       if (actor.side === 'party') this.openMenu();
       else this.runEnemyTurn(actor);
     });
@@ -579,10 +560,16 @@ export class BattleScene extends Phaser.Scene {
       { label: 'Flee', action: 'flee', enabled: true },
     ];
     // A full gauge (see battle.ts LIMIT_MAX) surfaces the ultimate as the
-    // first, most prominent option rather than just another row at the end.
+    // first, most prominent option rather than just another row at the end —
+    // but the cursor still opens on Attack (index 1, not 0), so a player who
+    // spam-confirms through ordinary turns can't accidentally blow a hard-won
+    // Limit Break the instant it fills. It's still one press away either way:
+    // tap the glowing row directly, arrow up to it then confirm, or press ▶
+    // from anywhere in this menu (see bindKeys' 'right' handler).
     const limitReady = (m.limit ?? 0) >= 100;
     if (limitReady) {
-      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}`, action: 'limit', enabled: true });
+      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}  ▶`, action: 'limit', enabled: true });
+      this.menuIndex = 1;
     }
     // The very first time any gauge fills, explain the mechanic before the
     // menu opens — otherwise it's just a glowing row with no introduction.
@@ -625,7 +612,7 @@ export class BattleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '13px', color: '#ffe27a', strokeThickness: 4, align: 'center',
     })).setOrigin(0.5).setDepth(81).setScale(1.3).setAlpha(0);
     const body = this.add.text(x + W / 2, y + 42,
-      `${actor.name} has weathered enough to unleash ${limitBreakName(actor.id)} — free of MP cost. Taking damage (and fighting on) fills the gauge; watch for the gold bar under each ally's name.`,
+      `${actor.name} has weathered enough to unleash ${limitBreakName(actor.id)} — free of MP cost. Taking damage (and fighting on) fills the gauge; watch for the gold bar under each ally's name. Press ▶ on any of their turns to unleash it instantly.`,
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2, align: 'center', lineSpacing: 4, wordWrap: { width: W - 34 } }),
     ).setOrigin(0.5, 0).setDepth(81).setAlpha(0);
     const hint = this.add.text(x + W / 2, y + H - 14, 'Z / tap to continue', sharpText({
@@ -703,18 +690,18 @@ export class BattleScene extends Phaser.Scene {
       const t = this.add.text(16, GAME.height - 92 + i * 18, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
       if (o.element) {
-        // Same element badge used on enemies (ELEMENT_LETTER/ELEMENT_COLOR),
+        // Same element badge used on enemies (ELEMENT_LABEL/ELEMENT_COLOR),
         // so a glance at the spell list matches what you already see on
         // their HP bars. A star + gold flags a current weakness match.
         const badgeColor = o.weak ? '#f0d36c' : (ELEMENT_COLOR[o.element] ?? '#dfe4f5');
-        const badgeText = (o.weak ? '✦' : '') + (ELEMENT_LETTER[o.element] ?? '?');
+        const badgeText = (o.weak ? '✦' : '') + (ELEMENT_LABEL[o.element] ?? '?');
         const badge = this.add.text(178, GAME.height - 91 + i * 18, badgeText, sharpText({
           fontFamily: FONT, fontSize: '8px', color: badgeColor, strokeThickness: 2,
         })).setDepth(16);
         this.menuText.push(badge);
       }
       if (o.desc) {
-        const d = this.add.text(200, GAME.height - 90 + i * 18, o.desc, sharpText({ fontFamily: FONT, fontSize: '8px', color: o.enabled ? '#8fa8c8' : '#4a5070', strokeThickness: 2 })).setDepth(16);
+        const d = this.add.text(234, GAME.height - 90 + i * 18, o.desc, sharpText({ fontFamily: FONT, fontSize: '8px', color: o.enabled ? '#8fa8c8' : '#4a5070', strokeThickness: 2 })).setDepth(16);
         this.menuText.push(d);
       }
     });
@@ -759,7 +746,10 @@ export class BattleScene extends Phaser.Scene {
     this.unsubs.push(input.on('up', () => this.nav(-1)));
     this.unsubs.push(input.on('down', () => this.nav(1)));
     this.unsubs.push(input.on('left', () => this.navTarget(-1)));
-    this.unsubs.push(input.on('right', () => this.navTarget(1)));
+    this.unsubs.push(input.on('right', () => {
+      if (this.tryLimitBreak()) return;
+      this.navTarget(1);
+    }));
     this.unsubs.push(input.on('confirm', () => this.confirm()));
     this.unsubs.push(input.on('cancel', () => this.cancel()));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
@@ -779,6 +769,19 @@ export class BattleScene extends Phaser.Scene {
       this.navTarget(dir);
       sfx.play('cursor');
     }
+  }
+
+  /** Right-press shortcut: fires the active actor's Limit Break immediately
+   *  from anywhere in the top-level command menu, regardless of which row
+   *  the cursor is actually sitting on. Returns false (a no-op) so the
+   *  caller can fall back to the ordinary target-cycling 'right' does
+   *  everywhere else. */
+  private tryLimitBreak(): boolean {
+    if (this.ui !== 'menu') return false;
+    if ((this.activeActor.limit ?? 0) < 100) return false;
+    sfx.play('confirm');
+    this.commit({ type: 'limit' });
+    return true;
   }
 
   private navTarget(dir: number) {
@@ -1020,7 +1023,11 @@ export class BattleScene extends Phaser.Scene {
   private runAction(cmd: Command) {
     const actor = this.activeActor;
     this.ui = 'busy';
-    this.returnAllHeroesHome();
+    // An attack reads better as one continuous forward motion — from
+    // "stepped up to act" straight into the strike — instead of snapping
+    // home first and then re-lunging; every other action still returns the
+    // actor home immediately as before.
+    this.returnAllHeroesHome(cmd.type === 'attack' ? actor.id : undefined);
     this.cursor.setVisible(false);
     this.targetFrame.setVisible(false);
     this.clearMenuText();
@@ -1044,6 +1051,32 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     const ev = events[i];
+    // A run of consecutive `parallel` events — one action hitting several
+    // targets at once, e.g. a boss's AoE phase move raking the whole party —
+    // plays and lands together instead of one target at a time with a gap
+    // between each, so "everyone gets hit at once" actually reads that way.
+    if (ev.parallel) {
+      let j = i;
+      while (j < events.length && events[j].parallel) j++;
+      for (let k = i; k < j; k++) this.processEvent(events[k]);
+      this.refreshStatus();
+      const base = 460;
+      const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
+      this.time.delayedCall(delay, () => this.playEvents(events, j, onDone));
+      return;
+    }
+    this.processEvent(ev);
+    this.refreshStatus();
+    // Hold confirm to fast-forward the round.
+    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : ev.kind === 'ailment' ? 560 : 460;
+    const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
+    this.time.delayedCall(delay, () => this.playEvents(events, i + 1, onDone));
+  }
+
+  /** Logs, animates, and applies the display state for a single event —
+   *  shared by playEvents' normal one-at-a-time path and its parallel-batch
+   *  path, which calls this once per event in the batch before refreshing. */
+  private processEvent(ev: BattleEvent) {
     this.pushLog(ev.text);
     this.animateEvent(ev);
     if (ev.kind === 'attack') sfx.play('hit');
@@ -1074,12 +1107,6 @@ export class BattleScene extends Phaser.Scene {
       const img = this.sprites.get(ev.targetId);
       if (revived && img && revived.stats.hp > 0 && img.alpha < 1) this.reviveSprite(ev.targetId);
     }
-
-    this.refreshStatus();
-    // Hold confirm to fast-forward the round.
-    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : ev.kind === 'ailment' ? 560 : 460;
-    const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
-    this.time.delayedCall(delay, () => this.playEvents(events, i + 1, onDone));
   }
 
   /**
@@ -1093,7 +1120,7 @@ export class BattleScene extends Phaser.Scene {
     if (snaps.length === 0) { onDone(); return; }
     const W = 220;
     const rowH = 28;
-    const padTop = 22;
+    const padTop = 34;
     const H = padTop + snaps.length * rowH + 14;
     const x = GAME.width / 2 - W / 2;
     const y = 50;
@@ -1101,8 +1128,9 @@ export class BattleScene extends Phaser.Scene {
     const objs: Phaser.GameObjects.GameObject[] = [];
     const panel = this.add.rectangle(x, y, W, H, 0x0d1024, 0.95).setOrigin(0, 0).setDepth(70).setStrokeStyle(1, 0x2f3658, 0.95);
     const title = this.add.text(x + W / 2, y + 9, 'EXPERIENCE', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(0.5).setDepth(71);
+    const gold = this.add.text(x + W / 2, y + 20, `+${this.battle.goldWon} Gold`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c', strokeThickness: 2 })).setOrigin(0.5).setDepth(71);
     const hint = this.add.text(x + W / 2, y + H - 9, 'Z / tap to skip', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })).setOrigin(0.5).setDepth(71);
-    objs.push(panel, title, hint);
+    objs.push(panel, title, gold, hint);
 
     const rows = snaps.map((s, i) => {
       const ry = y + padTop + i * rowH;
@@ -1241,12 +1269,12 @@ export class BattleScene extends Phaser.Scene {
     }
 
     let firstClear = false;
+    const chapter = chapterOfDepth(depth);
     if (boss) {
-      const flag = depth <= 2 ? 'ch1_complete' : depth <= 4 ? 'ch2_complete' : depth <= 6 ? 'ch3_complete' : 'ch4_complete';
+      const flag = BattleScene.CHAPTER_FLAG[chapter];
       firstClear = !hasFlag(flag);
       setFlag(flag);
-      const questId = flag === 'ch1_complete' ? 'clear_ch1' : flag === 'ch2_complete' ? 'clear_ch2'
-        : flag === 'ch3_complete' ? 'defeat_ashbrand' : 'defeat_prism_sovereign';
+      const questId = BattleScene.CHAPTER_QUEST[chapter];
       const completedQuest = completeQuest(questId);
       if (completedQuest) this.pushLog(`Quest complete: ${completedQuest.title} — ${questRewardText(completedQuest)}`);
       track('chapter_clear', { ch: chapterOfDepth(depth), d: depth });
@@ -1257,12 +1285,12 @@ export class BattleScene extends Phaser.Scene {
 
     if (boss) {
       this.time.delayedCall(1000, () => {
-        const winScript = depth <= 2 ? 'ch1_win' : depth <= 4 ? 'ch2_win' : depth <= 6 ? 'ch3_win' : 'ch4_win';
+        const winScript = BattleScene.CHAPTER_WIN_SCRIPT[chapter];
         // The full ending + feedback prompt is a one-time capstone for the
-        // first-ever Prism Sovereign kill. Later kills (Ascension replays)
-        // still get the win dialogue, just not the "you finished the game"
-        // ceremony again.
-        const isFinalBossFirstClear = depth > 6 && firstClear;
+        // first-ever kill of the current final chapter's boss. Later kills
+        // (Ascension replays) still get the win dialogue, just not the
+        // "you finished the game" ceremony again.
+        const isFinalBossFirstClear = chapter >= TOTAL_CHAPTERS && firstClear;
         if (isFinalBossFirstClear) track('game_complete', { d: depth });
         // After the ending plays, prompt for feedback once — beating the game
         // is the single highest-signal moment to ask "how was the journey?".
@@ -1457,7 +1485,7 @@ export class BattleScene extends Phaser.Scene {
       ease: 'Sine.easeOut', onComplete: () => txt.destroy(),
     });
     if (crit || weak) {
-      const tag = this.add.text(img.x, img.y - 34, crit ? 'CRIT!' : 'WEAK', sharpText({
+      const tag = this.add.text(img.x, img.y - 34, crit ? 'CRITICAL!' : 'WEAK', sharpText({
         fontFamily: FONT, fontSize: '9px', color: crit ? '#ffd34d' : '#ffa03c', strokeThickness: 3,
       })).setOrigin(0.5, 1).setDepth(40);
       this.tweens.add({ targets: tag, y: tag.y - 14, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => tag.destroy() });
@@ -1884,9 +1912,11 @@ export class BattleScene extends Phaser.Scene {
   private playPhaseTransition(bossId?: string) {
     // Full-screen flash + heavy shake
     const bossColors: Record<string, number> = {
-      forest_shade: 0x220033,
-      tide_warden:  0x003344,
-      ashbrand:     0x440800,
+      forest_shade:    0x220033,
+      tide_warden:     0x003344,
+      ashbrand:        0x440800,
+      prism_sovereign: 0x2a0a44,
+      galebrand:       0x223344,
     };
     const color = bossId ? (bossColors[bossId] ?? 0x111122) : 0x111122;
     const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, color, 0.85)
@@ -1961,20 +1991,12 @@ export class BattleScene extends Phaser.Scene {
     const pipCount = ex.pips.length;
     const pipsW = pipCount * 7 - 2;
     ex.pips.forEach((p, i) => p.setPosition(img.x - pipsW / 2 + i * 7 + 2, y + 7));
-    // Weakness badges: small letters to the right of the HP bar.
-    ex.weakBadges.forEach((b, i) => b.setPosition(img.x + bar.bg.width / 2 + 8 + i * 9, y));
+    // Weakness badges: spelled-out element names to the right of the HP bar.
+    ex.weakBadges.forEach((b, i) => b.setPosition(img.x + bar.bg.width / 2 + 8 + i * ELEMENT_BADGE_SLOT, y));
     // Ailment badges: mirrored on the left side of the HP bar.
-    AILMENT_ORDER.forEach((a, i) => ex.ailmentBadges[a].setPosition(img.x - bar.bg.width / 2 - 8 - i * 9, y));
-    // Intent chip: floating to the right of the sprite.
-    const ix = img.x + img.displayWidth / 2 + 18;
-    ex.intentBg.setPosition(ix, img.y - 8);
-    ex.intentText.setPosition(ix, img.y - 8);
+    AILMENT_ORDER.forEach((a, i) => ex.ailmentBadges[a].setPosition(img.x - bar.bg.width / 2 - 8 - i * AILMENT_BADGE_SLOT, y));
     // BREAK label above the sprite center.
     ex.breakLabel.setPosition(img.x, img.y - 2);
-  }
-
-  private layoutAllEnemyUi() {
-    for (const e of this.battle.enemies) this.layoutEnemyBar(e.id);
   }
 
   private refreshStatus() {
@@ -1984,8 +2006,8 @@ export class BattleScene extends Phaser.Scene {
       const row = this.partyStatusRows.get(c.id);
       if (!row) continue;
       const dead = hp <= 0;
-      row.name.setText(`${c.name} L${c.level ?? 1}`).setColor(dead ? '#ff5a6a' : '#dfe4f5');
-      row.hp.setText(dead ? `KO ${hp}/${c.stats.maxHp}` : `HP ${hp}/${c.stats.maxHp}`);
+      row.name.setText(`${c.name} Lv${c.level ?? 1}`).setColor(dead ? '#ff5a6a' : '#dfe4f5');
+      row.hp.setText(dead ? `Fallen ${hp}/${c.stats.maxHp}` : `HP ${hp}/${c.stats.maxHp}`);
       row.hp.setColor(dead ? '#ff5a6a' : '#6cf0a0');
       row.mp.setText(c.stats.maxMp > 0 ? `MP ${mp}/${c.stats.maxMp}` : '');
       row.bg.setAlpha(dead ? 0.38 : 0.7);
@@ -2011,7 +2033,7 @@ export class BattleScene extends Phaser.Scene {
       bar.fill.setScale(pct, 1);
       bar.bg.setAlpha(hp > 0 ? 0.88 : 0.28);
       bar.fill.setAlpha(hp > 0 ? 0.96 : 0);
-      bar.label?.setText(hp > 0 ? `${e.name} ${hp}/${e.stats.maxHp}` : `${e.name} KO`);
+      bar.label?.setText(hp > 0 ? `${e.name} ${hp}/${e.stats.maxHp}` : `${e.name} — Fallen`);
 
       const ex = this.enemyExtras.get(e.id);
       if (!ex) continue;
@@ -2024,7 +2046,7 @@ export class BattleScene extends Phaser.Scene {
       ex.weakBadges.forEach((b, i) => {
         const el = weakness[i];
         b.setVisible(!dead && el != null);
-        if (el != null) b.setText(ELEMENT_LETTER[el] ?? '?').setColor(ELEMENT_COLOR[el] ?? '#dfe4f5');
+        if (el != null) b.setText(ELEMENT_LABEL[el] ?? '?').setColor(ELEMENT_COLOR[el] ?? '#dfe4f5');
       });
       for (const a of AILMENT_ORDER) {
         ex.ailmentBadges[a].setVisible(!dead && (e.ailments?.[a] ?? 0) > 0);
@@ -2036,8 +2058,6 @@ export class BattleScene extends Phaser.Scene {
       });
       if (dead) {
         ex.breakLabel.setVisible(false);
-        ex.intentBg.setVisible(false);
-        ex.intentText.setVisible(false);
       } else if (e.broken) {
         if (!ex.breakLabel.visible) {
           ex.breakLabel.setVisible(true).setAlpha(1);

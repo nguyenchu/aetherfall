@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { rarityColor, type Boon } from '../game/boons';
-import { addBoon, getRun, saveProgress } from '../game/run';
+import { addBoon } from '../game/run';
 import { input, isTouchDevice } from '../game/input';
 import { sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -12,11 +12,9 @@ interface BoonPickData {
   onDone: () => void;
 }
 
-const SKIP_GOLD = 10;
-
 /**
  * Post-battle boon chooser: three cards, pick one blessing for the rest of
- * the run. Left/right + confirm, or tap a card. Cancel skips for a little gold.
+ * the run. Left/right + confirm, or tap a card. No cancel — a boon must be chosen.
  */
 export class BoonScene extends Phaser.Scene {
   private choices: Boon[] = [];
@@ -94,11 +92,6 @@ export class BoonScene extends Phaser.Scene {
       this.cards.push({ frame, glow, name });
     });
 
-    const skipHint = isTouchDevice() ? 'or tap here to skip' : 'X: skip';
-    const skip = this.add.text(GAME.width / 2, top + cardH + 34, `${skipHint}  (+${SKIP_GOLD} gold)`, sharpText({
-      fontFamily: FONT, fontSize: '9px', color: '#8a93b8',
-    })).setOrigin(0.5).setDepth(2).setInteractive({ useHandCursor: true });
-    skip.on('pointerdown', () => this.skip());
     if (!isTouchDevice()) {
       this.add.text(GAME.width / 2, top + cardH + 20, '< >  choose   Z  take', sharpText({
         fontFamily: FONT, fontSize: '9px', color: '#6cf0c2',
@@ -110,7 +103,6 @@ export class BoonScene extends Phaser.Scene {
     this.unsubs.push(input.on('up', () => this.move(-1)));
     this.unsubs.push(input.on('down', () => this.move(1)));
     this.unsubs.push(input.on('confirm', () => this.choose()));
-    this.unsubs.push(input.on('cancel', () => this.skip()));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
 
     this.updateSelection();
@@ -146,15 +138,6 @@ export class BoonScene extends Phaser.Scene {
     const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0.18).setOrigin(0, 0).setDepth(10);
     this.tweens.add({ targets: flash, alpha: 0, duration: 350 });
     this.time.delayedCall(420, () => this.finish());
-  }
-
-  private skip() {
-    if (this.done) return;
-    this.done = true;
-    getRun().gold += SKIP_GOLD;
-    saveProgress();
-    sfx.play('cancel');
-    this.finish();
   }
 
   private finish() {

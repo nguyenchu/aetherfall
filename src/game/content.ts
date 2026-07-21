@@ -53,6 +53,17 @@ export const SPELLS: Record<string, Spell> = {
     id: 'cureall', name: 'Sunward', cost: 9, kind: 'heal', power: 16,
     element: 'none', target: 'party', desc: 'Heals the whole party.',
   },
+  haste: {
+    id: 'haste', name: 'Dawnrush', cost: 6, kind: 'buff', power: 0,
+    element: 'none', target: 'ally', desc: 'Quickens an ally’s next turns.',
+    haste: { mult: 1.6, turns: 3 },
+  },
+  // Enemy-only support: a lighter mend than Mira's, so a healer trash mob
+  // doesn't out-sustain the party — used by Squall Wisp (chapters.ts).
+  squall_mend: {
+    id: 'squall_mend', name: 'Squall\'s Grace', cost: 7, kind: 'heal', power: 12,
+    element: 'none', target: 'ally', desc: 'A gust knits a packmate\'s wounds.',
+  },
   // Kael — Aetherblade: fast physical pressure and guard breaking.
   bash: {
     id: 'bash', name: 'Guardbreak', cost: 3, kind: 'damage', power: 18,
@@ -205,6 +216,15 @@ export const ITEMS: Record<string, Item> = {
     sellPrice: 25,
     description: 'A shard split from a living geode.',
   },
+  storm_shard: {
+    id: 'storm_shard',
+    name: 'Storm Shard',
+    kind: 'sell',
+    power: 0,
+    target: 'none',
+    sellPrice: 30,
+    description: 'A fragment of glass fused mid-strike, still faintly charged.',
+  },
   warden_sigils: {
     id: 'warden_sigils',
     name: 'Warden Sigils',
@@ -254,7 +274,7 @@ export function makeParty(): Combatant[] {
       color: C.cleric, size: 21, spells: ['cure', 'smite'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 44, maxMp: 14, str: 9, agi: 7, vit: 8, int: 11 }),
       growth: { maxHp: 7, maxMp: 3, int: 2, str: 1, vit: 1, agi: 1 },
-      learnset: { 5: ['cureall'] },
+      learnset: { 3: ['haste'], 5: ['cureall'] },
     },
   ];
 }
