@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS } from '../config';
 import { buildCharacterSprites, paintPixelGrid } from '../art/sprites';
+import { buildBossSprites } from '../art/bossSprites';
 import { cobbleFloor, stoneWall, aetherGlow } from '../art/tiles';
 import { ITEMS } from '../game/content';
 import { EQUIPMENT } from '../game/equipment';
@@ -32,6 +33,9 @@ export class BootScene extends Phaser.Scene {
     paintPixelGrid(this, 'wall', stoneWall(COLORS.wall, 15));
     paintPixelGrid(this, 'aether', aetherGlow());
 
+    // Boss silhouettes first (own geometry) so buildCharacterSprites skips
+    // the now-superseded shared-template entries still in spriteData.ts.
+    buildBossSprites(this);
     // Pixel sprites for the hero, party, and enemies.
     buildCharacterSprites(this);
     this.buildItemIcons();

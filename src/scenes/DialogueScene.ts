@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
-import { SCRIPTS } from '../game/dialogue';
+import { SCRIPTS, SPEAKER_PORTRAIT } from '../game/dialogue';
 import { input } from '../game/input';
 import { sharpText, FONT } from '../ui/text';
 import type { DialogueLine, DialogueVisual, Script } from '../game/dialogue';
@@ -126,8 +126,13 @@ export class DialogueScene extends Phaser.Scene {
     this.portraitImg = undefined;
     const narration = !line.speaker;
     this.box.setVisible(!narration);
-    if (!narration && line.portrait && this.textures.exists(line.portrait)) {
-      this.portraitImg = this.add.image(43, this.portraitY, line.portrait).setDepth(2).setDisplaySize(52, 52);
+    // Falls back to a default portrait for the named speaker (see
+    // dialogue.ts SPEAKER_PORTRAIT) so NPC scripts don't need to repeat a
+    // texture key on every single line — only Kael/Lyra/Mira's painted
+    // portraits and any one-off override bother setting `portrait` directly.
+    const portraitKey = line.portrait ?? (line.speaker ? SPEAKER_PORTRAIT[line.speaker] : undefined);
+    if (!narration && portraitKey && this.textures.exists(portraitKey)) {
+      this.portraitImg = this.add.image(43, this.portraitY, portraitKey).setDepth(2).setDisplaySize(52, 52);
       this.portrait.setVisible(true);
       this.setPortraitRing(line.color);
     } else if (!narration && line.color != null) {

@@ -147,6 +147,10 @@ export interface Combatant {
   // Sanctuary (run.ts restoreParty) — so it can be built up over a floor and
   // unleashed on a tough fight.
   limit?: number;
+  // Party-only damage-taken shield (e.g. Kael's "Warden's Bulwark" Limit
+  // Break) — mirrors SpeedStatus's shape/decay: ticks down on the bearer's
+  // own next turn (tickOwnStatuses), read back in computeHit().
+  dmgTakenStatus?: { mult: number; turns: number };
 }
 
 export type Command =
@@ -156,7 +160,7 @@ export type Command =
   | { type: 'defend' }
   | { type: 'flee' }
   | { type: 'phase' }
-  | { type: 'limit' };
+  | { type: 'limit'; limitId: string };
 
 export type EventKind =
   | 'attack'

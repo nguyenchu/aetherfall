@@ -51,6 +51,16 @@ const MOMENTUM_MAX_STACKS = 5;
 const LIMIT_MAX = 100;
 const LIMIT_TAKEN_SCALE = 1.4;
 const LIMIT_ACT_GAIN = 4;
+// Kael's "Warden's Bulwark" Limit Break: party-wide damage-taken shield.
+const BULWARK_MULT = 0.5;
+const BULWARK_TURNS = 3;
+// Lyra's "Frostbind Eclipse" Limit Break: a weaker Cataclysm that chills
+// the whole enemy side instead of just hurting it.
+const FROSTBIND_SCALE = 1.4;
+const FROSTBIND_CHILL_TURNS = 2;
+// Mira's "Dawnbreaker Judgment" Limit Break: the offensive counterpart to
+// Aegis of Dawn — holy AoE instead of a full-party heal/revive/cleanse.
+const JUDGMENT_SCALE = 2.0;
 
 // --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
 // Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
@@ -209,12 +219,16 @@ export class Battle {
     return events;
   }
 
-  /** Non-mutating: the next `steps` actors in queue order, for UI preview. */
-  previewQueue(steps: number): Combatant[] {
+  /** Non-mutating: the next `steps` actors in queue order, for UI preview.
+   *  `hypothetical` layers an extra speed multiplier onto one combatant
+   *  without touching real state — lets the UI show what the order would
+   *  look like if a pending Haste/Slow cast actually landed, while the
+   *  player is still choosing a target (see BattleScene.renderTargetModal). */
+  previewQueue(steps: number, hypothetical?: { id: string; speedMult: number }): Combatant[] {
     const entries: ReadinessEntry[] = this.living('party').concat(this.living('enemy')).map((c) => ({
       id: c.id,
       readiness: c.readiness ?? 0,
-      speed: this.effectiveSpeed(c),
+      speed: this.effectiveSpeed(c) * (hypothetical && c.id === hypothetical.id ? hypothetical.speedMult : 1),
     }));
     const order: Combatant[] = [];
     for (let i = 0; i < steps && entries.length > 0; i++) {
@@ -302,6 +316,10 @@ export class Battle {
         if (status.turns - 1 <= 0) delete actor.speedStatuses[source];
         else actor.speedStatuses[source] = { ...status, turns: status.turns - 1 };
       }
+    }
+    if (actor.dmgTakenStatus) {
+      if (actor.dmgTakenStatus.turns - 1 <= 0) actor.dmgTakenStatus = undefined;
+      else actor.dmgTakenStatus = { ...actor.dmgTakenStatus, turns: actor.dmgTakenStatus.turns - 1 };
     }
   }
 
@@ -407,7 +425,7 @@ export class Battle {
       case 'limit': {
         if ((actor.limit ?? 0) < LIMIT_MAX) return; // menu shouldn't offer it otherwise
         actor.limit = 0;
-        this.executeLimitBreak(actor, events);
+        this.executeLimitBreak(actor, cmd.limitId, events);
         return;
       }
     }
@@ -425,9 +443,13 @@ export class Battle {
     return { dmg: Math.max(1, Math.round(dmg)), weak };
   }
 
-  private executeLimitBreak(actor: Combatant, events: BattleEvent[]): void {
-    switch (actor.id) {
-      case 'kael': {
+  /** Dispatches on the move's own id (unique across the whole roster) rather
+   *  than actor.id — each party member offers two (see content.ts
+   *  LIMIT_BREAKS): one offensive, one defensive/control, chosen in the
+   *  BattleScene submenu once the gauge is full. */
+  private executeLimitBreak(actor: Combatant, limitId: string, events: BattleEvent[]): void {
+    switch (limitId) {
+      case 'requiem': {
         const target = this.living('enemy')[0];
         if (!target) return;
         events.push({ kind: 'limit', text: `Kael unleashes AETHERBLADE REQUIEM!`, actorId: actor.id });
@@ -446,7 +468,15 @@ export class Battle {
         this.maybeKo(target, events);
         return;
       }
-      case 'lyra': {
+      case 'bulwark': {
+        events.push({ kind: 'limit', text: `Kael unleashes WARDEN'S BULWARK!`, actorId: actor.id });
+        for (const t of this.living('party')) {
+          t.dmgTakenStatus = { mult: BULWARK_MULT, turns: BULWARK_TURNS };
+          events.push({ kind: 'info', text: `${t.name} is shielded!`, targetId: t.id, parallel: true });
+        }
+        return;
+      }
+      case 'cataclysm': {
         events.push({ kind: 'limit', text: `Lyra unleashes CATACLYSM!`, actorId: actor.id });
         for (const target of this.living('enemy')) {
           const hit = this.limitDamage(target, actor.stats.int * 2.6, 'none');
@@ -459,7 +489,21 @@ export class Battle {
         }
         return;
       }
-      case 'mira': {
+      case 'frostbind': {
+        events.push({ kind: 'limit', text: `Lyra unleashes FROSTBIND ECLIPSE!`, actorId: actor.id });
+        for (const target of this.living('enemy')) {
+          const hit = this.limitDamage(target, actor.stats.int * FROSTBIND_SCALE, 'none');
+          this.applyDamage(target, hit.dmg);
+          events.push({
+            kind: 'spell', text: `${target.name} is chilled! −${hit.dmg}`,
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'none', spellId: 'frostbind', parallel: true,
+          });
+          this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: FROSTBIND_CHILL_TURNS }, events, true, true);
+          this.maybeKo(target, events, true);
+        }
+        return;
+      }
+      case 'aegis': {
         events.push({ kind: 'limit', text: `Mira unleashes AEGIS OF DAWN!`, actorId: actor.id });
         for (const t of this.party) {
           if (t.stats.hp <= 0) {
@@ -481,6 +525,19 @@ export class Battle {
             t.ailments = undefined;
             events.push({ kind: 'info', text: `${t.name} is cleansed of ailments.`, targetId: t.id, parallel: true });
           }
+        }
+        return;
+      }
+      case 'judgment': {
+        events.push({ kind: 'limit', text: `Mira unleashes DAWNBREAKER JUDGMENT!`, actorId: actor.id });
+        for (const target of this.living('enemy')) {
+          const hit = this.limitDamage(target, actor.stats.int * JUDGMENT_SCALE, 'holy');
+          this.applyDamage(target, hit.dmg);
+          events.push({
+            kind: 'spell', text: `${target.name} is smitten! −${hit.dmg}${hit.weak ? ' Weak!' : ''}`,
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'holy', spellId: 'judgment', weak: hit.weak, parallel: true,
+          });
+          this.maybeKo(target, events, true);
         }
         return;
       }
@@ -795,6 +852,9 @@ export class Battle {
     // Prism ward: this element barely scratches it — switch to another school.
     if (target.wardElement && element !== 'none' && element === target.wardElement) dmg *= WARD_MULT;
     if (target.defending) dmg *= element === 'physical' ? 0.5 : 0.75;
+    // Warden's Bulwark: Kael's Limit Break shields the whole party for a
+    // few turns (see executeLimitBreak/tickOwnStatuses).
+    if (target.dmgTakenStatus) dmg *= target.dmgTakenStatus.mult;
     return { dmg: Math.max(1, Math.round(dmg)), crit, weak };
   }
 

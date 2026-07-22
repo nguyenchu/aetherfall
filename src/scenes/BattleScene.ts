@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
-import { ITEMS, SPELLS } from '../game/content';
+import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
 import { getArea, isRiftActive, TOTAL_CHAPTERS } from '../game/chapters';
 import { applyWipePenalty, ascend, completeQuest, getRun, getSave, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
@@ -17,14 +17,15 @@ import type { Ailment, BattleEvent, Combatant, Command, Element } from '../game/
 type UIState = 'menu' | 'target' | 'submenu' | 'subtarget' | 'busy' | 'over';
 
 interface PendingAction {
-  kind: 'attack' | 'spell' | 'item';
-  id?: string; // spell or item id
+  kind: 'attack' | 'spell' | 'item' | 'limit';
+  id?: string; // spell, item, or limit break id
 }
 
 interface MenuOption {
   label: string;
   action: 'attack' | 'magic' | 'item' | 'defend' | 'flee' | 'limit';
   enabled: boolean;
+  desc?: string;
 }
 
 interface BarSet {
@@ -69,6 +70,18 @@ const AILMENT_LABEL: Record<Ailment, string> = { burn: 'Burn', chill: 'Chill', v
 const AILMENT_COLOR: Record<Ailment, string> = { burn: '#ff8a5a', chill: '#6cb8ff', venom: '#8aff6c' };
 const AILMENT_TINT: Record<Ailment, number> = { burn: 0xff8a5a, chill: 0x6cb8ff, venom: 0x8aff6c };
 const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILLED!', venom: 'POISONED!' };
+
+// Bosses get their own display scale (see placeSide) — noticeably larger
+// than any elite/trash mob, on top of their already-bigger hand-drawn
+// sprite grid (see spriteData.ts).
+const BOSS_SCALE = 3.4;
+
+function lighten(color: number, amt: number): number {
+  const r = Math.min(255, ((color >> 16) & 0xff) + amt);
+  const g = Math.min(255, ((color >> 8) & 0xff) + amt);
+  const b = Math.min(255, (color & 0xff) + amt);
+  return (r << 16) | (g << 8) | b;
+}
 
 /**
  * Battle presentation layer. Drives the Battle engine by collecting commands
@@ -325,6 +338,9 @@ export class BattleScene extends Phaser.Scene {
 
   private buildSprites() {
     for (const c of this.battle.all()) {
+      // Named combatants already have hand-drawn textures baked at boot
+      // (see art/sprites.ts buildCharacterSprites) — this is only a
+      // fallback for anything without one.
       if (!this.textures.exists(c.spriteKey)) {
         const g = this.add.graphics();
         g.fillStyle(c.color, 1);
@@ -349,7 +365,14 @@ export class BattleScene extends Phaser.Scene {
     const fromOffset = x < GAME.width / 2 ? -46 : 46;
     list.forEach((c, i) => {
       const homeY = startY + i * spacing;
-      const img = this.add.image(x + fromOffset, homeY, c.spriteKey).setScale(2.4).setDepth(5).setAlpha(0);
+      const img = this.add.image(x + fromOffset, homeY, c.spriteKey).setScale(c.isBoss ? BOSS_SCALE : 2.4).setDepth(5).setAlpha(0);
+      // Non-boss enemies share a handful of sprite keys across the whole
+      // bestiary (e_warden, e_sprite, etc.) — each monster's own `color`
+      // (chapters.ts) recolors that shared shape via tint so, say, a Pyre
+      // Colossus doesn't render pixel-identical to a Keep Sentinel. Bosses
+      // skip this: their sprite already bakes in the final color (see
+      // art/bossSprites.ts), and party members keep their painted colors.
+      if (c.side === 'enemy' && !c.isBoss) img.setTint(c.color);
       this.sprites.set(c.id, img);
       this.spriteHome.set(c.id, { x, y: homeY });
       this.tweens.add({
@@ -370,13 +393,28 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  /** Elite ring + idle bob — started only once a combatant's entrance
-   *  slide-in has finished, so nothing floats or pulses mid-slide. */
+  /** Elite ring / boss halo + idle bob — started only once a combatant's
+   *  entrance slide-in has finished, so nothing floats or pulses mid-slide. */
   private startIdleMotion(img: Phaser.GameObjects.Image, c: Combatant, i: number) {
     if (c.isElite) {
       const ring = this.add.ellipse(img.x, img.y + img.displayHeight / 2 + 3, img.displayWidth + 18, 12)
         .setStrokeStyle(2, 0xffa03c, 0.8).setDepth(4);
       this.tweens.add({ targets: ring, alpha: { from: 0.85, to: 0.3 }, duration: 700, yoyo: true, repeat: -1 });
+    }
+    // Bosses get a standing radiant halo (not just the one-time reveal
+    // flash) — two soft rings in the boss's own color, breathing slowly, so
+    // the ongoing presence in battle still reads as something special.
+    if (c.isBoss) {
+      const glowColor = lighten(c.color, 120);
+      for (let ring = 0; ring < 2; ring++) {
+        const halo = this.add.circle(img.x, img.y, img.displayWidth / 2 + 6 + ring * 10, glowColor, 0.14 - ring * 0.04).setDepth(4);
+        this.tweens.add({
+          targets: halo,
+          alpha: { from: 0.14 - ring * 0.04, to: 0.04 },
+          scale: { from: 0.9, to: 1.15 },
+          duration: 1400 + ring * 300, yoyo: true, repeat: -1, delay: ring * 200, ease: 'Sine.easeInOut',
+        });
+      }
     }
     // Idle float — enemies and party members bob at slightly different speeds
     const dur = c.side === 'enemy' ? 1600 + i * 220 : 2000 + i * 180;
@@ -444,16 +482,16 @@ export class BattleScene extends Phaser.Scene {
     this.battle.party.forEach((c, i) => {
       const statusX = GAME.width - 196;
       const rowTop = GAME.height - 99 + i * 30;
-      const barY = rowTop + 22;
+      const barY = rowTop + 24;
 
       const rowBg = this.add.rectangle(statusX - 1, rowTop, 188, 27, i % 2 === 0 ? 0x11172b : 0x0f1427, 0.7)
         .setOrigin(0, 0)
         .setDepth(14);
       rowBg.setStrokeStyle(1, 0x2f3658, 0.45);
 
-      const name = this.add.text(statusX + 5, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 3 })).setDepth(16);
-      const hpText = this.add.text(statusX + 58, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0a0', strokeThickness: 3 })).setDepth(16);
-      const mpText = this.add.text(statusX + 126, rowTop + 4, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 3 })).setDepth(16);
+      const name = this.add.text(statusX + 5, rowTop + 2, '', sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 3 })).setDepth(16);
+      const hpText = this.add.text(statusX + 58, rowTop + 2, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0a0', strokeThickness: 3 })).setDepth(16);
+      const mpText = this.add.text(statusX + 126, rowTop + 2, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 3 })).setDepth(16);
       // Ailment badges in the free space left of the HP bar row — too little
       // room here for a spelled-out name, so a plain colored dot (an icon,
       // not shorthand text) stands in; the AILMENT_STAMP banner already
@@ -476,7 +514,7 @@ export class BattleScene extends Phaser.Scene {
 
       // Limit Break gauge: a thin gold sliver in the gap between the name row
       // and the HP/XP bars — glows and pulses once full (see refreshPartyBars).
-      const limitY = rowTop + 16;
+      const limitY = rowTop + 19;
       const limitBg = this.add.rectangle(statusX + 5, limitY, 176, 3, 0x07060e, 0.85).setOrigin(0, 0.5).setDepth(16);
       const limitFill = this.add.rectangle(statusX + 6, limitY, 174, 1.5, 0xb8923c, 0.9).setOrigin(0, 0.5).setDepth(17).setScale(0, 1);
       this.partyLimitBars.set(c.id, { bg: limitBg, fill: limitFill });
@@ -487,11 +525,13 @@ export class BattleScene extends Phaser.Scene {
 
   /** Vertical CTB queue on the right edge: active actor + upcoming turns,
    * live-updated after every single action (not once per round). Shows each
-   * combatant's own portrait/battle sprite rather than a name-letter chip. */
-  private renderQueue() {
+   * combatant's own portrait/battle sprite rather than a name-letter chip.
+   * `hypothetical` previews a pending Haste/Slow cast on its target before
+   * it's actually confirmed (see renderTargetModal). */
+  private renderQueue(hypothetical?: { id: string; speedMult: number }) {
     for (const chip of this.turnChips) chip.destroy();
     this.turnChips = [];
-    const upcoming = [this.activeActor, ...this.battle.previewQueue(7)];
+    const upcoming = [this.activeActor, ...this.battle.previewQueue(7, hypothetical)];
     const x = GAME.width - 26;
     const ACTIVE_SIZE = 42;
     const REST_SIZE = 18;
@@ -595,7 +635,10 @@ export class BattleScene extends Phaser.Scene {
     // from anywhere in this menu (see bindKeys' 'right' handler).
     const limitReady = (m.limit ?? 0) >= 100;
     if (limitReady) {
-      this.options.unshift({ label: `⚡ ${limitBreakName(m.id)}`, action: 'limit', enabled: true });
+      // Generic label: each member offers two Limit Breaks now (see
+      // content.ts LIMIT_BREAKS), picked in the submenu this opens — see
+      // openLimit() — so no single name/desc belongs on this row anymore.
+      this.options.unshift({ label: '⚡ Limit Break', action: 'limit', enabled: true, desc: 'Choose one of two ultimates.' });
       this.menuIndex = 1;
     }
     // The very first time any gauge fills, explain the mechanic before the
@@ -639,7 +682,7 @@ export class BattleScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '13px', color: '#ffe27a', strokeThickness: 4, align: 'center',
     })).setOrigin(0.5).setDepth(81).setScale(1.3).setAlpha(0);
     const body = this.add.text(x + W / 2, y + 42,
-      `${actor.name} has weathered enough to unleash ${limitBreakName(actor.id)} — free of MP cost. Taking damage (and fighting on) fills the gauge; watch for the gold bar under each ally's name. Press ▶ on any of their turns to unleash it instantly.`,
+      `${actor.name} has weathered enough to unleash a Limit Break — free of MP cost, and with a choice between two. Taking damage (and fighting on) fills the gauge; watch for the gold bar under each ally's name. Press ▶ on any of their turns to jump straight to the choice.`,
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5', strokeThickness: 2, align: 'center', lineSpacing: 4, wordWrap: { width: W - 34 } }),
     ).setOrigin(0.5, 0).setDepth(81).setAlpha(0);
     const hint = this.add.text(x + W / 2, y + H - 14, 'Z / tap to continue', sharpText({
@@ -683,6 +726,13 @@ export class BattleScene extends Phaser.Scene {
       const prefix = i === this.menuIndex ? '▶ ' : '  ';
       const t = this.add.text(16, GAME.height - 92 + i * pitch, prefix + o.label, sharpText({ fontFamily: FONT, fontSize: '12px', color })).setDepth(16);
       this.menuText.push(t);
+      // Only the Limit Break row carries a desc today — the other four are
+      // self-explanatory, so this stays quiet for them instead of cluttering
+      // every row with restated labels.
+      if (o.desc) {
+        const d = this.add.text(190, GAME.height - 91 + i * pitch, o.desc, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ffe27a', strokeThickness: 2 })).setDepth(16);
+        this.menuText.push(d);
+      }
     });
     this.cursor.setVisible(false);
     this.targetFrame.setVisible(false);
@@ -812,16 +862,17 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  /** Right-press shortcut: fires the active actor's Limit Break immediately
-   *  from anywhere in the top-level command menu, regardless of which row
-   *  the cursor is actually sitting on. Returns false (a no-op) so the
-   *  caller can fall back to the ordinary target-cycling 'right' does
-   *  everywhere else. */
+  /** Right-press shortcut: jumps straight to the active actor's Limit Break
+   *  submenu from anywhere in the top-level command menu, regardless of
+   *  which row the cursor is actually sitting on. Two choices now live
+   *  there (see openLimit), so this opens the picker rather than committing
+   *  blind. Returns false (a no-op) so the caller can fall back to the
+   *  ordinary target-cycling 'right' does everywhere else. */
   private tryLimitBreak(): boolean {
     if (this.ui !== 'menu') return false;
     if ((this.activeActor.limit ?? 0) < 100) return false;
     sfx.play('confirm');
-    this.commit({ type: 'limit' });
+    this.openLimit();
     return true;
   }
 
@@ -854,6 +905,10 @@ export class BattleScene extends Phaser.Scene {
       if (this.pending?.kind === 'spell') this.openMagic();
       else if (this.pending?.kind === 'item') this.openItems();
       else this.openMenu();
+      // Undoes any live Haste preview renderTargetModal() left on the ORDER
+      // queue (see there) — nothing was actually cast, so the real order
+      // needs to come back once targeting is abandoned.
+      this.renderQueue();
     }
     // Top-level command menu: nothing to back out of, and the pause menu is
     // deliberately unreachable mid-battle (it would let you re-equip gear or
@@ -881,7 +936,7 @@ export class BattleScene extends Phaser.Scene {
         this.commit({ type: 'flee' });
         break;
       case 'limit':
-        this.commit({ type: 'limit' });
+        this.openLimit();
         break;
     }
   }
@@ -925,6 +980,23 @@ export class BattleScene extends Phaser.Scene {
     this.renderSubmenu(`${this.activeActor.name} - item`);
   }
 
+  /** Opens the two-choice Limit Break submenu (see content.ts LIMIT_BREAKS).
+   *  Neither choice needs a target — both are single-enemy/AoE/party-wide by
+   *  design — so confirming a row commits straight away, same as an
+   *  all-enemies or party-target spell. */
+  private openLimit() {
+    const m = this.activeActor;
+    this.ui = 'submenu';
+    this.subIndex = 0;
+    this.subItems = (LIMIT_BREAKS[m.id] ?? []).map((d) => ({ id: d.id, label: d.name, desc: d.desc, enabled: true }));
+    if (this.subItems.length === 0) {
+      this.openMenu();
+      return;
+    }
+    this.pending = { kind: 'limit' };
+    this.renderSubmenu(`${m.name} - limit break`);
+  }
+
   private confirmSubmenu() {
     const sel = this.subItems[this.subIndex];
     if (!sel || !sel.enabled) return;
@@ -946,6 +1018,8 @@ export class BattleScene extends Phaser.Scene {
       this.pending.id = sel.id;
       const item = ITEMS[sel.id];
       this.beginTargeting(item?.target === 'enemy' ? 'enemy' : 'party', 'subtarget', item?.kind === 'revive');
+    } else if (this.pending?.kind === 'limit') {
+      this.commit({ type: 'limit', limitId: sel.id });
     }
   }
 
@@ -1014,6 +1088,13 @@ export class BattleScene extends Phaser.Scene {
     // a choice instead of a guess, the same way the weakness star does for attacks.
     const pendingSpell = this.pending?.kind === 'spell' && this.pending.id ? SPELLS[this.pending.id] : undefined;
     const showsHasteTag = pendingSpell?.kind === 'buff' && !!pendingSpell.haste;
+    // Live-preview the ORDER queue as the cursor moves across targets, so
+    // the speed swing from a pending Haste cast is visible before it's
+    // actually confirmed — reverted to the real queue in cancel().
+    if (showsHasteTag && pendingSpell?.haste) {
+      const previewTarget = this.targets[this.targetIndex];
+      this.renderQueue({ id: previewTarget.id, speedMult: pendingSpell.haste.mult });
+    }
     this.targets.forEach((t, i) => {
       const hp = Math.round(this.hpDisplay.get(t.id) ?? t.stats.hp);
       const weak = t.side === 'enemy' && !!element && element !== 'none' && (t.weakness?.includes(element) ?? false);
@@ -2179,14 +2260,5 @@ function battleArtLabel(memberId: string): string {
     case 'lyra': return 'Hexes';
     case 'mira': return 'Prayers';
     default: return 'Magic';
-  }
-}
-
-function limitBreakName(memberId: string): string {
-  switch (memberId) {
-    case 'kael': return 'Aetherblade Requiem';
-    case 'lyra': return 'Cataclysm';
-    case 'mira': return 'Aegis of Dawn';
-    default: return 'Limit Break';
   }
 }

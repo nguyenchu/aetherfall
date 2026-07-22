@@ -76,7 +76,7 @@ const SHOP_ITEMS: Array<{ id: string; flag: string; hint: string }> = [
 /** Rows visible per shop column before scrolling (▲/▼ markers). */
 const SHOP_ROWS = 8;
 
-type ShopKind = 'blessing' | 'buyItem' | 'buyGear' | 'sellItem' | 'sellItemAll' | 'sellGear' | 'sellAll';
+type ShopKind = 'blessing' | 'buyItem' | 'buyGear' | 'sellItem' | 'sellGear' | 'sellAll';
 interface ShopOption {
   id?: string;
   kind: ShopKind;
@@ -172,7 +172,7 @@ function npcs(): Record<string, Npc> {
   const ch1Done = hasFlag('ch1_complete');
   return {
     K: {
-      spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
+      spriteKey: 'e_wardeneda', scale: 1, name: 'Warden Eda', kind: 'dialogue',
       scriptId: ch5Done ? 'npc_keeper_after5' : ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
       // eda_orders is the ch5 payoff — the unrecognized name on Kael's old
       // orders. eda_watchline is the ch4 payoff to her "I served with Kael's
@@ -183,7 +183,7 @@ function npcs(): Record<string, Npc> {
       wander: true,
     },
     L: {
-      spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
+      spriteKey: 'e_scholarvoss', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
       scriptId: ch5Done ? 'npc_scholar_after5' : ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
       // voss_twelve is the ch5 payoff — the "line before the line" theory.
       // voss_hollow is the ch4 payoff to the "Twisting Hollow" reveal from
@@ -193,7 +193,7 @@ function npcs(): Record<string, Npc> {
       wander: true,
     },
     C: {
-      spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
+      spriteKey: 'e_child', scale: 0.8, name: 'Child', kind: 'dialogue',
       scriptId: ch5Done ? 'npc_child_after5' : ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
       // pip_wont_settle is the ch5 payoff. pip_digging is the ch4 payoff —
       // the sigil Pip digs up by the well. child_current/child_stars are the
@@ -202,11 +202,11 @@ function npcs(): Record<string, Npc> {
       questId: ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
       wander: true,
     },
-    V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
+    V: { spriteKey: 'e_merchant', scale: 1, name: 'Merchant', kind: 'vendor' },
     // The Stranger appears after Ch1 in the northwest corner
     ...(ch1Done ? {
       T: {
-        spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
+        spriteKey: 'e_stranger', scale: 0.9, name: '???', kind: 'dialogue' as const,
         scriptId: ch5Done ? 'npc_stranger_after5' : ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
         // heed_the_stranger is a one-off "you've noticed them" bootstrap quest
         // (completes on first talk after ch1); stranger_truth is the ch4
@@ -802,27 +802,17 @@ export class SanctuaryScene extends Phaser.Scene {
         action: () => { for (const [id, n] of junk) for (let k = 0; k < n; k++) sellItem(id); },
       });
     }
-    for (const [id, count] of Object.entries(inv).filter(([, n]) => n > 0)) {
+    for (const [id] of Object.entries(inv).filter(([, n]) => n > 0)) {
       const item = ITEMS[id];
       if (!item) continue;
+      // One row per item — confirming it sells the entire stack at once.
       sells.push({
         id, kind: 'sellItem',
-        label: () => `${item.name} x${count}`,
-        price: () => item.sellPrice ?? 0,
+        label: () => `${item.name} x${getRun().inventory[id] ?? 0}`,
+        price: () => (item.sellPrice ?? 0) * (getRun().inventory[id] ?? 0),
         enabled: () => (getRun().inventory[id] ?? 0) > 0,
-        action: () => { sellItem(id); },
+        action: () => { const n = getRun().inventory[id] ?? 0; for (let k = 0; k < n; k++) sellItem(id); },
       });
-      // Only worth a second row once there's actually a stack to dump —
-      // a lone potion doesn't need a "sell all" next to "sell one".
-      if (count > 1) {
-        sells.push({
-          id, kind: 'sellItemAll',
-          label: () => `Sell all ${item.name} (${getRun().inventory[id] ?? 0})`,
-          price: () => (item.sellPrice ?? 0) * (getRun().inventory[id] ?? 0),
-          enabled: () => (getRun().inventory[id] ?? 0) > 0,
-          action: () => { const n = getRun().inventory[id] ?? 0; for (let k = 0; k < n; k++) sellItem(id); },
-        });
-      }
     }
     for (const eq of ownedEquipment().filter((e) => canSellEquipment(e.id))) {
       sells.push({
@@ -917,7 +907,7 @@ export class SanctuaryScene extends Phaser.Scene {
       const eq = o.id ? EQUIPMENT[o.id] : undefined;
       return eq ? `${SLOT_BADGE[eq.slot]} · ${eq.users.map((u) => USER_NAME[u] ?? u).join('/')}` : '';
     }
-    if (o.kind === 'buyItem' || o.kind === 'sellItem' || o.kind === 'sellItemAll') {
+    if (o.kind === 'buyItem' || o.kind === 'sellItem') {
       const d = o.id ? ITEMS[o.id]?.description ?? '' : '';
       return d.length > 30 ? d.slice(0, 29) + '…' : d;
     }
@@ -951,16 +941,14 @@ export class SanctuaryScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9aa4c8', strokeThickness: 2, wordWrap: { width: 500 } })));
       box.add(this.add.text(tx, py + 48, eq.description ?? '',
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2, wordWrap: { width: 510 } })));
-    } else if (o.kind === 'buyItem' || o.kind === 'sellItem' || o.kind === 'sellItemAll') {
+    } else if (o.kind === 'buyItem' || o.kind === 'sellItem') {
       const item = ITEMS[o.id!];
       head(item.name);
       box.add(this.add.text(tx, py + 22, item.description ?? '',
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 500 } })));
       box.add(this.add.text(tx, py + 42, o.kind === 'buyItem'
         ? `Buy ${item.buyPrice ?? 0}g   ·   sells back for ${item.sellPrice ?? 0}g`
-        : o.kind === 'sellItemAll'
-        ? `Sells the whole stack at once — total ${o.price()}g`
-        : `Sells for ${item.sellPrice ?? 0}g each`,
+        : `Sells the whole stack at once — total ${o.price()}g`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
     } else if (o.kind === 'blessing') {
       head('Crystal Blessing');

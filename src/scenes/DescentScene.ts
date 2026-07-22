@@ -73,7 +73,7 @@ export class DescentScene extends Phaser.Scene {
     super('Descent');
   }
 
-  create(data?: { deeper?: boolean }) {
+  create(data?: { deeper?: boolean; retreated?: boolean }) {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale * WORLD_ZOOM_BONUS);
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
@@ -89,13 +89,15 @@ export class DescentScene extends Phaser.Scene {
     this.mapPixelW = this.map[0].length * GAME.tile;
     this.mapPixelH = this.map.length * GAME.tile;
 
-    // create() runs both on a fresh descent from Sanctuary (scene.start, no data)
-    // and on advancing to the next stratum within a run (advanceArea's
-    // scene.restart({ deeper: true })). Battle returns via RESUME, not create.
-    // So a fresh entry is the one per-chapter "started" signal, while a deeper
-    // entry marks reaching the next stratum — the mid-run progress the funnel
-    // was otherwise blind to.
-    if (data?.deeper) {
+    // create() runs on a fresh descent from Sanctuary (scene.start, no data),
+    // on advancing to the next stratum within a run (advanceArea's
+    // scene.restart({ deeper: true })), and on stepping back to the previous
+    // one (retreatArea's scene.restart({ retreated: true })). Battle returns
+    // via RESUME, not create. So a fresh entry is the one per-chapter
+    // "started" signal, deeper/retreated both mark mid-run floor movement —
+    // the progress the funnel was otherwise blind to — without mislabeling
+    // a backward step as a brand-new chapter start.
+    if (data?.deeper || data?.retreated) {
       track('descent_progress', { ch: chapterOfDepth(run.depth), d: run.depth });
     } else {
       track('chapter_start', { ch: chapterOfDepth(run.depth), d: run.depth, mod: run.modifier.id });
@@ -658,9 +660,23 @@ export class DescentScene extends Phaser.Scene {
     this.scene.restart({ deeper: true });
   }
 
-  /** Only the '<' portal tile leads home; there is no global retreat key. */
+  /** Mirrors advanceArea() the other direction — steps back to the
+   *  previous stratum's map (its own fixed 'P' spawn, same as descending)
+   *  without touching boons/modifier/springs, since the run isn't ending. */
+  private retreatArea() {
+    if (this.busy) return;
+    this.busy = true;
+    getRun().depth--;
+    saveProgress();
+    this.scene.restart({ retreated: true });
+  }
+
+  /** The '<' portal steps back one floor — full retreat to town only when
+   *  already on the first floor (there's nowhere shallower to go), or via
+   *  the pause menu's explicit "Return to Town" button at any depth. */
   private goHome() {
     if (this.busy) return;
+    if (getRun().depth > 1) { this.retreatArea(); return; }
     this.busy = true;
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth }));
@@ -676,7 +692,7 @@ export class DescentScene extends Phaser.Scene {
       const ch = this.map[ny]?.[nx];
       if (!ch) continue;
       if (ch === '>') return 'Z / tap  ·  descend';
-      if (ch === '<') return 'Z / tap  ·  return home';
+      if (ch === '<') return depth > 1 ? 'Z / tap  ·  previous floor' : 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
         return ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
       }

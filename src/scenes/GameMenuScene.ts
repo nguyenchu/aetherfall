@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { music, sfx } from '../audio/music';
 import { BOONS } from '../game/boons';
-import { ITEMS, SPELLS } from '../game/content';
+import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
 import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
 import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedByOther, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
@@ -515,24 +515,56 @@ export class GameMenuScene extends Phaser.Scene {
     }
 
     if (battleOnly.length > 0) {
-      y += 6;
-      box.add(this.add.text(46, y, 'BATTLE-ONLY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080', strokeThickness: 2 })));
-      y += 12;
+      y += 4;
+      const boHeader = this.add.text(46, y, 'BATTLE-ONLY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080', strokeThickness: 2 }));
+      box.add(boHeader);
+      y += boHeader.height + 1;
       // Wrapping row of spell names, each colored by its element (mirrors
       // BattleScene's element badges) so the list still reads at a glance
       // even though none of these can be cast from here.
       let x = 46;
       const rowStart = x;
       const maxX = 446;
+      let lastRowHeight = 0;
       battleOnly.forEach((spell, i) => {
         const label = i < battleOnly.length - 1 ? `${spell.name}, ` : spell.name;
         const t = this.add.text(x, y, label, sharpText({
           fontFamily: FONT, fontSize: '8px', color: ELEMENT_COLOR[spell.element] ?? '#5a6080', strokeThickness: 2,
         }));
         box.add(t);
+        lastRowHeight = t.height;
         x += t.width;
-        if (x > maxX) { x = rowStart; y += 12; t.setPosition(x, y); x += t.width; }
+        if (x > maxX) { x = rowStart; y += t.height; t.setPosition(x, y); x += t.width; }
       });
+      y += lastRowHeight; // account for the last (unwrapped) line's height — nothing followed this block before now
+    }
+
+    // Limit Break: never castable here (battle-only), but shown so a player
+    // can see what an ally's two ultimates actually do before ever filling
+    // the gauge in battle, instead of discovering them only by triggering
+    // one (the gauge is shared — the choice happens in the battle menu).
+    // The spell list above is variable height (more spells learned = taller),
+    // so this advances y by each line's *actual measured* height rather than
+    // a guessed constant — otherwise a fuller spell list pushes this block
+    // past the panel's bottom edge. While the TARGET portrait column is
+    // showing on the right (ally-heal selected) there isn't room for full
+    // descriptions too — even a single wrapped line would run past the
+    // panel's bottom edge for a character with a full spell list — so this
+    // falls back to names only until the player backs out of targeting.
+    const compact = !!selectedSpell;
+    y += 2;
+    box.add(this.add.rectangle(46, y, compact ? 230 : 400, 1, 0x2f3658, 0.6).setOrigin(0, 0));
+    y += 3;
+    const gauge = member.limit ?? 0;
+    const lbHeader = this.add.text(46, y, `⚡ LIMIT BREAK  (${gauge}/100 · battle-only)`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: gauge >= 100 ? '#ffe27a' : '#f0d36c', strokeThickness: 2 }));
+    box.add(lbHeader);
+    y += lbHeader.height + 1;
+    for (const lb of LIMIT_BREAKS[member.id] ?? []) {
+      const line = this.add.text(46, y, compact ? lb.name : `${lb.name} — ${lb.desc}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, wordWrap: { width: 400 } }));
+      box.add(line);
+      y += line.height + 1;
     }
 
     if (!selectedSpell) return;

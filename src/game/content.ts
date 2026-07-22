@@ -245,6 +245,32 @@ export const ITEMS: Record<string, Item> = {
   },
 };
 
+export interface LimitBreakDef {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+// Limit Break: two bespoke ultimates per party member — one offensive, one
+// defensive/control, so the choice on a full gauge is situational rather
+// than automatic (see battle.ts executeLimitBreak for the mechanics behind
+// each). Shared between BattleScene (submenu + row) and GameMenuScene
+// (status/magic tab info) so the flavor text only lives in one place.
+export const LIMIT_BREAKS: Record<string, LimitBreakDef[]> = {
+  kael: [
+    { id: 'requiem', name: 'Aetherblade Requiem', desc: 'Massive single-target hit. Shatters guard.' },
+    { id: 'bulwark', name: "Warden's Bulwark", desc: 'Shields the whole party from damage for 3 turns.' },
+  ],
+  lyra: [
+    { id: 'cataclysm', name: 'Cataclysm', desc: 'Arcane blast that hits every enemy.' },
+    { id: 'frostbind', name: 'Frostbind Eclipse', desc: 'Weaker blast that chills every enemy, stalling them.' },
+  ],
+  mira: [
+    { id: 'aegis', name: 'Aegis of Dawn', desc: 'Fully heals & revives the party; cleanses ailments.' },
+    { id: 'judgment', name: 'Dawnbreaker Judgment', desc: 'Holy damage to every enemy.' },
+  ],
+};
+
 // Color palette for placeholder sprites, ready to be replaced by art later.
 const C = {
   warrior: 0x6cf0c2,

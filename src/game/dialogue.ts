@@ -17,6 +17,21 @@ export interface DialogueLine {
 
 export type Script = DialogueLine[];
 
+// Default portrait per speaker, used when a line doesn't set its own
+// `portrait` — every Warden Eda / Scholar Voss / Child / Stranger / Merchant
+// line in this file relies on this rather than repeating the texture key on
+// every single line (see art/spriteData.ts for the sprites themselves).
+export const SPEAKER_PORTRAIT: Record<string, string> = {
+  Kael: 'portrait_kael',
+  Lyra: 'portrait_lyra',
+  Mira: 'portrait_mira',
+  'Warden Eda': 'e_wardeneda',
+  'Scholar Voss': 'e_scholarvoss',
+  Child: 'e_child',
+  Merchant: 'e_merchant',
+  '???': 'e_stranger',
+};
+
 const NARRATOR = 0x8a93b8;
 
 export const SCRIPTS: Record<string, Script> = {
