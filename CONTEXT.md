@@ -1,6 +1,51 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-16.
+> Paste this into a new session to continue the work. Last updated: 2026-07-22.
+
+## 2026-07-22 (gameplay): Tide Warden's Phase 2 Was the One Boss With No AI Identity
+
+Ask: "hva forbedrer vi nå?" then "commit og push og forbedre gameplay etter
+det" (what are we improving now, then commit/push and improve gameplay
+after that). First committed a large pending working-tree diff (dual Limit
+Breaks per party member, boss sprites/scale/halo, live Haste queue preview,
+dedicated NPC sprites, stepwise Descent retreat, simplified shop sell-all,
+slower intro pacing) that had accumulated uncommitted — not written this
+session, just landed and pushed as-is after a clean `tsc --noEmit`. Note:
+this environment had no git author identity configured at all (not just
+missing on this machine's global config) — had to ask the user and set
+`user.name`/`user.email` **locally** (this repo only) before any commit
+could go through.
+
+For the actual "improve gameplay" ask, audited `battle.ts`'s `enemyAi`/
+`executeBossPhase`/`bossTick` across all five bosses (mirrors the
+2026-07-16 boon/AI audit's method). Finding: Forest Shade (alternating
+weakness), Ashbrand (hunts anyone bracing), and Galebrand (half-random
+targeting) each gained a distinct phase-2 *behavior* change on top of the
+generic stat/heal bump. Prism Sovereign has its own `enrageOnOwnTurn`
+self-haste escalation. **Tide Warden was the one exception** — its phase 2
+(`Undertow`: heal 12% + a 3-turn attack-speed-drag debuff on whoever it
+next hits) was pure flavor text over the same unchanged weakest-HP-ratio
+targeting every non-boss enemy uses.
+
+Fix (`battle.ts` `enemyAi`): past phase 2, Tide Warden now prioritizes
+whoever has the *highest readiness* (closest to acting next) instead of
+weakest HP ratio — thematically Undertow punishes momentum, not health.
+One `priority = e.id === 'tide_warden' && e.phaseTriggered ? soonest :
+weakest` branch, same 60%-priority/40%-random-pool structure as the
+existing weakest-HP pick.
+
+Verified with a standalone logic script (`battle.ts` has no Phaser
+dependency, runs under `tsx` directly against `chapters.ts`/`content.ts`
+factories — same approach as the 2026-07-16 boon audit): forced distinct
+HP-ratio/readiness on each party member so the two strategies would
+disagree, called the private `enemyAi` 500× each side of the phase flag.
+Pre-phase: 267/500 picks went to the weakest-HP member (as before).
+Post-phase: 249/500 shifted to the highest-readiness member instead —
+confirms the branch actually fires and doesn't accidentally affect
+pre-phase behavior. `tsc --noEmit` clean. Scratch test script deleted
+after, not committed. Not verified in a live browser battle (no vendored
+driver reaching a real Tide Warden phase-2 turn) — same bar as most prior
+`battle.ts`-only logic changes in this log.
 
 ## 2026-07-16 (gui): Longer Intro Cutscene + a Real Battle-Start Entrance
 
