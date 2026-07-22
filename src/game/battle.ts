@@ -1020,7 +1020,13 @@ export class Battle {
     // the one actually close to falling. Not relentless, though — pure focus
     // fire feels unfair and makes protecting a wounded member impossible.
     const weakest = pool.reduce((w, c) => (c.stats.hp / c.stats.maxHp) < (w.stats.hp / w.stats.maxHp) ? c : w);
-    const target = Math.random() < 0.6 ? weakest : pool[Math.floor(Math.random() * pool.length)];
+    // Tide Warden's Undertow: past phase 2, every strike drags its target
+    // back in the turn queue (see strike()'s attackSpeedDebuff) — so it
+    // hunts whoever is closest to acting next (highest readiness) instead
+    // of the usual HP-ratio weakest. Undertow punishes momentum, not health.
+    const soonest = pool.reduce((s, c) => (c.readiness ?? 0) > (s.readiness ?? 0) ? c : s);
+    const priority = e.id === 'tide_warden' && e.phaseTriggered ? soonest : weakest;
+    const target = Math.random() < 0.6 ? priority : pool[Math.floor(Math.random() * pool.length)];
 
     // Cast occasionally if MP allows; bosses cast more often.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
