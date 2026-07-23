@@ -91,25 +91,39 @@ const USER_NAME: Record<string, string> = { kael: 'Kael', lyra: 'Lyra', mira: 'M
 const STAT_ABBR: Record<string, string> = { maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT' };
 const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase();
 
-// Sanctuary, the last city of light. Handmade map, not procedural.
+// Sanctuary, the last city of light — a keep built around its own Anchor
+// shard (see IntroScene's cosmology), not a rectangle with a wall around it.
+// The octagonal fortress ring narrows to five carved gate alcoves: the
+// always-open Chapter 1 gate (top) plus one per later chapter, so the shape
+// itself says "expeditions launch from here" instead of being arbitrary.
+// Warden Eda and Scholar Voss keep their posts flanking the Anchor shrine at
+// the keep's true center; the Merchant/Child/everyday plaza sits south of it,
+// same as a real keep's inner ward vs. outer bailey.
 // '#' wall, '.' floor, 'P' player start, 'D' descent portal
-// 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'F' plaza fountain (blocking)
+// 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'A' the Anchor, 'T' the
+// Stranger, 'F' plaza fountain (blocking)
 const MAP = [
-  '##############################',
-  '#..T.........................#',
-  '#..###..............###......#',
-  '#..###...K.......L..###...DD.#',
-  '#..###..............###...D..#',
-  '#..............F.............#',
-  '#............................#',
-  '#.........C.......V..........#',
-  '#..........A.................#',
-  '#............................#',
-  '#..............P.............#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '##############################',
+  '#######################################',
+  '#######################################',
+  '##############################DD#######',
+  '##############################D.#######',
+  '##############################..#######',
+  '#######...###.............###...#######',
+  '######....###.............###....######',
+  '#####.....###.............###.....#####',
+  '#####......K...............L......#####',
+  '##.................A.................##',
+  '##...................................##',
+  '#####..............F..............#####',
+  '#####....T........................#####',
+  '#####.............................#####',
+  '######...........................######',
+  '#######.......C....P....V.......#######',
+  '#######..##############..##############',
+  '#######..##############..##############',
+  '#######..##############..##############',
+  '#######################################',
+  '#######################################',
 ];
 
 /** Purely visual clutter: never touched for collision/interaction, layered
@@ -117,23 +131,24 @@ const MAP = [
  *  avoid every NPC/portal/building tile above. */
 type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'flowers' | 'crate' | 'barrel';
 const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
-  { x: 2, y: 3, kind: 'lantern' },
-  { x: 7, y: 3, kind: 'lantern' },
-  { x: 19, y: 3, kind: 'lantern' },
-  { x: 23, y: 2, kind: 'lantern' },
-  { x: 23, y: 4, kind: 'lantern' },
-  { x: 4, y: 2, kind: 'banner_gold' },   // Warden Eda's building
-  { x: 21, y: 2, kind: 'banner_violet' }, // Scholar Voss's building
-  { x: 13, y: 5, kind: 'flowers' },
-  { x: 17, y: 5, kind: 'flowers' },
-  { x: 13, y: 6, kind: 'flowers' },
-  { x: 17, y: 6, kind: 'flowers' },
-  { x: 6, y: 9, kind: 'flowers' },
-  { x: 24, y: 9, kind: 'flowers' },
-  { x: 5, y: 12, kind: 'flowers' },
-  { x: 25, y: 12, kind: 'flowers' },
-  { x: 16, y: 7, kind: 'crate' },
-  { x: 20, y: 7, kind: 'barrel' },
+  { x: 9, y: 7, kind: 'lantern' },   // flanking Warden Eda's building
+  { x: 29, y: 7, kind: 'lantern' },  // flanking Scholar Voss's building
+  { x: 29, y: 5, kind: 'lantern' },  // flanking the Chapter 1 gate corridor
+  { x: 14, y: 12, kind: 'lantern' }, // west plaza, near the Stranger
+  { x: 20, y: 15, kind: 'lantern' }, // south plaza
+  { x: 11, y: 5, kind: 'banner_gold' },   // Warden Eda's building
+  { x: 27, y: 5, kind: 'banner_violet' }, // Scholar Voss's building
+  { x: 16, y: 9, kind: 'flowers' },
+  { x: 22, y: 9, kind: 'flowers' },
+  { x: 16, y: 11, kind: 'flowers' },
+  { x: 22, y: 11, kind: 'flowers' },
+  { x: 12, y: 13, kind: 'flowers' },
+  { x: 26, y: 13, kind: 'flowers' },
+  { x: 10, y: 15, kind: 'flowers' },
+  { x: 28, y: 15, kind: 'flowers' },
+  { x: 30, y: 12, kind: 'flowers' },
+  { x: 22, y: 15, kind: 'crate' },  // near the Merchant
+  { x: 26, y: 15, kind: 'barrel' }, // near the Merchant
 ];
 
 /** Chapter descent portals beyond the always-open Chapter 1 gate ('D' tiles
@@ -150,11 +165,13 @@ interface ChapterPortal {
   targetDepth: number;
 }
 
+// Each pos sits inside its own carved gate alcove in the outer wall (see
+// MAP) -- right gate for Ch2, left for Ch3, the two bottom gates for Ch4/5.
 const CHAPTER_PORTALS: ChapterPortal[] = [
-  { chapter: 2, flag: 'ch1_complete', pos: { x: 14, y: 1 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
-  { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 7 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
-  { chapter: 4, flag: 'ch3_complete', pos: { x: 27, y: 7 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
-  { chapter: 5, flag: 'ch4_complete', pos: { x: 15, y: 13 }, areaName: 'Stormcrag Heights', tint: 0x6ac8f0, labelColor: '#8ad8f5', targetDepth: 9 },
+  { chapter: 2, flag: 'ch1_complete', pos: { x: 36, y: 10 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
+  { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 10 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
+  { chapter: 4, flag: 'ch3_complete', pos: { x: 24, y: 18 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
+  { chapter: 5, flag: 'ch4_complete', pos: { x: 8, y: 18 }, areaName: 'Stormcrag Heights', tint: 0x6ac8f0, labelColor: '#8ad8f5', targetDepth: 9 },
 ];
 
 interface Npc {
@@ -797,7 +814,12 @@ export class SanctuaryScene extends Phaser.Scene {
     // in-progress one — unless its own chapter is also already cleared, in
     // which case every authored chapter is done and the Rift takes over.
     const mainPortal = dTiles.length > 0 ? { x: dTiles[Math.floor(dTiles.length / 2)].c, y: dTiles[Math.floor(dTiles.length / 2)].r } : null;
-    const crystalPos = { x: 11, y: 8 };
+    // Scanned rather than hand-duplicated (like dTiles above) so the Anchor's
+    // MAP position and this bounce-marker target can't drift out of sync.
+    let crystalPos = { x: 0, y: 0 };
+    for (let r = 0; r < this.grid.length; r++)
+      for (let c = 0; c < this.grid[r].length; c++)
+        if (this.grid[r][c] === 'A') crystalPos = { x: c, y: r };
     const lastPortal = this.activePortals[this.activePortals.length - 1];
     const nextObjective = !hasFlag('ch1_complete') ? mainPortal
       : lastPortal && !hasFlag(`ch${lastPortal.chapter}_complete`) ? lastPortal.pos
