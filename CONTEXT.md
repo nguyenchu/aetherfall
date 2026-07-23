@@ -2,6 +2,53 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-23.
 
+## 2026-07-23 (gui 2): Sanctuary's Shape — A Keep Built Around the Anchor
+
+Follow-up ask: "kan du gjøre mer av dette, men kanskje også sånn at det gir
+mening? sanctuary trenger ikke være firkantet" (do more of this, but make
+it make sense — Sanctuary doesn't need to be square). Gave a short
+recommendation (3 options via AskUserQuestion: fortress-around-the-Anchor,
+distinct quarters, organically-grown town) rather than picking one myself —
+this was a real creative-direction fork, not a bug to fix. User picked
+fortress-around-the-Anchor.
+
+Replaced the 30x15 rectangle with a 39x21 chamfered-corner octagon (a keep
+wall, not a box) — the shape now has an in-fiction reason: it's built to
+protect the Anchor shard at its center, the same "last city of light"
+IntroScene's cosmology already established. Designed and validated the
+whole layout with a throwaway Node script (`.scratch-verify/`, not
+committed) before touching the real map: generates the octagon via a
+corner-chamfer distance check, carves 5 gate alcoves through the ring (the
+always-open Ch1 gate top, one per later chapter — right/left/two-bottom —
+so the silhouette reads as "expeditions launch in different directions"),
+places the two NPC buildings + all entities, then flood-fills from spawn to
+confirm every entity/gate tile is actually reachable. This caught two real
+mistakes before they ever hit the browser: an early gate alcove landed
+under Scholar Voss's building block (sealed shut — buildings were placed
+after gate-carving and silently overwrote the corridor), and the initial
+NPC building footprint boxed Eda/Voss into a 3-walls recess reachable from
+only one tile.
+
+Final layout: Warden Eda and Scholar Voss's buildings flank a central
+shrine (the Anchor, plus a fountain just south of it, inherited from the
+prior session's decor pass and repositioned) — they're guarding it now,
+not just standing near an unrelated corner. Merchant/Child/plaza clutter
+moved south of the shrine (inner keep vs. outer bailey). All prior decor
+(lanterns/banners/flowers/crate/barrel) repositioned to match. Also fixed
+a latent duplication bug while in there: the "next objective" bounce
+marker had its own hardcoded Anchor position (`{x:11,y:8}`) separate from
+the MAP's own `'A'` tile — replaced with a grid scan, the same pattern the
+existing Ch1-gate-label code already used for `'D'`, so the two positions
+can't drift apart again.
+
+Verified: the flood-fill script (structural proof, run before porting
+anything into `SanctuaryScene.ts`), then live with Playwright same as the
+prior decor session — fresh save to Sanctuary, full screenshot confirms the
+octagon/alcoves/buildings/decor all render correctly, walked the player
+toward the fountain and confirmed it still blocks at its new position. No
+console/page errors. `tsc --noEmit` clean. Grid now 624x336px, still fits
+the fixed 640x360 canvas with no camera-scroll changes needed.
+
 ## 2026-07-23 (gui): Sanctuary Gets a Decor Pass — Lanterns, Banners, Flowers, a Fountain
 
 Ask: "la oss pynte sånn at sanctuary har masse detaljer og ser fint ut"
