@@ -1,6 +1,44 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-22.
+> Paste this into a new session to continue the work. Last updated: 2026-07-23.
+
+## 2026-07-23 (gameplay): Rift Could Roll Chapter 5 Content Before You'd Ever Seen It
+
+Follow-up to "fortsett med å forbedre spillet" (continue improving the
+game) — same audit method as the previous session's boss-AI pass, this
+time over the endgame Rift (`rift.ts`) instead of `battle.ts`.
+
+The Rift (`SanctuaryScene`'s Anchor NPC) unlocks at `ch4_complete` — always
+has, per its own top-of-file comment ("reached from Sanctuary's Anchor once
+Chapter 4 is cleared"). `generateRift()` picked its theme with a flat
+`Phaser.Utils.Array.GetRandom(CONFIGS)` across all five chapter themes.
+That was correct when only 4 chapters existed; once Chapter 5 (Tempest,
+`galebrand`) was added, its `tempest` config went straight into the same
+pool with no one revisiting the Rift's gate. Net effect: a player who had
+*just* cleared Chapter 4 and talked to the Anchor for the first time could
+roll a Squall Rift — permanently-hasted Gale Harriers, 35%-reflect
+Storm-Warped Sentries, Galebrand itself (860 HP even at tier 0) — none of
+which they'd ever encountered, using mechanics (speed-drag, reflect
+punishment) the game hadn't taught them yet.
+
+Fix: `RiftConfig` gained a `chapter` field (1-5, matching each theme's
+source chapter); `generateRift(tier, maxChapter)` filters `CONFIGS` to
+`chapter <= maxChapter` before picking. `SanctuaryScene.enterRift()` now
+computes `maxChapter = hasFlag('ch5_complete') ? 5 : 4` and passes it
+through — so a Chapter 4 finisher only ever rolls the four themes they've
+actually played, and Tempest joins the pool the moment Chapter 5 is done
+too. `tsc --noEmit` clean.
+
+**Not verified live**, and for a different reason than usual in this log:
+`rift.ts` imports the full `Phaser` package (`Phaser.Utils.Array.GetRandom`,
+`Phaser.Math.*`) rather than being a plain-TS module like `battle.ts`, so it
+can't run standalone under `tsx` the way the boss-AI fix's test script
+did — attempted it with manual `window`/`document` stubs, got past device
+detection but hit `Image is not defined` deeper in Phaser's canvas-feature
+probing. Not worth vendoring a DOM shim for. Verified by direct code
+review instead: confirmed the five `chapter` values match `CONFIGS`' own
+array order (forest=1 ... tempest=5), the filter predicate is a plain `<=`,
+and `enterRift()` is the sole call site (grepped).
 
 ## 2026-07-22 (gameplay): Tide Warden's Phase 2 Was the One Boss With No AI Identity
 
