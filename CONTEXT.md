@@ -2,6 +2,49 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-23.
 
+## 2026-07-23 (gui): Sanctuary Gets a Decor Pass — Lanterns, Banners, Flowers, a Fountain
+
+Ask: "la oss pynte sånn at sanctuary har masse detaljer og ser fint ut"
+(let's decorate so Sanctuary has lots of detail and looks nice). Pure
+visual-polish request, not gameplay/balance — Sanctuary's plaza was flat
+flagstone/wall tiles with zero ambient props, plain next to the rest of
+the game's hand-painted pixel art.
+
+`BootScene.ts` gained `buildSanctuaryDecor()` (+`makeDecorTexture`, a
+card-less sibling of the existing `makeIcon`): six new Graphics-drawn
+textures — `decor_lantern` (iron post + warm glass), two banner variants
+(`decor_banner_gold`/`_violet`), `decor_flowers`, `decor_crate`,
+`decor_barrel`, and `decor_fountain` (stone basin around aether-violet
+water, tying the plaza centerpiece into the game's anchor/aether motif
+instead of a generic water feature).
+
+`SanctuaryScene.ts`: a new `DECOR` table (hand-picked `{x,y,kind}`
+coordinates, checked one-by-one against every NPC/portal/building tile so
+nothing overlaps) rendered by `placeDecor()` after `drawMap()` — 5
+lanterns (each with a pulsing warm-glow circle layered on top) flanking
+the two NPC buildings and the Chapter 1 gate, gold/violet banners on
+Warden Eda's and Scholar Voss's building facades respectively, 9 flower
+beds across the open plaza, and a crate+barrel by the Merchant. All of
+that is pure decoration — none of it touches collision.
+
+The one exception is the new plaza fountain (`placeFountain()`, its own
+pulsing water-glint tween): made it **blocking** on purpose, via a new
+`'F'` map tile, so the plaza centerpiece reads as a real town-square
+obstacle instead of walk-through scenery. Extended the two existing
+`ch === '#'` collision checks (`update()`'s movement, `isWanderable()`'s
+NPC-wander check) to also treat `'F'` as solid — the only logic change in
+an otherwise purely additive pass.
+
+Live-verified with Playwright (cold-start setup per `.claude/skills/verify/
+SKILL.md`, fresh save through to Sanctuary): full-map and zoomed-crop
+screenshots confirm every prop renders in the right place with no z-order
+or overlap glitches; walked the player 8 tiles straight at the fountain
+and confirmed it stops one tile short and stays there across repeated
+presses (blocked), not walking through. `tsc --noEmit` clean. Playwright
+was installed/removed the same way prior verify sessions have (`pnpm
+install --save-dev playwright` → verify → `git checkout --
+package.json pnpm-lock.yaml`), so the manifests are unchanged.
+
 ## 2026-07-23 (gameplay 2): Chapter 5 Survivability Audit + Bulwark Couldn't Shield Boss Bursts
 
 Follow-up to "hva skal vi forbedre nå?" -> user picked both proposed options:
