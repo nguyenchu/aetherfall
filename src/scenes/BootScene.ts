@@ -179,17 +179,6 @@ export class BootScene extends Phaser.Scene {
     this.makeDecorTexture('decor_banner_gold', 12, 20, drawBanner(0xf0d36c, 0xc9aa54));
     this.makeDecorTexture('decor_banner_violet', 12, 20, drawBanner(0x8a6cf0, 0x6a4ec0));
 
-    // Flower bed: flat ground clutter, drawn like the 'D' portal-glow overlay
-    // (sits just above the floor tile, doesn't replace it).
-    this.makeDecorTexture('decor_flowers', 16, 16, (g) => {
-      g.fillStyle(0x2e4a2e, 0.55).fillEllipse(8, 10, 11, 6); // soil/grass patch
-      const dots: [number, number, number][] = [[5, 8, 0xff8ab0], [10, 7, 0xf0d36c], [7, 11, 0x8a6cf0], [11, 10, 0xffe0a0]];
-      for (const [x, y, c] of dots) {
-        g.fillStyle(0x2e6b38, 1).fillRect(x, y + 1, 1, 2); // stem
-        g.fillStyle(c, 1).fillCircle(x, y, 1.6);
-      }
-    });
-
     // Merchant-adjacent clutter.
     this.makeDecorTexture('decor_crate', 16, 16, (g) => {
       g.fillStyle(0x6b4a2e, 1).fillRect(2, 3, 12, 11);

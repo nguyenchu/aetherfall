@@ -128,25 +128,18 @@ const MAP = [
 
 /** Purely visual clutter: never touched for collision/interaction, layered
  *  on top of the base map after drawMap(). Coordinates were hand-picked to
- *  avoid every NPC/portal/building tile above. */
-type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'flowers' | 'crate' | 'barrel';
+ *  avoid every NPC/portal/building tile above. Kept deliberately sparse —
+ *  an earlier pass covered the plaza in lanterns/flower beds everywhere,
+ *  which read as visual noise (the flower beds' colored dot clusters in
+ *  particular got confused for pickups/markers) rather than detail. Every
+ *  piece left here also does double duty as a wayfinding cue (which
+ *  building is whose, where the Merchant is) instead of being pure filler. */
+type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel';
 const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
   { x: 9, y: 7, kind: 'lantern' },   // flanking Warden Eda's building
   { x: 29, y: 7, kind: 'lantern' },  // flanking Scholar Voss's building
-  { x: 29, y: 5, kind: 'lantern' },  // flanking the Chapter 1 gate corridor
-  { x: 14, y: 12, kind: 'lantern' }, // west plaza, near the Stranger
-  { x: 20, y: 15, kind: 'lantern' }, // south plaza
   { x: 11, y: 5, kind: 'banner_gold' },   // Warden Eda's building
   { x: 27, y: 5, kind: 'banner_violet' }, // Scholar Voss's building
-  { x: 16, y: 9, kind: 'flowers' },
-  { x: 22, y: 9, kind: 'flowers' },
-  { x: 16, y: 11, kind: 'flowers' },
-  { x: 22, y: 11, kind: 'flowers' },
-  { x: 12, y: 13, kind: 'flowers' },
-  { x: 26, y: 13, kind: 'flowers' },
-  { x: 10, y: 15, kind: 'flowers' },
-  { x: 28, y: 15, kind: 'flowers' },
-  { x: 30, y: 12, kind: 'flowers' },
   { x: 22, y: 15, kind: 'crate' },  // near the Merchant
   { x: 26, y: 15, kind: 'barrel' }, // near the Merchant
 ];
@@ -410,9 +403,6 @@ export class SanctuaryScene extends Phaser.Scene {
           break;
         case 'banner_violet':
           this.add.image(x, y - GAME.tile / 2, `decor_banner_violet`).setOrigin(0.5, 0).setDepth(2);
-          break;
-        case 'flowers':
-          this.add.image(x, y, 'decor_flowers').setOrigin(0.5, 0.5).setDepth(1);
           break;
         case 'crate':
           this.add.image(x, y, 'decor_crate').setOrigin(0.5, 0.6).setDepth(2);
