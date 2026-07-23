@@ -93,14 +93,14 @@ const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase
 
 // Sanctuary, the last city of light. Handmade map, not procedural.
 // '#' wall, '.' floor, 'P' player start, 'D' descent portal
-// 'K' warden, 'L' scholar, 'C' child, 'V' merchant
+// 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'F' plaza fountain (blocking)
 const MAP = [
   '##############################',
   '#..T.........................#',
   '#..###..............###......#',
   '#..###...K.......L..###...DD.#',
   '#..###..............###...D..#',
-  '#............................#',
+  '#..............F.............#',
   '#............................#',
   '#.........C.......V..........#',
   '#..........A.................#',
@@ -110,6 +110,30 @@ const MAP = [
   '#............................#',
   '#............................#',
   '##############################',
+];
+
+/** Purely visual clutter: never touched for collision/interaction, layered
+ *  on top of the base map after drawMap(). Coordinates were hand-picked to
+ *  avoid every NPC/portal/building tile above. */
+type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'flowers' | 'crate' | 'barrel';
+const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
+  { x: 2, y: 3, kind: 'lantern' },
+  { x: 7, y: 3, kind: 'lantern' },
+  { x: 19, y: 3, kind: 'lantern' },
+  { x: 23, y: 2, kind: 'lantern' },
+  { x: 23, y: 4, kind: 'lantern' },
+  { x: 4, y: 2, kind: 'banner_gold' },   // Warden Eda's building
+  { x: 21, y: 2, kind: 'banner_violet' }, // Scholar Voss's building
+  { x: 13, y: 5, kind: 'flowers' },
+  { x: 17, y: 5, kind: 'flowers' },
+  { x: 13, y: 6, kind: 'flowers' },
+  { x: 17, y: 6, kind: 'flowers' },
+  { x: 6, y: 9, kind: 'flowers' },
+  { x: 24, y: 9, kind: 'flowers' },
+  { x: 5, y: 12, kind: 'flowers' },
+  { x: 25, y: 12, kind: 'flowers' },
+  { x: 16, y: 7, kind: 'crate' },
+  { x: 20, y: 7, kind: 'barrel' },
 ];
 
 /** Chapter descent portals beyond the always-open Chapter 1 gate ('D' tiles
@@ -322,12 +346,63 @@ export class SanctuaryScene extends Phaser.Scene {
         if (ch === 'D') {
           this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85);
         }
+        if (ch === 'F') {
+          this.placeFountain(x + GAME.tile / 2, y + GAME.tile / 2);
+        }
         if (ch === 'P') {
           this.px = c;
           this.py = r;
         }
         const npc = npcDefs[ch];
         if (npc) this.spawnNpc(npc, c, r);
+      }
+    }
+    this.placeDecor();
+  }
+
+  /** Plaza centerpiece (see BootScene's decor_fountain). Blocking — the only
+   *  solid decoration, see the 'F' checks in update()/isWanderable — with a
+   *  slow water-glint pulse so it isn't just a static painting. */
+  private placeFountain(cx: number, cy: number) {
+    this.add.image(cx, cy, 'decor_fountain').setDepth(2);
+    const glint = this.add.circle(cx - 2, cy - 2, 2.4, 0x6a7ac0, 0.6).setDepth(2);
+    this.tweens.add({
+      targets: glint, alpha: { from: 0.6, to: 0.15 }, scale: { from: 1, to: 1.6 },
+      duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+  }
+
+  /** Purely visual world clutter (see the DECOR table) — lanterns, banners,
+   *  flower beds, merchant crates. None of it affects collision or input. */
+  private placeDecor() {
+    for (const d of DECOR) {
+      const x = d.x * GAME.tile + GAME.tile / 2;
+      const y = d.y * GAME.tile + GAME.tile / 2;
+      switch (d.kind) {
+        case 'lantern': {
+          this.add.image(x, y, 'decor_lantern').setOrigin(0.5, 0.85).setDepth(2);
+          const glow = this.add.circle(x, y - GAME.tile * 0.6, 5, 0xffcf7a, 0.35).setDepth(2);
+          this.tweens.add({
+            targets: glow, alpha: { from: 0.35, to: 0.12 }, scale: { from: 1, to: 1.3 },
+            duration: 1300 + Phaser.Math.Between(0, 400), yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          });
+          break;
+        }
+        case 'banner_gold':
+          this.add.image(x, y - GAME.tile / 2, `decor_banner_gold`).setOrigin(0.5, 0).setDepth(2);
+          break;
+        case 'banner_violet':
+          this.add.image(x, y - GAME.tile / 2, `decor_banner_violet`).setOrigin(0.5, 0).setDepth(2);
+          break;
+        case 'flowers':
+          this.add.image(x, y, 'decor_flowers').setOrigin(0.5, 0.5).setDepth(1);
+          break;
+        case 'crate':
+          this.add.image(x, y, 'decor_crate').setOrigin(0.5, 0.6).setDepth(2);
+          break;
+        case 'barrel':
+          this.add.image(x, y, 'decor_barrel').setOrigin(0.5, 0.6).setDepth(2);
+          break;
       }
     }
   }
@@ -473,7 +548,7 @@ export class SanctuaryScene extends Phaser.Scene {
       this.interact(live);
       return;
     }
-    if (ch === '#' || ch === undefined) {
+    if (ch === '#' || ch === 'F' || ch === undefined) {
       this.moveLockedUntil = time + 120;
       return;
     }
@@ -503,7 +578,7 @@ export class SanctuaryScene extends Phaser.Scene {
    *  tile, and within a short leash of home so they stay findable. */
   private isWanderable(live: LiveNpc, x: number, y: number): boolean {
     const ch = this.grid[y]?.[x];
-    if (!ch || ch === '#' || ch === 'D') return false;
+    if (!ch || ch === '#' || ch === 'D' || ch === 'F') return false;
     if (x === this.px && y === this.py) return false;
     if (this.liveNpcAt(x, y)) return false;
     if (this.activePortals.some((p) => p.pos.x === x && p.pos.y === y)) return false;

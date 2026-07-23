@@ -40,6 +40,7 @@ export class BootScene extends Phaser.Scene {
     buildCharacterSprites(this);
     this.buildItemIcons();
     this.buildEquipmentIcons();
+    this.buildSanctuaryDecor();
 
     this.scene.start('Intro');
   }
@@ -151,6 +152,80 @@ export class BootScene extends Phaser.Scene {
         }
       });
     }
+  }
+
+  // World-placed decoration for Sanctuary (see SanctuaryScene) — lanterns,
+  // banners, garden clutter, and the plaza fountain. Unlike makeIcon these
+  // have no card background: they sit directly on the map, not in a UI slot.
+  private buildSanctuaryDecor() {
+    this.makeDecorTexture('decor_lantern', 10, 22, (g) => {
+      g.fillStyle(0x2a2018, 1).fillRect(0, 1, 10, 1); // wall cap
+      g.fillStyle(0x4a3a28, 1).fillRoundedRect(1, 2, 8, 10, 2); // cage frame
+      g.fillStyle(0xffcf7a, 1).fillRoundedRect(3, 4, 4, 6, 1); // warm glass
+      g.fillStyle(0xfff0c0, 0.9).fillRect(4, 5, 2, 3); // glint
+      g.fillStyle(0x2a2018, 1).fillRect(4, 13, 2, 8); // post
+      g.fillStyle(0x1a140e, 1).fillRect(2, 20, 6, 2); // base
+    });
+
+    // Two facade banners — gold for the Warden's side of the plaza, violet
+    // (the game's aether accent) for the Scholar's — sharing one shape.
+    const drawBanner = (cloth: number, tail: number) => (g: Phaser.GameObjects.Graphics) => {
+      g.fillStyle(0x2a2018, 1).fillRect(0, 0, 12, 2); // wall rod
+      g.fillStyle(cloth, 1).fillRect(2, 2, 8, 12);
+      g.fillStyle(tail, 1).fillTriangle(2, 14, 6, 14, 4, 19);
+      g.fillStyle(tail, 1).fillTriangle(6, 14, 10, 14, 8, 19);
+      g.fillStyle(0xdfe4f5, 0.85).fillCircle(6, 8, 2); // emblem
+    };
+    this.makeDecorTexture('decor_banner_gold', 12, 20, drawBanner(0xf0d36c, 0xc9aa54));
+    this.makeDecorTexture('decor_banner_violet', 12, 20, drawBanner(0x8a6cf0, 0x6a4ec0));
+
+    // Flower bed: flat ground clutter, drawn like the 'D' portal-glow overlay
+    // (sits just above the floor tile, doesn't replace it).
+    this.makeDecorTexture('decor_flowers', 16, 16, (g) => {
+      g.fillStyle(0x2e4a2e, 0.55).fillEllipse(8, 10, 11, 6); // soil/grass patch
+      const dots: [number, number, number][] = [[5, 8, 0xff8ab0], [10, 7, 0xf0d36c], [7, 11, 0x8a6cf0], [11, 10, 0xffe0a0]];
+      for (const [x, y, c] of dots) {
+        g.fillStyle(0x2e6b38, 1).fillRect(x, y + 1, 1, 2); // stem
+        g.fillStyle(c, 1).fillCircle(x, y, 1.6);
+      }
+    });
+
+    // Merchant-adjacent clutter.
+    this.makeDecorTexture('decor_crate', 16, 16, (g) => {
+      g.fillStyle(0x6b4a2e, 1).fillRect(2, 3, 12, 11);
+      g.lineStyle(1, 0x3f2c1a, 0.9).strokeRect(2, 3, 12, 11).lineBetween(2, 3, 14, 14).lineBetween(14, 3, 2, 14);
+      g.fillStyle(0x8a6440, 0.6).fillRect(2, 3, 12, 2);
+    });
+    this.makeDecorTexture('decor_barrel', 14, 16, (g) => {
+      g.fillStyle(0x6b4a2e, 1).fillRoundedRect(2, 2, 10, 13, 3);
+      g.fillStyle(0x3f2c1a, 1).fillRect(2, 5, 10, 1).fillRect(2, 10, 10, 1);
+      g.fillStyle(0x8a6440, 0.5).fillRoundedRect(3, 3, 3, 11, 2); // highlight
+    });
+
+    // Plaza centerpiece: stone basin around aether-tinted water, tying the
+    // fountain into the same anchor/aether motif as the portal glow and the
+    // Rift NPC rather than an unrelated generic water feature. Blocking (see
+    // SanctuaryScene's 'F' tile) — the only solid decoration, so it reads as
+    // a real obstacle players walk around, not scenery they'd expect to pass
+    // through. SanctuaryScene layers a slow ripple tween on top of this.
+    this.makeDecorTexture('decor_fountain', 22, 22, (g) => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(11, 19, 14, 4); // ground shadow
+      g.fillStyle(0x4a5278, 1).fillCircle(11, 11, 10); // outer stone ring
+      g.fillStyle(0x2f3658, 1).fillCircle(11, 11, 8); // inner rim shade
+      g.fillStyle(0x3a4a8a, 1).fillCircle(11, 11, 7); // water
+      g.fillStyle(0x6a7ac0, 0.6).fillCircle(9, 9, 2.4); // water glint
+      g.fillStyle(0x8a6cf0, 1).fillCircle(11, 11, 2.4); // aether spire core
+      g.fillStyle(0xdfe4f5, 0.8).fillCircle(11, 11, 1); // spire glint
+    });
+  }
+
+  private makeDecorTexture(key: string, w: number, h: number, draw: (g: Phaser.GameObjects.Graphics) => void) {
+    if (this.textures.exists(key)) return;
+    const g = this.add.graphics();
+    draw(g);
+    g.generateTexture(key, w, h);
+    this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    g.destroy();
   }
 
   private makeIcon(key: string, draw: (g: Phaser.GameObjects.Graphics) => void) {
