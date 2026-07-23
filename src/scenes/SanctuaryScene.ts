@@ -654,10 +654,14 @@ export class SanctuaryScene extends Phaser.Scene {
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
-  /** Generates a fresh Rift floor for the current tier and descends into it. */
+  /** Generates a fresh Rift floor for the current tier and descends into it.
+   *  Theme pool is capped to chapters actually cleared (see generateRift) —
+   *  the Rift itself opens at ch4_complete, so without this a fresh Chapter 4
+   *  finisher could roll the Chapter 5 (tempest/Galebrand) theme blind. */
   private enterRift() {
     this.state = 'busy';
-    setRiftArea(generateRift(getSave().ngPlus));
+    const maxChapter = hasFlag('ch5_complete') ? 5 : 4;
+    setRiftArea(generateRift(getSave().ngPlus, maxChapter));
     getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
