@@ -2,6 +2,63 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-23.
 
+## 2026-07-23 (gameplay 2): Chapter 5 Survivability Audit + Bulwark Couldn't Shield Boss Bursts
+
+Follow-up to "hva skal vi forbedre nå?" -> user picked both proposed options:
+a Chapter-5 difficulty-curve check (the "no one-shots" pass ch1-4 got on
+2026-07-11, never redone for the newer chapter) and a balance pass on the
+two new Limit Break pairs from two sessions back.
+
+**Chapter 5 survivability — audited, no bug found.** Wrote a standalone
+`tsx` script (`chapters.ts`/`content.ts`/`progression.ts` have no Phaser
+dependency) that replays every *guaranteed* (non-random) depth 1-8
+encounter via the real `makeEncounterForArea`/`grantXp` to get a grounded
+"worst case, zero random battles" level floor at depth-9 entry: **L11**,
+party maxHp 160/86/114 (kael/lyra/mira). A looser "+3 randoms/area"
+estimate lands at L12, maxHp 170/91/121 — level estimate is stable either
+way. Checked every Chapter 5 enemy/boss's worst single hit (basic attack +
+known spells, using the real `strike`/`castDamage` formulas by hand) plus
+Galebrand's flat, VIT-bypassing phase-2 burst against both. Worst case:
+Lyra takes 51-57% of her HP in one hit (Thunderhead Sentinel's basic
+attack, or Galebrand's burst) — survivable, matches the "squishiest but
+not one-shottable" bar the 2026-07-11 audit set for chapters 1-4. No
+one-shot risk found; no change made.
+
+**Limit Break balance — two pairs fine, one real gap found and fixed.**
+Computed Cataclysm/Frostbind and Aegis/Judgment's actual numbers at L11:
+Cataclysm one-shots most Chapter 5 trash (88 dmg vs. 78-150 HP) while
+Frostbind trades power (48 dmg) for a guaranteed AoE Chill; Judgment (62
+flat AoE) vs. Aegis (pure full-party heal/revive/cleanse) are both
+clearly situational, not a dominant-choice problem — no change needed
+there.
+
+Kael's pair was different. Every boss's phase-2 transition burst
+(Forest Shade's Shadow Veil, Tide Warden's Tidal Surge, Ashbrand's
+Conflagration, Prism Sovereign's Refracted Blades, Galebrand's Wild
+Current) deals damage via a **direct `applyDamage()` call**, bypassing
+`computeHit()` — a deliberate choice from 2026-07-11 so Defend can't
+trivialize the one scripted "heal-or-die" spike per boss fight. Kael's new
+**Warden's Bulwark** (party-wide 50% damage-taken shield, 3 turns) reads
+`dmgTakenStatus`, but that field is only ever checked *inside*
+`computeHit()` — so Bulwark, sold specifically as anti-burst protection,
+could never touch the single biggest hit in any boss fight. Unlike the
+Defend bypass (a free, always-available action the burst is meant to
+punish), Bulwark is a resource-gated, one-shot ultimate whose entire pitch
+is "shield the party from damage" — leaving it blind to exactly the
+moment it exists for isn't the same deliberate call, it's Bulwark getting
+caught in a bypass that predates it.
+
+Fix (`battle.ts`): new `applyBossBurst(t, dmg)` — applies
+`dmgTakenStatus`'s multiplier if present (still ignoring VIT/crit/
+weakness/Defend, unchanged), used by all five phase-2 cases in place of
+the raw `applyDamage()` call. Event log text/`amount` now shows the
+post-shield number so the log doesn't misreport what actually landed.
+
+Verified with a standalone script exercising the real `Battle.executeTurn`
+path against Galebrand: no shield/not defending → 49 dmg; defending → still
+49 (bypass correctly preserved); Bulwark active (0.5x) → 25 (halved, the
+fix). `tsc --noEmit` clean.
+
 ## 2026-07-23 (gameplay): Rift Could Roll Chapter 5 Content Before You'd Ever Seen It
 
 Follow-up to "fortsett med å forbedre spillet" (continue improving the
