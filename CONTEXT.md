@@ -2,6 +2,28 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-23.
 
+## 2026-07-23 (gui 3): Sanctuary's Decor Was Noise, Not Detail — Cut Back
+
+Feedback after the fortress-layout redesign: "det gjør det for forvirrende
+i byen" (it makes the town too confusing) — asked specifically about the
+decor commit from two sessions back (confirmed via a quick disambiguation,
+since several recent commits touch Sanctuary). Root cause: the original
+decor pass put 5 lanterns and 9 flower beds across the plaza; the flower
+beds' small multi-colored dot clusters in particular read as things you
+might be able to pick up or interact with (competing with real cues —
+quest "!"s, the portal glow, NPC name labels) rather than as scenery.
+
+Cut flower beds entirely (`DecorKind` dropped `'flowers'`, removed the
+now-dead `decor_flowers` texture from `BootScene.ts`) and lanterns from 5
+down to 2 — kept only the pair flanking Warden Eda's and Scholar Voss's
+buildings. What's left (those 2 lanterns, the 2 building banners, the
+fountain, the Merchant's crate/barrel) all double as wayfinding — which
+building is whose, where the shrine/merchant are — instead of being pure
+filler with nothing to distinguish it from clutter.
+
+Live-verified with Playwright: screenshot confirms a visibly calmer plaza,
+remaining landmarks still read clearly. `tsc --noEmit` clean.
+
 ## 2026-07-23 (gui 2): Sanctuary's Shape — A Keep Built Around the Anchor
 
 Follow-up ask: "kan du gjøre mer av dette, men kanskje også sånn at det gir
