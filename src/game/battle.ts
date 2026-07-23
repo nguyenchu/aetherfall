@@ -716,6 +716,22 @@ export class Battle {
     actor.speedStatuses = { ...actor.speedStatuses, haste: { mult: Math.min(2.5, cur + inc), turns: 999 } };
   }
 
+  /** Applies a boss phase-transition burst, honoring only Warden's
+   *  Bulwark's party-wide shield (target.dmgTakenStatus) — not VIT, crit,
+   *  weakness, or Defend. These bursts go through applyDamage() directly
+   *  rather than computeHit() on purpose (see the 2026-07-11 CONTEXT.md
+   *  audit): they're meant to be a flat "heal-or-die" spike even Defend
+   *  can't shrug off. Bulwark is different — a resource-gated, one-shot
+   *  party Limit Break sold specifically as an anti-burst shield — so
+   *  leaving it unable to touch the single biggest scripted hit in every
+   *  boss fight would make its own billing false. Returns the amount
+   *  actually dealt, for the event log to report honestly. */
+  private applyBossBurst(t: Combatant, dmg: number): number {
+    const dealt = t.dmgTakenStatus ? Math.max(1, Math.round(dmg * t.dmgTakenStatus.mult)) : dmg;
+    this.applyDamage(t, dealt);
+    return dealt;
+  }
+
   private executeBossPhase(boss: Combatant): BattleEvent[] {
     const events: BattleEvent[] = [];
 
@@ -724,8 +740,8 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Forest Shade tears apart — shadows pour from its wound!', actorId: boss.id });
         const dmg = Math.round(12 + boss.stats.int * 0.7);
         for (const t of this.living('party')) {
-          this.applyDamage(t, dmg);
-          events.push({ kind: 'spell', text: `Shadow Veil engulfs ${t.name}! −${dmg} HP`, actorId: boss.id, targetId: t.id, amount: dmg, element: 'none', parallel: true });
+          const dealt = this.applyBossBurst(t, dmg);
+          events.push({ kind: 'spell', text: `Shadow Veil engulfs ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'none', parallel: true });
           this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
@@ -741,8 +757,8 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Tide Warden roars — the chamber floods in an instant!', actorId: boss.id });
         const surge = Math.round(18 + boss.stats.int * 0.8);
         for (const t of this.living('party')) {
-          this.applyDamage(t, surge);
-          events.push({ kind: 'spell', text: `Tidal Surge crashes into ${t.name}! −${surge} HP`, actorId: boss.id, targetId: t.id, amount: surge, element: 'ice', parallel: true });
+          const dealt = this.applyBossBurst(t, surge);
+          events.push({ kind: 'spell', text: `Tidal Surge crashes into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
           this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
@@ -759,8 +775,8 @@ export class Battle {
         events.push({ kind: 'phase', text: 'Ashbrand ignites — the entire shrine becomes fire!', actorId: boss.id });
         const fire = Math.round(24 + boss.stats.int * 0.9);
         for (const t of this.living('party')) {
-          this.applyDamage(t, fire);
-          events.push({ kind: 'spell', text: `Conflagration scorches ${t.name}! −${fire} HP`, actorId: boss.id, targetId: t.id, amount: fire, element: 'fire', parallel: true });
+          const dealt = this.applyBossBurst(t, fire);
+          events.push({ kind: 'spell', text: `Conflagration scorches ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'fire', parallel: true });
           this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
@@ -776,8 +792,8 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Prism Sovereign shatters its own shell — light scatters into blades!', actorId: boss.id });
         const shards = Math.round(20 + boss.stats.int * 0.85);
         for (const t of this.living('party')) {
-          this.applyDamage(t, shards);
-          events.push({ kind: 'spell', text: `Refracted Blades tear into ${t.name}! −${shards} HP`, actorId: boss.id, targetId: t.id, amount: shards, element: 'ice', parallel: true });
+          const dealt = this.applyBossBurst(t, shards);
+          events.push({ kind: 'spell', text: `Refracted Blades tear into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
           this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
@@ -795,8 +811,8 @@ export class Battle {
         events.push({ kind: 'phase', text: 'Galebrand tears loose from its own anchor-point — the storm inside it runs wild!', actorId: boss.id });
         const surge = Math.round(20 + boss.stats.int * 0.85);
         for (const t of this.living('party')) {
-          this.applyDamage(t, surge);
-          events.push({ kind: 'spell', text: `Wild current rakes ${t.name}! −${surge} HP`, actorId: boss.id, targetId: t.id, amount: surge, element: 'none', parallel: true });
+          const dealt = this.applyBossBurst(t, surge);
+          events.push({ kind: 'spell', text: `Wild current rakes ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'none', parallel: true });
           this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
