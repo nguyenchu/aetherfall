@@ -671,12 +671,22 @@ export class DescentScene extends Phaser.Scene {
     this.scene.restart({ retreated: true });
   }
 
-  /** The '<' portal steps back one floor — full retreat to town only when
-   *  already on the first floor (there's nowhere shallower to go), or via
-   *  the pause menu's explicit "Return to Town" button at any depth. */
+  /** The '<' portal steps back one floor within the *current* chapter (its
+   *  boss stratum -> its own entrance stratum) -- full retreat to town
+   *  otherwise: already on an entrance stratum (nothing shallower belongs to
+   *  this chapter), or already on floor 1. Each chapter is exactly two
+   *  strata (see analytics.ts's chapterOfDepth: depth 1-2 = ch1, 3-4 = ch2,
+   *  ...), so its entrance sits on an odd depth and its boss on the next
+   *  even one. Retreating used to just check `depth > 1`, which doesn't
+   *  know the difference -- from a later chapter's own entrance floor (odd,
+   *  e.g. depth 7) it would "step back" straight into the *previous*
+   *  chapter's boss arena (depth 6), landing the player somewhere they'd
+   *  already cleared and never meant to return to, instead of going home. */
   private goHome() {
     if (this.busy) return;
-    if (getRun().depth > 1) { this.retreatArea(); return; }
+    const depth = getRun().depth;
+    const onBossFloor = depth % 2 === 0;
+    if (depth > 1 && onBossFloor) { this.retreatArea(); return; }
     this.busy = true;
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth }));
@@ -692,7 +702,7 @@ export class DescentScene extends Phaser.Scene {
       const ch = this.map[ny]?.[nx];
       if (!ch) continue;
       if (ch === '>') return 'Z / tap  ·  descend';
-      if (ch === '<') return depth > 1 ? 'Z / tap  ·  previous floor' : 'Z / tap  ·  return home';
+      if (ch === '<') return depth > 1 && depth % 2 === 0 ? 'Z / tap  ·  previous floor' : 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
         return ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
       }
