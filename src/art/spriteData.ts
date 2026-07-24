@@ -45,6 +45,12 @@ export const PALETTE: Record<string, number> = {
   Y: 0x24352a, // shade base (mossy near-black green)
   y: 0x152018, // shade shadow
   I: 0xd8f5ff, // icy glow
+  T: 0x6c9cf0, // scholar robe blue (matches Scholar Voss's dialogue name color)
+  t: 0x4a5aa8, // scholar robe shadow
+  K: 0x4a7a3a, // merchant coat olive
+  j: 0x2f5a28, // merchant coat shadow
+  Z: 0x2a2438, // hood base (dark purple-gray)
+  z: 0x171420, // hood deepest shadow
 };
 
 // Each value is top-to-bottom rows. Width is the longest row.
@@ -413,5 +419,113 @@ export const SPRITES: Record<string, string[]> = {
     '..oCCCCCCCCo..',
     '..ooo.oo.ooo..',
     '.o..o.o..o..o.',
+  ],
+
+  // --- Dialogue portraits for Sanctuary's non-hero speakers. Bigger/more
+  // detailed busts than the field sprites above, drawn for DialogueScene's
+  // 52x52 display box (see BootScene for how these get loaded as textures).
+
+  // Warden Eda: silver-gray hair, stern face, gold Warden collar over
+  // warden-gray shoulders — the same gold/gray language as the Warden sigil
+  // and Mira's own dawnkeeper coloring.
+  portrait_eda: [
+    '........ooo........',
+    '......ooNNNoo......',
+    '.....oNNNNNNNo.....',
+    '....oNNNNNNNNNo....',
+    '....oNSSSSSSSNo....',
+    '....oSeSSSSSeSo....',
+    '....oSSSSSSSSSo....',
+    '....osSSSsoSSso....',
+    '.....ossssosso.....',
+    '......oossooo......',
+    '.......ooooo.......',
+    '......oGGGoGo......',
+    '.....oGgggogGo.....',
+    '....oNNggNNgNNo....',
+    '...oNNNggNNgNNNo...',
+    '...oNNNNNNNNNNNo...',
+  ],
+
+  // Scholar Voss: dark hair, studious eyes, a scholar's blue robe (tinted
+  // to match her dialogue name color exactly).
+  portrait_voss: [
+    '........ooo........',
+    '......ooHHHoo......',
+    '.....oHHHHHHHo.....',
+    '....oHHHHHHHHHo....',
+    '....oHSSSSSSSHo....',
+    '....oSeSSSSSeSo....',
+    '....oSSSSSSSSSo....',
+    '....osSSSsoSSso....',
+    '.....ossssosso.....',
+    '......oossooo......',
+    '.......ooooo.......',
+    '......oTTToTo......',
+    '.....oTtttotTo.....',
+    '....oTTttTTtTTo....',
+    '...oTTTttTTtTTTo...',
+    '...oTTTTTTTTTTTo...',
+  ],
+
+  // Child: light brown hair, round young face, a turquoise tunic (the same
+  // color as their dialogue name and as Kael's — a small found-family echo).
+  portrait_child: [
+    '........ooo........',
+    '......ooHHHoo......',
+    '.....oHHHHHHHo.....',
+    '....oHHHHHHHHHo....',
+    '....oHSSSSSSSHo....',
+    '....oSeSSSSSeSo....',
+    '....oSSSSSSSSSo....',
+    '....osSSSsoSSso....',
+    '.....ossssosso.....',
+    '......oossooo......',
+    '.......ooooo.......',
+    '......oAAAoAo......',
+    '.....oAaaAoaAo.....',
+    '....oAAaaAAaAAo....',
+    '....oAAAAAAAAAo....',
+    '...oAAAAAAAAAAAo...',
+  ],
+
+  // Merchant: a friendly cap, round warm face, an olive trader's coat with
+  // gold buttons. Deliberately gender-neutral — never specified in dialogue.
+  portrait_merchant: [
+    '.....ooooooooo.....',
+    '....oWWWWWoWWWo....',
+    '....oWwwwWowwWo....',
+    '....oSSSSSoSSSo....',
+    '....oSeSSSoSeSo....',
+    '....oSSSSSoSSSo....',
+    '....osSSSsoSSso....',
+    '.....ossssosso.....',
+    '......oossooo......',
+    '.......ooooo.......',
+    '......oKKKoKo......',
+    '.....oKjKjojKo.....',
+    '....oKKjjKKjKKo....',
+    '...oKKKggKKgKKKo...',
+    '...oKKKKKKKKKKKo...',
+  ],
+
+  // The Stranger: face lost entirely in a deep hood — deliberately unclear,
+  // matching the "???" name and the mystery the writing intends.
+  portrait_stranger: [
+    '.....ooooooooo.....',
+    '....oZZZZZoZZZo....',
+    '...oZZZZZZoZZZZo...',
+    '...oZzZZZzoZZzZo...',
+    '...oZzzZzzoZzzZo...',
+    '...oZzzzzzozzzZo...',
+    '...oZzz..zo.zzZo...',
+    '....oZzzZo.zzZo....',
+    '.....oZZZo.ZZo.....',
+    '......oZo..Zo......',
+    '.......o...o.......',
+    '......oZZo.Zo......',
+    '.....oZzZZozZo.....',
+    '....oZZzZZZzZZo....',
+    '...oZZZzZZZzZZZo...',
   ],
 };

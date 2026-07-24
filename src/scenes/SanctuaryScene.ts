@@ -861,6 +861,10 @@ export class SanctuaryScene extends Phaser.Scene {
     this.shopBox?.destroy();
     const box = this.add.container(0, 0).setDepth(40);
     box.add(this.add.rectangle(20, 22, 600, 316, 0x0d1024, 0.98).setOrigin(0, 0).setStrokeStyle(1, COLORS.wall));
+    if (this.textures.exists('portrait_merchant')) {
+      box.add(this.add.rectangle(600, 42, 38, 38, 0x0d1024).setStrokeStyle(1, 0xf0d36c, 0.8));
+      box.add(this.add.image(600, 42, 'portrait_merchant').setDisplaySize(34, 34));
+    }
     box.add(this.add.text(34, 30, 'MERCHANT', sharpText({ fontFamily: FONT, fontSize: '13px', color: '#f0d36c' })));
     box.add(this.add.text(150, 34, `Gold: ${getRun().gold}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
     box.add(this.add.text(34, 44, this.merchantQuip, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));

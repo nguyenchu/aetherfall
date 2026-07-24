@@ -36,18 +36,18 @@ export const SCRIPTS: Record<string, Script> = {
   ],
 
   npc_keeper: [
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Ashenveil has been sealed since the wolves turned. Shadow-touched, all of them.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'The eastern gate is open for you. Whatever is in there — be careful.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Ashenveil has been sealed since the wolves turned. Shadow-touched, all of them.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'The eastern gate is open for you. Whatever is in there — be careful.' },
   ],
 
   npc_scholar: [
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The grove at the heart of Ashenveil was once an Aether anchor — one of twelve in the region.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'If someone is draining it, the creatures around it will warp. Find the anchor.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The grove at the heart of Ashenveil was once an Aether anchor — one of twelve in the region.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'If someone is draining it, the creatures around it will warp. Find the anchor.' },
   ],
 
   npc_child: [
-    { speaker: 'Child', color: 0x6cf0c2, text: 'My dog ran into the forest two nights ago. His name is Pip. He\'s small and brown.' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Please... if you see him...' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'My dog ran into the forest two nights ago. His name is Pip. He\'s small and brown.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Please... if you see him...' },
   ],
 
   // Story trigger at the dying Aether crystal in the Ancient Grove.
@@ -64,13 +64,13 @@ export const SCRIPTS: Record<string, Script> = {
 
   // Post-ch1 NPC dialogue.
   npc_keeper_after: [
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Ashenveil is quiet again. I never thought I\'d say that.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'The northern road leads to the old Sunken City. We lost contact months ago. Whatever is down there is worse.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Ashenveil is quiet again. I never thought I\'d say that.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'The northern road leads to the old Sunken City. We lost contact months ago. Whatever is down there is worse.' },
   ],
 
   npc_scholar_after: [
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The forest anchor is stable — for now. But there are eleven others.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The Sunken City had one too, the Tidal Anchor. It\'s been submerged for years. Whatever guards it now isn\'t human.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The forest anchor is stable — for now. But there are eleven others.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The Sunken City had one too, the Tidal Anchor. It\'s been submerged for years. Whatever guards it now isn\'t human.' },
   ],
 
   // After defeating the Forest Shade — triggered by BattleScene on boss win.
@@ -98,13 +98,13 @@ export const SCRIPTS: Record<string, Script> = {
   ],
 
   npc_keeper_after2: [
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Two anchors. The Sunken City is draining less now — I can feel it.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'The Ashen Peaks to the west have been burning since before I was born. Whatever lives up there is old.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Two anchors. The Sunken City is draining less now — I can feel it.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'The Ashen Peaks to the west have been burning since before I was born. Whatever lives up there is old.' },
   ],
 
   npc_scholar_after2: [
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The Peaks Anchor is called the Ashbrand in the old texts. A fire spirit that predates the Aether itself.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'It was bound to the anchor willingly, long ago. Something must have turned it.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The Peaks Anchor is called the Ashbrand in the old texts. A fire spirit that predates the Aether itself.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'It was bound to the anchor willingly, long ago. Something must have turned it.' },
   ],
 
   // After defeating the Tide Warden.
@@ -171,63 +171,63 @@ export const SCRIPTS: Record<string, Script> = {
   ],
   // Post-Ch3 NPC follow-ups
   npc_keeper_after3: [
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Three anchors. The scouts are reporting light returning to places that\'ve been dark for a decade.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'But something else is moving. Deeper than the anchors. Older. I don\'t know what it is yet.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Three anchors. The scouts are reporting light returning to places that\'ve been dark for a decade.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'But something else is moving. Deeper than the anchors. Older. I don\'t know what it is yet.' },
   ],
   npc_scholar_after3: [
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The old texts mention twelve anchors — but they also mention something that predates them all.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The Hollow. The empty space beneath the world where the Aether originally fell from. I think it\'s waking up.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'That grove where the first anchor stood — old maps call it "Twisting Hollow." No one ever explained why.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The old texts mention twelve anchors — but they also mention something that predates them all.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'The Hollow. The empty space beneath the world where the Aether originally fell from. I think it\'s waking up.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'That grove where the first anchor stood — old maps call it "Twisting Hollow." No one ever explained why.' },
   ],
   // The Stranger — appears after Ch1, hints at a deeper threat
   npc_stranger: [
-    { speaker: '???', color: 0x8a93b8, text: 'One anchor restored. The drain isn\'t stopping — it\'s slowing.' },
-    { speaker: '???', color: 0x8a93b8, text: 'Someone is collecting the fallen Aether. The anchors aren\'t failing on their own.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'One anchor restored. The drain isn\'t stopping — it\'s slowing.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Someone is collecting the fallen Aether. The anchors aren\'t failing on their own.' },
   ],
   npc_stranger_after2: [
-    { speaker: '???', color: 0x8a93b8, text: 'Ten anchors remain. But the one who\'s draining them will feel each restoration like a thorn.' },
-    { speaker: '???', color: 0x8a93b8, text: 'I stood where the Tide Warden used to kneel, long before it was a Warden at all. They\'ll send something worse soon. Be ready.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Ten anchors remain. But the one who\'s draining them will feel each restoration like a thorn.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'I stood where the Tide Warden used to kneel, long before it was a Warden at all. They\'ll send something worse soon. Be ready.' },
   ],
   npc_stranger_after3: [
-    { speaker: '???', color: 0x8a93b8, text: 'The Hollow stirs. When the time comes, you\'ll need to go deeper than any map shows.' },
-    { speaker: '???', color: 0x8a93b8, text: 'Nine more anchors. And then... something else entirely.' },
-    { speaker: '???', color: 0x8a93b8, text: 'Your swordsman carries a new blade. Ask him whose. I already know the answer, and I don\'t think you\'ll like it.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'The Hollow stirs. When the time comes, you\'ll need to go deeper than any map shows.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Nine more anchors. And then... something else entirely.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Your swordsman carries a new blade. Ask him whose. I already know the answer, and I don\'t think you\'ll like it.' },
   ],
   npc_child_after1: [
-    { speaker: 'Child', color: 0x6cf0c2, text: 'The wolves are gone from Ashenveil. Pip came back last night.' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'He smells like pine and wet stone. I think he was waiting in the grove.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'The wolves are gone from Ashenveil. Pip came back last night.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'He smells like pine and wet stone. I think he was waiting in the grove.' },
   ],
   npc_child_after2: [
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Pip won\'t go near the well anymore. He used to love it.' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum says the water\'s calmer since you fixed the city under the waves. Maybe he can tell.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Pip won\'t go near the well anymore. He used to love it.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Mum says the water\'s calmer since you fixed the city under the waves. Maybe he can tell.' },
   ],
   npc_child_after3: [
-    { speaker: 'Child', color: 0x6cf0c2, text: 'I can see three stars now that were missing before. Mum says those are the anchors you fixed.' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'The Stranger told me there are nine more. Are you going to fix all of them?' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'I can see three stars now that were missing before. Mum says those are the anchors you fixed.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'The Stranger told me there are nine more. Are you going to fix all of them?' },
   ],
   // Post-Ch4 NPC follow-ups
   npc_keeper_after4: [
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Four anchors. The scouts who go near the deep caverns don\'t come back the same — quieter, like they heard something.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I served with Kael\'s watch-line, years back. If pieces of it are still turning up this far from where they fell, whatever\'s out there isn\'t finished with them. Watch yourselves.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I put my name to that assignment. Eight names on a roster, and I signed off on all of them.' },
-    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Kael came back. I told myself that meant it was worth it. I don\'t know if I believe that anymore — but I\'m glad it was him.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Four anchors. The scouts who go near the deep caverns don\'t come back the same — quieter, like they heard something.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'I served with Kael\'s watch-line, years back. If pieces of it are still turning up this far from where they fell, whatever\'s out there isn\'t finished with them. Watch yourselves.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'I put my name to that assignment. Eight names on a roster, and I signed off on all of them.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, portrait: 'portrait_eda', text: 'Kael came back. I told myself that meant it was worth it. I don\'t know if I believe that anymore — but I\'m glad it was him.' },
   ],
   npc_scholar_after4: [
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Four anchors restored, and the old texts agree on one thing now: the anchors aren\'t just lamps. They\'re a seal.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Every one we fix pushes the Hollow back down. And every one we fix, it pushes harder.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'I finally translated that old name properly. "Twisting Hollow" isn\'t a place-name. It\'s a warning, carved by whoever built the original seal.' },
-    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Ashenveil was the weakest anchor of the twelve. Whoever is doing this didn\'t stumble onto it first. They chose it.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'Four anchors restored, and the old texts agree on one thing now: the anchors aren\'t just lamps. They\'re a seal.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'Every one we fix pushes the Hollow back down. And every one we fix, it pushes harder.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'I finally translated that old name properly. "Twisting Hollow" isn\'t a place-name. It\'s a warning, carved by whoever built the original seal.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, portrait: 'portrait_voss', text: 'Ashenveil was the weakest anchor of the twelve. Whoever is doing this didn\'t stumble onto it first. They chose it.' },
   ],
   npc_stranger_after4: [
-    { speaker: '???', color: 0x8a93b8, text: 'Four now. It felt that one — I saw it flinch, if a thing like that can flinch.' },
-    { speaker: '???', color: 0x8a93b8, text: 'Eight anchors left. It will not let you reach all of them quietly. Or all of you.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Four now. It felt that one — I saw it flinch, if a thing like that can flinch.' },
+    { speaker: '???', color: 0x8a93b8, portrait: 'portrait_stranger', text: 'Eight anchors left. It will not let you reach all of them quietly. Or all of you.' },
   ],
   npc_child_after4: [
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Four stars now. I drew them on my wall so I don\'t forget which ones are yours.' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum said something\'s digging under the city at night. Is that the thing you\'re fighting?' },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Pip dug something up by the old well last night. I didn\'t touch it — it felt cold, like the stuff you bring back from the anchors.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Four stars now. I drew them on my wall so I don\'t forget which ones are yours.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Mum said something\'s digging under the city at night. Is that the thing you\'re fighting?' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Pip dug something up by the old well last night. I didn\'t touch it — it felt cold, like the stuff you bring back from the anchors.' },
     { text: 'Under a flat stone, wrapped in cloth: a small, tarnished watch-sigil — the same mark from the grove, and from the casing in the depths.', color: NARRATOR },
-    { speaker: 'Child', color: 0x6cf0c2, text: 'Is that bad? You look like it\'s bad.' },
+    { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Is that bad? You look like it\'s bad.' },
   ],
 };
 
