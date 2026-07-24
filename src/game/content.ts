@@ -53,6 +53,17 @@ export const SPELLS: Record<string, Spell> = {
     id: 'cureall', name: 'Sunward', cost: 9, kind: 'heal', power: 16,
     element: 'none', target: 'party', desc: 'Heals the whole party.',
   },
+  haste: {
+    id: 'haste', name: 'Dawnrush', cost: 6, kind: 'buff', power: 0,
+    element: 'none', target: 'ally', desc: 'Quickens an ally’s next turns.',
+    haste: { mult: 1.6, turns: 3 },
+  },
+  // Enemy-only support: a lighter mend than Mira's, so a healer trash mob
+  // doesn't out-sustain the party — used by Squall Wisp (chapters.ts).
+  squall_mend: {
+    id: 'squall_mend', name: 'Squall\'s Grace', cost: 7, kind: 'heal', power: 12,
+    element: 'none', target: 'ally', desc: 'A gust knits a packmate\'s wounds.',
+  },
   // Kael — Aetherblade: fast physical pressure and guard breaking.
   bash: {
     id: 'bash', name: 'Guardbreak', cost: 3, kind: 'damage', power: 18,
@@ -205,6 +216,15 @@ export const ITEMS: Record<string, Item> = {
     sellPrice: 25,
     description: 'A shard split from a living geode.',
   },
+  storm_shard: {
+    id: 'storm_shard',
+    name: 'Storm Shard',
+    kind: 'sell',
+    power: 0,
+    target: 'none',
+    sellPrice: 30,
+    description: 'A fragment of glass fused mid-strike, still faintly charged.',
+  },
   warden_sigils: {
     id: 'warden_sigils',
     name: 'Warden Sigils',
@@ -223,6 +243,32 @@ export const ITEMS: Record<string, Item> = {
     sellPrice: 40,
     description: 'Torn loose from a collapsing Rift. Merchants pay well for these.',
   },
+};
+
+export interface LimitBreakDef {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+// Limit Break: two bespoke ultimates per party member — one offensive, one
+// defensive/control, so the choice on a full gauge is situational rather
+// than automatic (see battle.ts executeLimitBreak for the mechanics behind
+// each). Shared between BattleScene (submenu + row) and GameMenuScene
+// (status/magic tab info) so the flavor text only lives in one place.
+export const LIMIT_BREAKS: Record<string, LimitBreakDef[]> = {
+  kael: [
+    { id: 'requiem', name: 'Aetherblade Requiem', desc: 'Massive single-target hit. Shatters guard.' },
+    { id: 'bulwark', name: "Warden's Bulwark", desc: 'Shields the whole party from damage for 3 turns.' },
+  ],
+  lyra: [
+    { id: 'cataclysm', name: 'Cataclysm', desc: 'Arcane blast that hits every enemy.' },
+    { id: 'frostbind', name: 'Frostbind Eclipse', desc: 'Weaker blast that chills every enemy, stalling them.' },
+  ],
+  mira: [
+    { id: 'aegis', name: 'Aegis of Dawn', desc: 'Fully heals & revives the party; cleanses ailments.' },
+    { id: 'judgment', name: 'Dawnbreaker Judgment', desc: 'Holy damage to every enemy.' },
+  ],
 };
 
 // Color palette for placeholder sprites, ready to be replaced by art later.
@@ -254,7 +300,7 @@ export function makeParty(): Combatant[] {
       color: C.cleric, size: 21, spells: ['cure', 'smite'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 44, maxMp: 14, str: 9, agi: 7, vit: 8, int: 11 }),
       growth: { maxHp: 7, maxMp: 3, int: 2, str: 1, vit: 1, agi: 1 },
-      learnset: { 5: ['cureall'] },
+      learnset: { 3: ['haste'], 5: ['cureall'] },
     },
   ];
 }

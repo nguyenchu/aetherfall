@@ -1,6 +1,332 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-16.
+> Paste this into a new session to continue the work. Last updated: 2026-07-24.
+
+## 2026-07-24 (audit): Chapter 5 Economy Check + Re-Auditing the Session's Big Batch
+
+Ask: "hva skal vi forbedre nå?" -> user picked both proposed options: a
+Chapter 5 item/quest economy pass (the same kind of check 2026-07-09 (d)
+did for chapters 1-4, never redone for the newer chapter) and a fresh
+audit of the large batch of changes committed at the very start of this
+session (dual Limit Breaks, boss presentation, NPC/UX polish) — motivated
+by having just found a real regression (the retreat-cascade bug above)
+hiding in that same batch, unaudited until something broke.
+
+**Economy check.** Chapter 4->5 equipment pricing (`run.ts`'s sell-price
+table) increases cleanly on both the shop-gear floor and the boss-reward
+ceiling — no issue. But every one of the four per-NPC side-quest chains
+(Eda/Voss/Child/Stranger's ch2/ch3/ch4/ch5-gated check-ins, added by the
+2026-07-16 Inotia-3 pass) dips in gold right at tier 4: Eda and Voss both
+50->35, Child 30->25, Stranger 45->40 — the same shape of bug the
+2026-07-09 (d) audit fixed for the boss-quest chain, just never checked
+here. Fixed Eda (`eda_watchline` 35->50), Voss (`voss_hollow` 35->50), and
+Child (`pip_digging` 25->30) back up to their tier-3 level. Left
+Stranger's `stranger_truth` alone — its dip is smaller and it's the one
+of the four whose tier-4 reward also includes real equipment
+(`watchers_ward`), matching the exact "equipment outweighs a modest gold
+dip" call the 2026-07-09 (d) audit already made once.
+
+**Batch re-audit.** Checked, no issues found: every `{type:'limit'}`
+command construction has exactly one call site and always supplies a
+valid `limitId` (the type change from optional to required didn't leave
+a stale caller); boss sprite keys in `bossSprites.ts` match every boss's
+`spriteKey` in `chapters.ts` exactly; the Sanctuary shop's "sell the whole
+stack" rows all read live inventory (`getRun().inventory[id]`) rather than
+a stale count captured at render time; the Haste queue-preview's
+hypothetical state doesn't need an explicit reset on every exit path
+because the next turn's plain `renderQueue()` call in `advance()`
+overwrites it regardless of how the previous turn ended; `GameMenuScene`'s
+Limit Break block's manual y-position tracking (needed since the spell
+list above it is variable height) holds up across the empty-castable and
+zero-battle-only-spells edge cases. No further fixes from this pass —
+the two bugs already caught and fixed earlier today (retreat cascade,
+Bulwark vs. boss bursts) appear to have been the real issues in this
+batch.
+
+## 2026-07-24 (bugfix): Retreat Cascaded Into the Previous Chapter's Boss Floor
+
+Bug report: "pil tilbake går til veldig rare plasser nå" (the back arrow
+goes to very strange places now) — disambiguated via a quick multiple-
+choice check to mean `DescentScene`'s "previous floor" `'<'` portal (added
+in the large batch of pending work committed at the very start of this
+session, so never specifically audited on its own before now).
+
+Root cause: `goHome()`'s retreat condition was a flat `depth > 1` — every
+chapter is exactly two strata (entrance = odd depth, boss = the next even
+one; see `analytics.ts`'s `chapterOfDepth`), but that check treated *any*
+depth past 1 as "stepping back one stratum is valid," with no concept of
+"stratum within the current chapter." From a later chapter's own entrance
+floor (e.g. depth 7, Ch4's Crystal Depths), pressing `'<'` didn't go home
+like a chapter entrance should — it stepped straight back into the
+*previous* chapter's boss arena (depth 6), an already-cleared area with no
+reason to return to it. Compounding it: every entrance floor's spawn point
+sits right next to its own `'<'` tile by design (it's "the way back"), so
+landing at one after a confusing jump made it easy to immediately trigger
+*another* retreat without meaning to — the "very strange places," plural.
+
+Fix (`DescentScene.ts`): retreat now only steps back a stratum when
+currently on a boss floor (`depth % 2 === 0`); from an entrance floor it
+goes to town regardless of depth, matching the pre-existing depth-1
+behavior. `hintLabel()`'s "previous floor" vs. "return home" text updated
+to the same condition so the on-screen hint doesn't lie.
+
+Verified live via Playwright + the run.ts dev-import hook (jump depth
+directly, no floor-by-floor grind): seeded depth 7 (Ch4 entrance), walked
+onto `'<'` — now correctly opens RunSummary/town, not another Descent
+restart. Seeded depth 8 (Ch4 boss floor), walked onto `'<'` — correctly
+retreats to depth 7, staying in Descent. `tsc --noEmit` clean.
+
+## 2026-07-23 (gui 3): Sanctuary's Decor Was Noise, Not Detail — Cut Back
+
+Feedback after the fortress-layout redesign: "det gjør det for forvirrende
+i byen" (it makes the town too confusing) — asked specifically about the
+decor commit from two sessions back (confirmed via a quick disambiguation,
+since several recent commits touch Sanctuary). Root cause: the original
+decor pass put 5 lanterns and 9 flower beds across the plaza; the flower
+beds' small multi-colored dot clusters in particular read as things you
+might be able to pick up or interact with (competing with real cues —
+quest "!"s, the portal glow, NPC name labels) rather than as scenery.
+
+Cut flower beds entirely (`DecorKind` dropped `'flowers'`, removed the
+now-dead `decor_flowers` texture from `BootScene.ts`) and lanterns from 5
+down to 2 — kept only the pair flanking Warden Eda's and Scholar Voss's
+buildings. What's left (those 2 lanterns, the 2 building banners, the
+fountain, the Merchant's crate/barrel) all double as wayfinding — which
+building is whose, where the shrine/merchant are — instead of being pure
+filler with nothing to distinguish it from clutter.
+
+Live-verified with Playwright: screenshot confirms a visibly calmer plaza,
+remaining landmarks still read clearly. `tsc --noEmit` clean.
+
+## 2026-07-23 (gui 2): Sanctuary's Shape — A Keep Built Around the Anchor
+
+Follow-up ask: "kan du gjøre mer av dette, men kanskje også sånn at det gir
+mening? sanctuary trenger ikke være firkantet" (do more of this, but make
+it make sense — Sanctuary doesn't need to be square). Gave a short
+recommendation (3 options via AskUserQuestion: fortress-around-the-Anchor,
+distinct quarters, organically-grown town) rather than picking one myself —
+this was a real creative-direction fork, not a bug to fix. User picked
+fortress-around-the-Anchor.
+
+Replaced the 30x15 rectangle with a 39x21 chamfered-corner octagon (a keep
+wall, not a box) — the shape now has an in-fiction reason: it's built to
+protect the Anchor shard at its center, the same "last city of light"
+IntroScene's cosmology already established. Designed and validated the
+whole layout with a throwaway Node script (`.scratch-verify/`, not
+committed) before touching the real map: generates the octagon via a
+corner-chamfer distance check, carves 5 gate alcoves through the ring (the
+always-open Ch1 gate top, one per later chapter — right/left/two-bottom —
+so the silhouette reads as "expeditions launch in different directions"),
+places the two NPC buildings + all entities, then flood-fills from spawn to
+confirm every entity/gate tile is actually reachable. This caught two real
+mistakes before they ever hit the browser: an early gate alcove landed
+under Scholar Voss's building block (sealed shut — buildings were placed
+after gate-carving and silently overwrote the corridor), and the initial
+NPC building footprint boxed Eda/Voss into a 3-walls recess reachable from
+only one tile.
+
+Final layout: Warden Eda and Scholar Voss's buildings flank a central
+shrine (the Anchor, plus a fountain just south of it, inherited from the
+prior session's decor pass and repositioned) — they're guarding it now,
+not just standing near an unrelated corner. Merchant/Child/plaza clutter
+moved south of the shrine (inner keep vs. outer bailey). All prior decor
+(lanterns/banners/flowers/crate/barrel) repositioned to match. Also fixed
+a latent duplication bug while in there: the "next objective" bounce
+marker had its own hardcoded Anchor position (`{x:11,y:8}`) separate from
+the MAP's own `'A'` tile — replaced with a grid scan, the same pattern the
+existing Ch1-gate-label code already used for `'D'`, so the two positions
+can't drift apart again.
+
+Verified: the flood-fill script (structural proof, run before porting
+anything into `SanctuaryScene.ts`), then live with Playwright same as the
+prior decor session — fresh save to Sanctuary, full screenshot confirms the
+octagon/alcoves/buildings/decor all render correctly, walked the player
+toward the fountain and confirmed it still blocks at its new position. No
+console/page errors. `tsc --noEmit` clean. Grid now 624x336px, still fits
+the fixed 640x360 canvas with no camera-scroll changes needed.
+
+## 2026-07-23 (gui): Sanctuary Gets a Decor Pass — Lanterns, Banners, Flowers, a Fountain
+
+Ask: "la oss pynte sånn at sanctuary har masse detaljer og ser fint ut"
+(let's decorate so Sanctuary has lots of detail and looks nice). Pure
+visual-polish request, not gameplay/balance — Sanctuary's plaza was flat
+flagstone/wall tiles with zero ambient props, plain next to the rest of
+the game's hand-painted pixel art.
+
+`BootScene.ts` gained `buildSanctuaryDecor()` (+`makeDecorTexture`, a
+card-less sibling of the existing `makeIcon`): six new Graphics-drawn
+textures — `decor_lantern` (iron post + warm glass), two banner variants
+(`decor_banner_gold`/`_violet`), `decor_flowers`, `decor_crate`,
+`decor_barrel`, and `decor_fountain` (stone basin around aether-violet
+water, tying the plaza centerpiece into the game's anchor/aether motif
+instead of a generic water feature).
+
+`SanctuaryScene.ts`: a new `DECOR` table (hand-picked `{x,y,kind}`
+coordinates, checked one-by-one against every NPC/portal/building tile so
+nothing overlaps) rendered by `placeDecor()` after `drawMap()` — 5
+lanterns (each with a pulsing warm-glow circle layered on top) flanking
+the two NPC buildings and the Chapter 1 gate, gold/violet banners on
+Warden Eda's and Scholar Voss's building facades respectively, 9 flower
+beds across the open plaza, and a crate+barrel by the Merchant. All of
+that is pure decoration — none of it touches collision.
+
+The one exception is the new plaza fountain (`placeFountain()`, its own
+pulsing water-glint tween): made it **blocking** on purpose, via a new
+`'F'` map tile, so the plaza centerpiece reads as a real town-square
+obstacle instead of walk-through scenery. Extended the two existing
+`ch === '#'` collision checks (`update()`'s movement, `isWanderable()`'s
+NPC-wander check) to also treat `'F'` as solid — the only logic change in
+an otherwise purely additive pass.
+
+Live-verified with Playwright (cold-start setup per `.claude/skills/verify/
+SKILL.md`, fresh save through to Sanctuary): full-map and zoomed-crop
+screenshots confirm every prop renders in the right place with no z-order
+or overlap glitches; walked the player 8 tiles straight at the fountain
+and confirmed it stops one tile short and stays there across repeated
+presses (blocked), not walking through. `tsc --noEmit` clean. Playwright
+was installed/removed the same way prior verify sessions have (`pnpm
+install --save-dev playwright` → verify → `git checkout --
+package.json pnpm-lock.yaml`), so the manifests are unchanged.
+
+## 2026-07-23 (gameplay 2): Chapter 5 Survivability Audit + Bulwark Couldn't Shield Boss Bursts
+
+Follow-up to "hva skal vi forbedre nå?" -> user picked both proposed options:
+a Chapter-5 difficulty-curve check (the "no one-shots" pass ch1-4 got on
+2026-07-11, never redone for the newer chapter) and a balance pass on the
+two new Limit Break pairs from two sessions back.
+
+**Chapter 5 survivability — audited, no bug found.** Wrote a standalone
+`tsx` script (`chapters.ts`/`content.ts`/`progression.ts` have no Phaser
+dependency) that replays every *guaranteed* (non-random) depth 1-8
+encounter via the real `makeEncounterForArea`/`grantXp` to get a grounded
+"worst case, zero random battles" level floor at depth-9 entry: **L11**,
+party maxHp 160/86/114 (kael/lyra/mira). A looser "+3 randoms/area"
+estimate lands at L12, maxHp 170/91/121 — level estimate is stable either
+way. Checked every Chapter 5 enemy/boss's worst single hit (basic attack +
+known spells, using the real `strike`/`castDamage` formulas by hand) plus
+Galebrand's flat, VIT-bypassing phase-2 burst against both. Worst case:
+Lyra takes 51-57% of her HP in one hit (Thunderhead Sentinel's basic
+attack, or Galebrand's burst) — survivable, matches the "squishiest but
+not one-shottable" bar the 2026-07-11 audit set for chapters 1-4. No
+one-shot risk found; no change made.
+
+**Limit Break balance — two pairs fine, one real gap found and fixed.**
+Computed Cataclysm/Frostbind and Aegis/Judgment's actual numbers at L11:
+Cataclysm one-shots most Chapter 5 trash (88 dmg vs. 78-150 HP) while
+Frostbind trades power (48 dmg) for a guaranteed AoE Chill; Judgment (62
+flat AoE) vs. Aegis (pure full-party heal/revive/cleanse) are both
+clearly situational, not a dominant-choice problem — no change needed
+there.
+
+Kael's pair was different. Every boss's phase-2 transition burst
+(Forest Shade's Shadow Veil, Tide Warden's Tidal Surge, Ashbrand's
+Conflagration, Prism Sovereign's Refracted Blades, Galebrand's Wild
+Current) deals damage via a **direct `applyDamage()` call**, bypassing
+`computeHit()` — a deliberate choice from 2026-07-11 so Defend can't
+trivialize the one scripted "heal-or-die" spike per boss fight. Kael's new
+**Warden's Bulwark** (party-wide 50% damage-taken shield, 3 turns) reads
+`dmgTakenStatus`, but that field is only ever checked *inside*
+`computeHit()` — so Bulwark, sold specifically as anti-burst protection,
+could never touch the single biggest hit in any boss fight. Unlike the
+Defend bypass (a free, always-available action the burst is meant to
+punish), Bulwark is a resource-gated, one-shot ultimate whose entire pitch
+is "shield the party from damage" — leaving it blind to exactly the
+moment it exists for isn't the same deliberate call, it's Bulwark getting
+caught in a bypass that predates it.
+
+Fix (`battle.ts`): new `applyBossBurst(t, dmg)` — applies
+`dmgTakenStatus`'s multiplier if present (still ignoring VIT/crit/
+weakness/Defend, unchanged), used by all five phase-2 cases in place of
+the raw `applyDamage()` call. Event log text/`amount` now shows the
+post-shield number so the log doesn't misreport what actually landed.
+
+Verified with a standalone script exercising the real `Battle.executeTurn`
+path against Galebrand: no shield/not defending → 49 dmg; defending → still
+49 (bypass correctly preserved); Bulwark active (0.5x) → 25 (halved, the
+fix). `tsc --noEmit` clean.
+
+## 2026-07-23 (gameplay): Rift Could Roll Chapter 5 Content Before You'd Ever Seen It
+
+Follow-up to "fortsett med å forbedre spillet" (continue improving the
+game) — same audit method as the previous session's boss-AI pass, this
+time over the endgame Rift (`rift.ts`) instead of `battle.ts`.
+
+The Rift (`SanctuaryScene`'s Anchor NPC) unlocks at `ch4_complete` — always
+has, per its own top-of-file comment ("reached from Sanctuary's Anchor once
+Chapter 4 is cleared"). `generateRift()` picked its theme with a flat
+`Phaser.Utils.Array.GetRandom(CONFIGS)` across all five chapter themes.
+That was correct when only 4 chapters existed; once Chapter 5 (Tempest,
+`galebrand`) was added, its `tempest` config went straight into the same
+pool with no one revisiting the Rift's gate. Net effect: a player who had
+*just* cleared Chapter 4 and talked to the Anchor for the first time could
+roll a Squall Rift — permanently-hasted Gale Harriers, 35%-reflect
+Storm-Warped Sentries, Galebrand itself (860 HP even at tier 0) — none of
+which they'd ever encountered, using mechanics (speed-drag, reflect
+punishment) the game hadn't taught them yet.
+
+Fix: `RiftConfig` gained a `chapter` field (1-5, matching each theme's
+source chapter); `generateRift(tier, maxChapter)` filters `CONFIGS` to
+`chapter <= maxChapter` before picking. `SanctuaryScene.enterRift()` now
+computes `maxChapter = hasFlag('ch5_complete') ? 5 : 4` and passes it
+through — so a Chapter 4 finisher only ever rolls the four themes they've
+actually played, and Tempest joins the pool the moment Chapter 5 is done
+too. `tsc --noEmit` clean.
+
+**Not verified live**, and for a different reason than usual in this log:
+`rift.ts` imports the full `Phaser` package (`Phaser.Utils.Array.GetRandom`,
+`Phaser.Math.*`) rather than being a plain-TS module like `battle.ts`, so it
+can't run standalone under `tsx` the way the boss-AI fix's test script
+did — attempted it with manual `window`/`document` stubs, got past device
+detection but hit `Image is not defined` deeper in Phaser's canvas-feature
+probing. Not worth vendoring a DOM shim for. Verified by direct code
+review instead: confirmed the five `chapter` values match `CONFIGS`' own
+array order (forest=1 ... tempest=5), the filter predicate is a plain `<=`,
+and `enterRift()` is the sole call site (grepped).
+
+## 2026-07-22 (gameplay): Tide Warden's Phase 2 Was the One Boss With No AI Identity
+
+Ask: "hva forbedrer vi nå?" then "commit og push og forbedre gameplay etter
+det" (what are we improving now, then commit/push and improve gameplay
+after that). First committed a large pending working-tree diff (dual Limit
+Breaks per party member, boss sprites/scale/halo, live Haste queue preview,
+dedicated NPC sprites, stepwise Descent retreat, simplified shop sell-all,
+slower intro pacing) that had accumulated uncommitted — not written this
+session, just landed and pushed as-is after a clean `tsc --noEmit`. Note:
+this environment had no git author identity configured at all (not just
+missing on this machine's global config) — had to ask the user and set
+`user.name`/`user.email` **locally** (this repo only) before any commit
+could go through.
+
+For the actual "improve gameplay" ask, audited `battle.ts`'s `enemyAi`/
+`executeBossPhase`/`bossTick` across all five bosses (mirrors the
+2026-07-16 boon/AI audit's method). Finding: Forest Shade (alternating
+weakness), Ashbrand (hunts anyone bracing), and Galebrand (half-random
+targeting) each gained a distinct phase-2 *behavior* change on top of the
+generic stat/heal bump. Prism Sovereign has its own `enrageOnOwnTurn`
+self-haste escalation. **Tide Warden was the one exception** — its phase 2
+(`Undertow`: heal 12% + a 3-turn attack-speed-drag debuff on whoever it
+next hits) was pure flavor text over the same unchanged weakest-HP-ratio
+targeting every non-boss enemy uses.
+
+Fix (`battle.ts` `enemyAi`): past phase 2, Tide Warden now prioritizes
+whoever has the *highest readiness* (closest to acting next) instead of
+weakest HP ratio — thematically Undertow punishes momentum, not health.
+One `priority = e.id === 'tide_warden' && e.phaseTriggered ? soonest :
+weakest` branch, same 60%-priority/40%-random-pool structure as the
+existing weakest-HP pick.
+
+Verified with a standalone logic script (`battle.ts` has no Phaser
+dependency, runs under `tsx` directly against `chapters.ts`/`content.ts`
+factories — same approach as the 2026-07-16 boon audit): forced distinct
+HP-ratio/readiness on each party member so the two strategies would
+disagree, called the private `enemyAi` 500× each side of the phase flag.
+Pre-phase: 267/500 picks went to the weakest-HP member (as before).
+Post-phase: 249/500 shifted to the highest-readiness member instead —
+confirms the branch actually fires and doesn't accidentally affect
+pre-phase behavior. `tsc --noEmit` clean. Scratch test script deleted
+after, not committed. Not verified in a live browser battle (no vendored
+driver reaching a real Tide Warden phase-2 turn) — same bar as most prior
+`battle.ts`-only logic changes in this log.
 
 ## 2026-07-16 (gui): Longer Intro Cutscene + a Real Battle-Start Entrance
 

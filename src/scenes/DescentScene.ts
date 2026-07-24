@@ -13,6 +13,10 @@ import { DescentHudScene } from './DescentHudScene';
 import { pickBanter, DESCENT_BANTER } from '../game/banter';
 import { showBanterToast } from '../ui/banterToast';
 
+const GUST_DIR: Record<'up' | 'down' | 'left' | 'right', [number, number]> = {
+  up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
+};
+
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
@@ -69,7 +73,7 @@ export class DescentScene extends Phaser.Scene {
     super('Descent');
   }
 
-  create(data?: { deeper?: boolean }) {
+  create(data?: { deeper?: boolean; retreated?: boolean }) {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale * WORLD_ZOOM_BONUS);
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
@@ -85,13 +89,15 @@ export class DescentScene extends Phaser.Scene {
     this.mapPixelW = this.map[0].length * GAME.tile;
     this.mapPixelH = this.map.length * GAME.tile;
 
-    // create() runs both on a fresh descent from Sanctuary (scene.start, no data)
-    // and on advancing to the next stratum within a run (advanceArea's
-    // scene.restart({ deeper: true })). Battle returns via RESUME, not create.
-    // So a fresh entry is the one per-chapter "started" signal, while a deeper
-    // entry marks reaching the next stratum — the mid-run progress the funnel
-    // was otherwise blind to.
-    if (data?.deeper) {
+    // create() runs on a fresh descent from Sanctuary (scene.start, no data),
+    // on advancing to the next stratum within a run (advanceArea's
+    // scene.restart({ deeper: true })), and on stepping back to the previous
+    // one (retreatArea's scene.restart({ retreated: true })). Battle returns
+    // via RESUME, not create. So a fresh entry is the one per-chapter
+    // "started" signal, deeper/retreated both mark mid-run floor movement —
+    // the progress the funnel was otherwise blind to — without mislabeling
+    // a backward step as a brand-new chapter start.
+    if (data?.deeper || data?.retreated) {
       track('descent_progress', { ch: chapterOfDepth(run.depth), d: run.depth });
     } else {
       track('chapter_start', { ch: chapterOfDepth(run.depth), d: run.depth, mod: run.modifier.id });
@@ -265,6 +271,11 @@ export class DescentScene extends Phaser.Scene {
           const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
             .setOrigin(0, 0).setTint(0xc78aff).setAlpha(0.8).setDepth(2);
           this.tweens.add({ targets: img, alpha: { from: 0.5, to: 0.95 }, duration: 550, yoyo: true, repeat: -1 });
+        }
+        if (ch === 'G') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0x9fc8e0).setAlpha(0.5).setDepth(1);
+          this.tweens.add({ targets: img, alpha: { from: 0.3, to: 0.65 }, duration: 450, yoyo: true, repeat: -1 });
         }
       }
     }
@@ -443,6 +454,24 @@ export class DescentScene extends Phaser.Scene {
         this.player.setPosition(this.tileCenter(this.px), this.tileCenter(this.py));
         this.playerShadow.setPosition(this.tileCenter(this.px), this.tileCenter(this.py) + 8);
         this.floatText('The prism light bends around you...', '#c78aff', 0);
+      }
+      return;
+    }
+    if (ch === 'G') {
+      const gust = getArea(depth).gusts?.[tileKey];
+      if (gust) {
+        const [gx, gy] = GUST_DIR[gust];
+        const nx = this.px + gx;
+        const ny = this.py + gy;
+        const nch = this.map[ny]?.[nx];
+        if (nch && nch !== '#') {
+          this.px = nx;
+          this.py = ny;
+          this.tweens.killTweensOf(this.player);
+          this.tweens.killTweensOf(this.playerShadow);
+          this.walkPlayerTo(this.tileCenter(this.px), this.tileCenter(this.py));
+          this.floatText('A gust of wind shoves you sideways!', '#9fc8e0', 0);
+        }
       }
       return;
     }
@@ -631,9 +660,33 @@ export class DescentScene extends Phaser.Scene {
     this.scene.restart({ deeper: true });
   }
 
-  /** Only the '<' portal tile leads home; there is no global retreat key. */
+  /** Mirrors advanceArea() the other direction — steps back to the
+   *  previous stratum's map (its own fixed 'P' spawn, same as descending)
+   *  without touching boons/modifier/springs, since the run isn't ending. */
+  private retreatArea() {
+    if (this.busy) return;
+    this.busy = true;
+    getRun().depth--;
+    saveProgress();
+    this.scene.restart({ retreated: true });
+  }
+
+  /** The '<' portal steps back one floor within the *current* chapter (its
+   *  boss stratum -> its own entrance stratum) -- full retreat to town
+   *  otherwise: already on an entrance stratum (nothing shallower belongs to
+   *  this chapter), or already on floor 1. Each chapter is exactly two
+   *  strata (see analytics.ts's chapterOfDepth: depth 1-2 = ch1, 3-4 = ch2,
+   *  ...), so its entrance sits on an odd depth and its boss on the next
+   *  even one. Retreating used to just check `depth > 1`, which doesn't
+   *  know the difference -- from a later chapter's own entrance floor (odd,
+   *  e.g. depth 7) it would "step back" straight into the *previous*
+   *  chapter's boss arena (depth 6), landing the player somewhere they'd
+   *  already cleared and never meant to return to, instead of going home. */
   private goHome() {
     if (this.busy) return;
+    const depth = getRun().depth;
+    const onBossFloor = depth % 2 === 0;
+    if (depth > 1 && onBossFloor) { this.retreatArea(); return; }
     this.busy = true;
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('RunSummary', { reason: 'retreat', depth: getRun().depth }));
@@ -649,7 +702,7 @@ export class DescentScene extends Phaser.Scene {
       const ch = this.map[ny]?.[nx];
       if (!ch) continue;
       if (ch === '>') return 'Z / tap  ·  descend';
-      if (ch === '<') return 'Z / tap  ·  return home';
+      if (ch === '<') return depth > 1 && depth % 2 === 0 ? 'Z / tap  ·  previous floor' : 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X') && !hasFlag(`enc_${depth}_${nx},${ny}`)) {
         return ch === 'B' ? 'Z / tap  ·  boss battle!' : 'Z / tap  ·  elite guardian!';
       }

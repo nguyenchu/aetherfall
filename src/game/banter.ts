@@ -84,6 +84,11 @@ export const DESCENT_BANTER: BanterBeat[] = [
     { ...LYRA, text: 'Four now. It knows we\'re coming.' },
     { ...KAEL, text: 'Good. I\'d rather it worry than us.' },
   ] },
+  { id: 'd_ch5_no_mark', minFlag: 'ch5_complete', lines: [
+    { ...LYRA, text: 'Five now. And that one wasn\'t anyone\'s doing.' },
+    { ...KAEL, text: 'That\'s supposed to be good news.' },
+    { ...LYRA, text: 'Is it?' },
+  ] },
 ];
 
 export const SANCTUARY_BANTER: BanterBeat[] = [
@@ -111,6 +116,10 @@ export const SANCTUARY_BANTER: BanterBeat[] = [
   { id: 's_four_stars', minFlag: 'ch4_complete', lines: [
     { ...MIRA, text: 'Four stars on that kid\'s wall now. Did you see?' },
     { ...KAEL, text: 'I saw. Made the whole thing feel a little less abstract.' },
+  ] },
+  { id: 's_five_stars', minFlag: 'ch5_complete', lines: [
+    { ...MIRA, text: 'Five stars around that window frame now. The kid ran out of wall.' },
+    { ...KAEL, text: 'Running out of wall\'s a good problem to have.' },
   ] },
   { id: 's_stranger_riddles', lines: [
     { ...LYRA, text: 'Sometimes I think the Stranger just likes being cryptic. Nobody needs to talk in riddles that much.' },

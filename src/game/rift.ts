@@ -17,15 +17,17 @@ interface RiftConfig {
   trash: string[];    // random-encounter pool for this theme's chapter
   boss: string;       // boss encounter group for this theme's chapter
   name: string;
+  chapter: number;    // the chapter this theme's content comes from — see generateRift's maxChapter filter
 }
 
 // One config per theme; the enemy pool/boss come from that theme's chapter, so
 // the id prefix has to line up with makeEncounterForArea()'s startsWith checks.
 const CONFIGS: RiftConfig[] = [
-  { theme: THEMES.forest,  idPrefix: 'forest',  trash: ['wolves', 'wolf_sprite', 'sprites', 'wisps'], boss: 'boss',     name: 'Verdant Rift' },
-  { theme: THEMES.sunken,  idPrefix: 'sunken',  trash: ['soldiers', 'soldier_sprite', 'crawlers', 'sprites'], boss: 'ch2_boss', name: 'Drowned Rift' },
-  { theme: THEMES.ashen,   idPrefix: 'ashen',   trash: ['hounds', 'hound_wraith', 'golems', 'wraiths'], boss: 'ch3_boss', name: 'Ember Rift' },
-  { theme: THEMES.crystal, idPrefix: 'crystal', trash: ['wisps', 'wisp_stalker', 'stalkers', 'prisms'], boss: 'ch4_boss', name: 'Prism Rift' },
+  { theme: THEMES.forest,  idPrefix: 'forest',  trash: ['wolves', 'wolf_sprite', 'sprites', 'wisps'], boss: 'boss',     name: 'Verdant Rift', chapter: 1 },
+  { theme: THEMES.sunken,  idPrefix: 'sunken',  trash: ['soldiers', 'soldier_sprite', 'crawlers', 'sprites'], boss: 'ch2_boss', name: 'Drowned Rift', chapter: 2 },
+  { theme: THEMES.ashen,   idPrefix: 'ashen',   trash: ['hounds', 'hound_wraith', 'golems', 'wraiths'], boss: 'ch3_boss', name: 'Ember Rift', chapter: 3 },
+  { theme: THEMES.crystal, idPrefix: 'crystal', trash: ['wisps', 'wisp_stalker', 'stalkers', 'prisms'], boss: 'ch4_boss', name: 'Prism Rift', chapter: 4 },
+  { theme: THEMES.tempest, idPrefix: 'tempest', trash: ['harriers', 'harrier_stalker', 'stalker_sentry', 'squalls'], boss: 'ch5_boss', name: 'Squall Rift', chapter: 5 },
 ];
 
 const W = 24;
@@ -55,9 +57,14 @@ function placeInRoom(grid: string[][], room: Room, char: string): { x: number; y
   return pick;
 }
 
-/** Builds a fresh random single-floor dungeon for the given tier. */
-export function generateRift(tier: number): AreaDef {
-  const cfg = Phaser.Utils.Array.GetRandom(CONFIGS);
+/** Builds a fresh random single-floor dungeon for the given tier. The Rift
+ *  itself unlocks at ch4_complete, but Chapter 5 (tempest) was added after
+ *  that gate was set — without `maxChapter`, a player who just finished
+ *  Chapter 4 could roll a Squall Rift and face Galebrand-tier enemies they
+ *  have never seen. Only themes from chapters actually cleared are eligible. */
+export function generateRift(tier: number, maxChapter: number): AreaDef {
+  const eligible = CONFIGS.filter((c) => c.chapter <= maxChapter);
+  const cfg = Phaser.Utils.Array.GetRandom(eligible);
   const grid: string[][] = Array.from({ length: H }, () => Array<string>(W).fill('#'));
 
   // A start room on the left, a boss room on the right, and a few in between —

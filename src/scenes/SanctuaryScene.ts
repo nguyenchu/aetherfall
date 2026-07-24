@@ -9,6 +9,7 @@ import {
   buyHpBlessing,
   buyItem,
   canSellEquipment,
+  checkMilestoneQuests,
   completeQuest,
   equipmentPrice,
   equippedFor,
@@ -46,12 +47,18 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'moonveil_charm', flag: 'ch1_complete' },
   { id: 'aether_loop', flag: 'ch1_complete' },
   { id: 'stormcaller_rod', flag: 'ch1_complete' },
+  { id: 'consecrated_censer', flag: 'ch1_complete' },
+  { id: 'serpents_kiss', flag: 'ch1_complete' },
+  { id: 'fracture_band', flag: 'ch1_complete' },
   { id: 'winter_staff', flag: 'ch2_complete' },
   { id: 'dawnstar', flag: 'ch2_complete' },
   { id: 'emberweave_robe', flag: 'ch2_complete' },
   { id: 'stormglass_rod', flag: 'ch4_complete' },
   { id: 'hollowguard_plate', flag: 'ch4_complete' },
   { id: 'prism_band', flag: 'ch4_complete' },
+  { id: 'tempest_rod', flag: 'ch5_complete' },
+  { id: 'stormguard_plate', flag: 'ch5_complete' },
+  { id: 'thunderhead_band', flag: 'ch5_complete' },
 ];
 
 // Merchant consumable stock beyond the always-available Elixir/Tonic.
@@ -84,25 +91,80 @@ const USER_NAME: Record<string, string> = { kael: 'Kael', lyra: 'Lyra', mira: 'M
 const STAT_ABBR: Record<string, string> = { maxHp: 'HP', maxMp: 'MP', str: 'STR', vit: 'VIT', agi: 'AGI', int: 'INT' };
 const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase();
 
-// Sanctuary, the last city of light. Handmade map, not procedural.
+// Sanctuary, the last city of light — a keep built around its own Anchor
+// shard (see IntroScene's cosmology), not a rectangle with a wall around it.
+// The octagonal fortress ring narrows to five carved gate alcoves: the
+// always-open Chapter 1 gate (top) plus one per later chapter, so the shape
+// itself says "expeditions launch from here" instead of being arbitrary.
+// Warden Eda and Scholar Voss keep their posts flanking the Anchor shrine at
+// the keep's true center; the Merchant/Child/everyday plaza sits south of it,
+// same as a real keep's inner ward vs. outer bailey.
 // '#' wall, '.' floor, 'P' player start, 'D' descent portal
-// 'K' warden, 'L' scholar, 'C' child, 'V' merchant
+// 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'A' the Anchor, 'T' the
+// Stranger, 'F' plaza fountain (blocking)
 const MAP = [
-  '##############################',
-  '#..T.........................#',
-  '#..###..............###......#',
-  '#..###...K.......L..###...DD.#',
-  '#..###..............###...D..#',
-  '#............................#',
-  '#............................#',
-  '#.........C.......V..........#',
-  '#..........A.................#',
-  '#............................#',
-  '#..............P.............#',
-  '#............................#',
-  '#............................#',
-  '#............................#',
-  '##############################',
+  '#######################################',
+  '#######################################',
+  '##############################DD#######',
+  '##############################D.#######',
+  '##############################..#######',
+  '#######...###.............###...#######',
+  '######....###.............###....######',
+  '#####.....###.............###.....#####',
+  '#####......K...............L......#####',
+  '##.................A.................##',
+  '##...................................##',
+  '#####..............F..............#####',
+  '#####....T........................#####',
+  '#####.............................#####',
+  '######...........................######',
+  '#######.......C....P....V.......#######',
+  '#######..##############..##############',
+  '#######..##############..##############',
+  '#######..##############..##############',
+  '#######################################',
+  '#######################################',
+];
+
+/** Purely visual clutter: never touched for collision/interaction, layered
+ *  on top of the base map after drawMap(). Coordinates were hand-picked to
+ *  avoid every NPC/portal/building tile above. Kept deliberately sparse —
+ *  an earlier pass covered the plaza in lanterns/flower beds everywhere,
+ *  which read as visual noise (the flower beds' colored dot clusters in
+ *  particular got confused for pickups/markers) rather than detail. Every
+ *  piece left here also does double duty as a wayfinding cue (which
+ *  building is whose, where the Merchant is) instead of being pure filler. */
+type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel';
+const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
+  { x: 9, y: 7, kind: 'lantern' },   // flanking Warden Eda's building
+  { x: 29, y: 7, kind: 'lantern' },  // flanking Scholar Voss's building
+  { x: 11, y: 5, kind: 'banner_gold' },   // Warden Eda's building
+  { x: 27, y: 5, kind: 'banner_violet' }, // Scholar Voss's building
+  { x: 22, y: 15, kind: 'crate' },  // near the Merchant
+  { x: 26, y: 15, kind: 'barrel' }, // near the Merchant
+];
+
+/** Chapter descent portals beyond the always-open Chapter 1 gate ('D' tiles
+ *  baked into MAP), keyed by the flag that unlocks them — a single table
+ *  instead of a hand-duplicated `chNPortalPos` field + call site at every
+ *  place a portal can be walked into, hinted at, or descended through. */
+interface ChapterPortal {
+  chapter: number;
+  flag: string;
+  pos: { x: number; y: number };
+  areaName: string;
+  tint: number;
+  labelColor: string;
+  targetDepth: number;
+}
+
+// Each pos sits inside its own carved gate alcove in the outer wall (see
+// MAP) -- right gate for Ch2, left for Ch3, the two bottom gates for Ch4/5.
+const CHAPTER_PORTALS: ChapterPortal[] = [
+  { chapter: 2, flag: 'ch1_complete', pos: { x: 36, y: 10 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
+  { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 10 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
+  { chapter: 4, flag: 'ch3_complete', pos: { x: 24, y: 18 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
+  { chapter: 5, flag: 'ch4_complete', pos: { x: 8, y: 18 }, areaName: 'Stormcrag Heights', tint: 0x6ac8f0, labelColor: '#8ad8f5', targetDepth: 9 },
 ];
 
 interface Npc {
@@ -137,53 +199,57 @@ interface LiveNpc {
 }
 
 function npcs(): Record<string, Npc> {
+  const ch5Done = hasFlag('ch5_complete');
   const ch4Done = hasFlag('ch4_complete');
   const ch3Done = hasFlag('ch3_complete');
   const ch2Done = hasFlag('ch2_complete');
   const ch1Done = hasFlag('ch1_complete');
   return {
     K: {
-      spriteKey: 'c_mira', scale: 1, name: 'Warden Eda', kind: 'dialogue',
-      scriptId: ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
-      // eda_watchline is the ch4 payoff to her "I served with Kael's
+      spriteKey: 'e_wardeneda', scale: 1, name: 'Warden Eda', kind: 'dialogue',
+      scriptId: ch5Done ? 'npc_keeper_after5' : ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
+      // eda_orders is the ch5 payoff — the unrecognized name on Kael's old
+      // orders. eda_watchline is the ch4 payoff to her "I served with Kael's
       // watch-line" hint — same one-off-then-chained pattern as the Stranger.
       // eda_sunken/eda_hollow are the ch2/ch3 check-ins in between.
-      questActive: isQuestActive(ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda'),
-      questId: ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda',
+      questActive: isQuestActive(ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda'),
+      questId: ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda',
       wander: true,
     },
     L: {
-      spriteKey: 'c_lyra', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
-      scriptId: ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+      spriteKey: 'e_scholarvoss', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
+      scriptId: ch5Done ? 'npc_scholar_after5' : ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+      // voss_twelve is the ch5 payoff — the "line before the line" theory.
       // voss_hollow is the ch4 payoff to the "Twisting Hollow" reveal from
       // npc_scholar_after3. voss_peaks/voss_texts are the ch2/ch3 check-ins.
-      questActive: isQuestActive(ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors'),
-      questId: ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors',
+      questActive: isQuestActive(ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors'),
+      questId: ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors',
       wander: true,
     },
     C: {
-      spriteKey: 'player', scale: 0.8, name: 'Child', kind: 'dialogue',
-      scriptId: ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
-      // pip_digging is the ch4 payoff — the sigil Pip digs up by the well.
-      // child_current/child_stars are the ch2/ch3 check-ins.
-      questActive: ch1Done && isQuestActive(ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip'),
-      questId: ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
+      spriteKey: 'e_child', scale: 0.8, name: 'Child', kind: 'dialogue',
+      scriptId: ch5Done ? 'npc_child_after5' : ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
+      // pip_wont_settle is the ch5 payoff. pip_digging is the ch4 payoff —
+      // the sigil Pip digs up by the well. child_current/child_stars are the
+      // ch2/ch3 check-ins.
+      questActive: ch1Done && isQuestActive(ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip'),
+      questId: ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
       wander: true,
     },
-    V: { spriteKey: 'c_kael', scale: 1, name: 'Merchant', kind: 'vendor' },
+    V: { spriteKey: 'e_merchant', scale: 1, name: 'Merchant', kind: 'vendor' },
     // The Stranger appears after Ch1 in the northwest corner
     ...(ch1Done ? {
       T: {
-        spriteKey: 'c_kael', scale: 0.9, name: '???', kind: 'dialogue' as const,
-        scriptId: ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
+        spriteKey: 'e_stranger', scale: 0.9, name: '???', kind: 'dialogue' as const,
+        scriptId: ch5Done ? 'npc_stranger_after5' : ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
         // heed_the_stranger is a one-off "you've noticed them" bootstrap quest
-        // (completes on first talk after ch1); stranger_truth is the real
-        // payoff, gated on ch4 so it can't complete until the after4 tier —
-        // completeQuest() no-ops on an already-complete id, so this switch is
-        // what makes the second quest ever fire at all. stranger_warning/
-        // stranger_hollow are the ch2/ch3 check-ins in between.
-        questActive: isQuestActive(ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger'),
-        questId: ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger',
+        // (completes on first talk after ch1); stranger_truth is the ch4
+        // payoff, stranger_witness the ch5 one — completeQuest() no-ops on an
+        // already-complete id, so this switch is what makes each subsequent
+        // quest ever fire at all. stranger_warning/stranger_hollow are the
+        // ch2/ch3 check-ins in between.
+        questActive: isQuestActive(ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger'),
+        questId: ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger',
         wander: true,
       },
     } : {}),
@@ -230,6 +296,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private hintText?: Phaser.GameObjects.Text;
   private questMarkers = new Map<string, Phaser.GameObjects.Text>();
   private storyMarkers = new Map<string, Phaser.GameObjects.Text>();
+  private activePortals: ChapterPortal[] = [];
 
   constructor() {
     super('Sanctuary');
@@ -249,6 +316,7 @@ export class SanctuaryScene extends Phaser.Scene {
     // without resetting these, update() can touch a destroyed GameObject.
     this.hintText = undefined;
     this.shopBox = undefined;
+    this.activePortals = CHAPTER_PORTALS.filter((p) => hasFlag(p.flag));
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
     this.drawMap(npcs());
@@ -264,6 +332,10 @@ export class SanctuaryScene extends Phaser.Scene {
       setFlag('intro_seen');
       this.openDialogue('intro');
     }
+
+    // Milestone/delivery quests have no NPC or boss to trigger them — check
+    // in every time the player is back in town, same as a real turn-in.
+    for (const quest of checkMilestoneQuests()) showQuestToast(this, quest);
   }
 
   // --- Map and figures ------------------------------------------------------
@@ -284,12 +356,60 @@ export class SanctuaryScene extends Phaser.Scene {
         if (ch === 'D') {
           this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85);
         }
+        if (ch === 'F') {
+          this.placeFountain(x + GAME.tile / 2, y + GAME.tile / 2);
+        }
         if (ch === 'P') {
           this.px = c;
           this.py = r;
         }
         const npc = npcDefs[ch];
         if (npc) this.spawnNpc(npc, c, r);
+      }
+    }
+    this.placeDecor();
+  }
+
+  /** Plaza centerpiece (see BootScene's decor_fountain). Blocking — the only
+   *  solid decoration, see the 'F' checks in update()/isWanderable — with a
+   *  slow water-glint pulse so it isn't just a static painting. */
+  private placeFountain(cx: number, cy: number) {
+    this.add.image(cx, cy, 'decor_fountain').setDepth(2);
+    const glint = this.add.circle(cx - 2, cy - 2, 2.4, 0x6a7ac0, 0.6).setDepth(2);
+    this.tweens.add({
+      targets: glint, alpha: { from: 0.6, to: 0.15 }, scale: { from: 1, to: 1.6 },
+      duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+    });
+  }
+
+  /** Purely visual world clutter (see the DECOR table) — lanterns, banners,
+   *  flower beds, merchant crates. None of it affects collision or input. */
+  private placeDecor() {
+    for (const d of DECOR) {
+      const x = d.x * GAME.tile + GAME.tile / 2;
+      const y = d.y * GAME.tile + GAME.tile / 2;
+      switch (d.kind) {
+        case 'lantern': {
+          this.add.image(x, y, 'decor_lantern').setOrigin(0.5, 0.85).setDepth(2);
+          const glow = this.add.circle(x, y - GAME.tile * 0.6, 5, 0xffcf7a, 0.35).setDepth(2);
+          this.tweens.add({
+            targets: glow, alpha: { from: 0.35, to: 0.12 }, scale: { from: 1, to: 1.3 },
+            duration: 1300 + Phaser.Math.Between(0, 400), yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          });
+          break;
+        }
+        case 'banner_gold':
+          this.add.image(x, y - GAME.tile / 2, `decor_banner_gold`).setOrigin(0.5, 0).setDepth(2);
+          break;
+        case 'banner_violet':
+          this.add.image(x, y - GAME.tile / 2, `decor_banner_violet`).setOrigin(0.5, 0).setDepth(2);
+          break;
+        case 'crate':
+          this.add.image(x, y, 'decor_crate').setOrigin(0.5, 0.6).setDepth(2);
+          break;
+        case 'barrel':
+          this.add.image(x, y, 'decor_barrel').setOrigin(0.5, 0.6).setDepth(2);
+          break;
       }
     }
   }
@@ -423,16 +543,9 @@ export class SanctuaryScene extends Phaser.Scene {
 
     if (ch === 'D') { this.descend(); return; }
 
-    if (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y) {
-      this.descendToChapter2();
-      return;
-    }
-    if (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y) {
-      this.descendToChapter3();
-      return;
-    }
-    if (this.ch4PortalPos && nx === this.ch4PortalPos.x && ny === this.ch4PortalPos.y) {
-      this.descendToChapter4();
+    const chapterPortal = this.activePortals.find((p) => p.pos.x === nx && p.pos.y === ny);
+    if (chapterPortal) {
+      this.descendToChapterPortal(chapterPortal);
       return;
     }
 
@@ -442,7 +555,7 @@ export class SanctuaryScene extends Phaser.Scene {
       this.interact(live);
       return;
     }
-    if (ch === '#' || ch === undefined) {
+    if (ch === '#' || ch === 'F' || ch === undefined) {
       this.moveLockedUntil = time + 120;
       return;
     }
@@ -472,12 +585,10 @@ export class SanctuaryScene extends Phaser.Scene {
    *  tile, and within a short leash of home so they stay findable. */
   private isWanderable(live: LiveNpc, x: number, y: number): boolean {
     const ch = this.grid[y]?.[x];
-    if (!ch || ch === '#' || ch === 'D') return false;
+    if (!ch || ch === '#' || ch === 'D' || ch === 'F') return false;
     if (x === this.px && y === this.py) return false;
     if (this.liveNpcAt(x, y)) return false;
-    if (this.ch2PortalPos && x === this.ch2PortalPos.x && y === this.ch2PortalPos.y) return false;
-    if (this.ch3PortalPos && x === this.ch3PortalPos.x && y === this.ch3PortalPos.y) return false;
-    if (this.ch4PortalPos && x === this.ch4PortalPos.x && y === this.ch4PortalPos.y) return false;
+    if (this.activePortals.some((p) => p.pos.x === x && p.pos.y === y)) return false;
     const leash = 3;
     return Math.max(Math.abs(x - live.homeX), Math.abs(y - live.homeY)) <= leash;
   }
@@ -548,14 +659,9 @@ export class SanctuaryScene extends Phaser.Scene {
       const ch = this.grid[ny]?.[nx] ?? '#';
 
       if (ch === 'D') return this.portalAction(() => this.descend());
-      if (this.ch2PortalPos && nx === this.ch2PortalPos.x && ny === this.ch2PortalPos.y) {
-        return this.portalAction(() => this.descendToChapter2());
-      }
-      if (this.ch3PortalPos && nx === this.ch3PortalPos.x && ny === this.ch3PortalPos.y) {
-        return this.portalAction(() => this.descendToChapter3());
-      }
-      if (this.ch4PortalPos && nx === this.ch4PortalPos.x && ny === this.ch4PortalPos.y) {
-        return this.portalAction(() => this.descendToChapter4());
+      const chapterPortal = this.activePortals.find((p) => p.pos.x === nx && p.pos.y === ny);
+      if (chapterPortal) {
+        return this.portalAction(() => this.descendToChapterPortal(chapterPortal));
       }
 
       const live = this.liveNpcAt(nx, ny);
@@ -630,10 +736,14 @@ export class SanctuaryScene extends Phaser.Scene {
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
-  /** Generates a fresh Rift floor for the current tier and descends into it. */
+  /** Generates a fresh Rift floor for the current tier and descends into it.
+   *  Theme pool is capped to chapters actually cleared (see generateRift) —
+   *  the Rift itself opens at ch4_complete, so without this a fresh Chapter 4
+   *  finisher could roll the Chapter 5 (tempest/Galebrand) theme blind. */
   private enterRift() {
     this.state = 'busy';
-    setRiftArea(generateRift(getSave().ngPlus));
+    const maxChapter = hasFlag('ch5_complete') ? 5 : 4;
+    setRiftArea(generateRift(getSave().ngPlus, maxChapter));
     getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
@@ -681,41 +791,28 @@ export class SanctuaryScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#a58cff' })).setOrigin(0.5, 1).setDepth(5);
     }
 
-    // Chapter 2 portal — north of town, only after ch1 complete.
-    if (hasFlag('ch1_complete')) {
-      const px = 14, py = 1;
-      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
-        .setOrigin(0, 0).setTint(0x4488ff).setDepth(1);
-      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Sunken City',
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6699ff' })).setOrigin(0.5, 1).setDepth(5);
-      this.ch2PortalPos = { x: px, y: py };
+    // Every unlocked chapter portal beyond Chapter 1's always-open gate.
+    for (const p of this.activePortals) {
+      this.add.image(p.pos.x * GAME.tile, p.pos.y * GAME.tile, 'aether')
+        .setOrigin(0, 0).setTint(p.tint).setDepth(1);
+      this.add.text(p.pos.x * GAME.tile + GAME.tile / 2, p.pos.y * GAME.tile - 6, p.areaName,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: p.labelColor })).setOrigin(0.5, 1).setDepth(5);
     }
 
-    if (hasFlag('ch2_complete')) {
-      const px = 2, py = 7;
-      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
-        .setOrigin(0, 0).setTint(0xff6622).setDepth(1);
-      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Ashen Peaks',
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#ff8844' })).setOrigin(0.5, 1).setDepth(5);
-      this.ch3PortalPos = { x: px, y: py };
-    }
-
-    if (hasFlag('ch3_complete')) {
-      const px = 27, py = 7;
-      this.add.image(px * GAME.tile, py * GAME.tile, 'aether')
-        .setOrigin(0, 0).setTint(0xaa44ff).setDepth(1);
-      this.add.text(px * GAME.tile + GAME.tile / 2, py * GAME.tile - 6, 'Crystal Depths',
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#c78aff' })).setOrigin(0.5, 1).setDepth(5);
-      this.ch4PortalPos = { x: px, y: py };
-    }
-
-    // Point toward whichever descent still holds the active main quest.
+    // Point toward whichever descent still holds the active main quest. Chapters
+    // unlock strictly in sequence, so the last *unlocked* portal is always the
+    // in-progress one — unless its own chapter is also already cleared, in
+    // which case every authored chapter is done and the Rift takes over.
     const mainPortal = dTiles.length > 0 ? { x: dTiles[Math.floor(dTiles.length / 2)].c, y: dTiles[Math.floor(dTiles.length / 2)].r } : null;
-    const crystalPos = { x: 11, y: 8 };
+    // Scanned rather than hand-duplicated (like dTiles above) so the Anchor's
+    // MAP position and this bounce-marker target can't drift out of sync.
+    let crystalPos = { x: 0, y: 0 };
+    for (let r = 0; r < this.grid.length; r++)
+      for (let c = 0; c < this.grid[r].length; c++)
+        if (this.grid[r][c] === 'A') crystalPos = { x: c, y: r };
+    const lastPortal = this.activePortals[this.activePortals.length - 1];
     const nextObjective = !hasFlag('ch1_complete') ? mainPortal
-      : !hasFlag('ch2_complete') ? this.ch2PortalPos
-      : !hasFlag('ch3_complete') ? this.ch3PortalPos
-      : !hasFlag('ch4_complete') ? this.ch4PortalPos
+      : lastPortal && !hasFlag(`ch${lastPortal.chapter}_complete`) ? lastPortal.pos
       : getSave().ngPlus === 0 ? crystalPos
       : null;
     if (nextObjective) {
@@ -730,10 +827,6 @@ export class SanctuaryScene extends Phaser.Scene {
     return marker;
   }
 
-  private ch2PortalPos: { x: number; y: number } | null = null;
-  private ch3PortalPos: { x: number; y: number } | null = null;
-  private ch4PortalPos: { x: number; y: number } | null = null;
-
   private descend() {
     this.state = 'busy';
     getRun().depth = 1;
@@ -741,23 +834,9 @@ export class SanctuaryScene extends Phaser.Scene {
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
-  private descendToChapter2() {
+  private descendToChapterPortal(portal: ChapterPortal) {
     this.state = 'busy';
-    getRun().depth = 3;
-    this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
-  }
-
-  private descendToChapter3() {
-    this.state = 'busy';
-    getRun().depth = 5;
-    this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
-  }
-
-  private descendToChapter4() {
-    this.state = 'busy';
-    getRun().depth = 7;
+    getRun().depth = portal.targetDepth;
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
@@ -814,15 +893,16 @@ export class SanctuaryScene extends Phaser.Scene {
         action: () => { for (const [id, n] of junk) for (let k = 0; k < n; k++) sellItem(id); },
       });
     }
-    for (const [id, count] of Object.entries(inv).filter(([, n]) => n > 0)) {
+    for (const [id] of Object.entries(inv).filter(([, n]) => n > 0)) {
       const item = ITEMS[id];
       if (!item) continue;
+      // One row per item — confirming it sells the entire stack at once.
       sells.push({
         id, kind: 'sellItem',
-        label: () => `${item.name} x${count}`,
-        price: () => item.sellPrice ?? 0,
+        label: () => `${item.name} x${getRun().inventory[id] ?? 0}`,
+        price: () => (item.sellPrice ?? 0) * (getRun().inventory[id] ?? 0),
         enabled: () => (getRun().inventory[id] ?? 0) > 0,
-        action: () => { sellItem(id); },
+        action: () => { const n = getRun().inventory[id] ?? 0; for (let k = 0; k < n; k++) sellItem(id); },
       });
     }
     for (const eq of ownedEquipment().filter((e) => canSellEquipment(e.id))) {
@@ -963,7 +1043,7 @@ export class SanctuaryScene extends Phaser.Scene {
         sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 500 } })));
       box.add(this.add.text(tx, py + 42, o.kind === 'buyItem'
         ? `Buy ${item.buyPrice ?? 0}g   ·   sells back for ${item.sellPrice ?? 0}g`
-        : `Sells for ${item.sellPrice ?? 0}g each`,
+        : `Sells the whole stack at once — total ${o.price()}g`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
     } else if (o.kind === 'blessing') {
       head('Crystal Blessing');

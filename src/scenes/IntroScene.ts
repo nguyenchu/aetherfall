@@ -731,19 +731,20 @@ export class IntroScene extends Phaser.Scene {
       const g = this.drawHero(colors[i]);
       const figure = this.add.container(startPos[i].x, startPos[i].y, [g]).setDepth(10).setAlpha(0);
       objs.push(figure);
-      this.tweens.add({ targets: figure, alpha: 1, duration: 500, delay: i * 260, ease: 'Sine.easeOut' });
+      this.tweens.add({ targets: figure, alpha: 1, duration: 500, delay: i * 380, ease: 'Sine.easeOut' });
 
       // Footstep bob while walking in
       const bob = this.tweens.add({
         targets: g, y: { from: 0, to: -3 }, duration: 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       });
 
-      // Walk in from off-screen and converge on the group position
+      // Walk in from off-screen and converge on the group position — a slow,
+      // deliberate approach so the moment they arrive together has weight.
       this.tweens.add({
         targets: figure,
         x: tx, y: CY + 10,
-        duration: 2200,
-        delay: i * 260,
+        duration: 3200,
+        delay: i * 380,
         ease: 'Sine.easeInOut',
         onComplete: () => {
           bob.remove();
@@ -759,34 +760,34 @@ export class IntroScene extends Phaser.Scene {
 
     // Once the three stand together, a warm light rises around them and holds —
     // the thing they have each chosen to guard. A held beat, not a quick blink.
-    this.after(2900, () => {
+    this.after(4100, () => {
       const flash = this.add.circle(CX, CY + 12, 4, 0xeef2ff, 0.6).setDepth(9);
-      this.tweens.add({ targets: flash, scale: 16, alpha: 0, duration: 900, ease: 'Sine.easeOut', onComplete: () => flash.destroy() });
+      this.tweens.add({ targets: flash, scale: 16, alpha: 0, duration: 1300, ease: 'Sine.easeOut', onComplete: () => flash.destroy() });
       const haloColors = [0xf0d36c, 0xfff0aa];
       for (let i = 0; i < 2; i++) {
         const halo = this.add.circle(CX, CY + 12, 22 + i * 22, haloColors[i], 0).setDepth(8);
         objs.push(halo);
-        this.tweens.add({ targets: halo, alpha: 0.1 - i * 0.03, scale: { from: 0.7, to: 1 }, duration: 1500, ease: 'Sine.easeOut' });
-        this.tweens.add({ targets: halo, alpha: { from: 0.1 - i * 0.03, to: 0.04 }, duration: 2200, yoyo: true, repeat: -1, delay: 1500, ease: 'Sine.easeInOut' });
+        this.tweens.add({ targets: halo, alpha: 0.1 - i * 0.03, scale: { from: 0.7, to: 1 }, duration: 1900, ease: 'Sine.easeOut' });
+        this.tweens.add({ targets: halo, alpha: { from: 0.1 - i * 0.03, to: 0.04 }, duration: 2200, yoyo: true, repeat: -1, delay: 1900, ease: 'Sine.easeInOut' });
       }
     });
 
     // They have come together. Pivot from who they are to what they are up
     // against — the world's story, told as the flashback that follows.
-    this.after(4400, () => {
+    this.after(6200, () => {
       const t = this.caption('They gathered around the last light still burning — Sanctuary.', CY + 90, '#dfe4f5', '12px');
       objs.push(t);
       this.fadeIn(t, 900);
       this.after(4200, () => this.fadeOut(t, 500));
     });
-    this.after(9400, () => {
+    this.after(11200, () => {
       const t2 = this.caption('To know what they are fighting for, you have to know what was lost.', CY + 90, '#c9cee8', '11px');
       objs.push(t2);
       this.fadeIn(t2, 900);
       this.after(4000, () => this.fadeOut(t2, 500));
     });
 
-    this.after(14400, () => this.sweep(objs, () => this.seq1_crystal()));
+    this.after(16200, () => this.sweep(objs, () => this.seq1_crystal()));
   }
 
   // ── Closing beat: the call to arms, after the world's story ──────────────

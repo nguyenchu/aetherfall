@@ -142,21 +142,101 @@ export const QUESTS: QuestDef[] = [
     title: 'Eda\'s Old Command',
     text: 'Warden Eda served with Kael\'s watch-line years ago. Ask her what she remembers before it\'s too late to ask.',
     unlockFlag: 'ch4_complete',
-    rewards: { gold: 35, items: { tonic: 1 } },
+    rewards: { gold: 50, items: { tonic: 1 } },
   },
   {
     id: 'voss_hollow',
     title: 'The Grove\'s Old Name',
     text: 'Scholar Voss finally translated the old name for Ashenveil\'s grove. Hear what it means.',
     unlockFlag: 'ch4_complete',
-    rewards: { gold: 35, items: { warden_sigils: 1 } },
+    rewards: { gold: 50, items: { warden_sigils: 1 } },
   },
   {
     id: 'pip_digging',
     title: 'What Pip Found',
     text: 'Pip dug something up by the old well. The child wants you to see it.',
     unlockFlag: 'ch4_complete',
-    rewards: { gold: 25, items: { potion: 1 } },
+    rewards: { gold: 30, items: { potion: 1 } },
+  },
+  {
+    id: 'defeat_galebrand',
+    title: 'Ground the Storm',
+    text: 'Defeat Galebrand, the storm spirit unraveling atop the Tempest Anchor.',
+    unlockFlag: 'ch4_complete',
+    rewards: { gold: 210, equipment: ['stormward_mace'], items: { warden_sigils: 2 } },
+  },
+  // Fifth-tier NPC check-ins, unlocked once Chapter 5 is clear — the same
+  // four NPCs' existing after5 dialogue.
+  {
+    id: 'eda_orders',
+    title: 'The Unsigned Order',
+    text: 'Warden Eda found a name on Kael\'s old deployment orders that shouldn\'t exist. Hear what she\'s found.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 55, items: { tonic: 1 } },
+  },
+  {
+    id: 'voss_twelve',
+    title: 'The Line Before the Line',
+    text: 'Scholar Voss believes the twelve anchors were first raised by twelve wardens older than Sanctuary itself. Hear her theory.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 55, items: { warden_sigils: 1 } },
+  },
+  {
+    id: 'stranger_witness',
+    title: 'Someone Who Was There',
+    text: 'The Stranger claims they were present when Kael\'s watch-line first deployed. Press them for what they remember.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 45, items: { tonic: 1 } },
+  },
+  {
+    id: 'pip_wont_settle',
+    title: 'Pip Won\'t Settle',
+    text: 'The digging under the city has Pip spooked. The child wants you to see for yourself.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 30, items: { potion: 1 } },
+  },
+  // Milestone quests: no NPC or boss to trigger them — they complete on
+  // their own once their condition is met (checkMilestoneQuests(), run.ts),
+  // checked whenever the player is back in Sanctuary. A different shape of
+  // "complex" than the talk-to/defeat quests above: a threshold to work
+  // toward over several fights or floors rather than a single action.
+  {
+    id: 'milestone_level10',
+    title: 'A Seasoned Line',
+    text: 'Bring any one of your party to level 10.',
+    rewards: { gold: 60, items: { hi_potion: 1 } },
+  },
+  {
+    id: 'milestone_boons',
+    title: 'Blessed Sixfold',
+    text: 'Carry six Boons at once.',
+    unlockFlag: 'ch1_complete',
+    rewards: { gold: 50, items: { tonic: 2 } },
+  },
+  {
+    id: 'milestone_gold',
+    title: 'A Fat Purse',
+    text: 'Hold 500 gold at once — spend it too soon and you\'ll have to build back up.',
+    unlockFlag: 'ch2_complete',
+    rewards: { gold: 75 },
+  },
+  {
+    id: 'milestone_depth9',
+    title: 'Deep Beneath',
+    text: 'Descend to depth 9 — the storm-wracked cliffs of the Tempest Anchor.',
+    unlockFlag: 'ch3_complete',
+    rewards: { gold: 80, items: { hi_tonic: 1 } },
+  },
+  // Delivery quest: reuses Warden Sigils — otherwise pure resale junk — as
+  // a tribute cost instead of a talk/defeat trigger. Consumed on completion
+  // (see checkMilestoneQuests()), so it's a real spend-vs-sell choice, not
+  // just another number to watch climb.
+  {
+    id: 'bounty_sigils',
+    title: 'A Warden\'s Due',
+    text: 'Warden Eda asked for five Warden Sigils, no questions asked, for reasons of her own.',
+    unlockFlag: 'ch3_complete',
+    rewards: { gold: 90, equipment: ['fracture_band'] },
   },
 ];
 

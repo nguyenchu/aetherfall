@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { music, sfx } from '../audio/music';
 import { BOONS } from '../game/boons';
-import { ITEMS, SPELLS } from '../game/content';
+import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
 import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
 import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedByOther, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
@@ -58,6 +58,7 @@ export class GameMenuScene extends Phaser.Scene {
   private resetArmed = false;
   private magicSpellId?: string;
   private itemsScroll = 0;
+  private questScroll = 0;
   /** Item drilled into for target-selection; undefined = showing the list. */
   private itemSelId?: string;
   /** Full sorted id list of held items — the logical list scroll nav walks. */
@@ -98,7 +99,7 @@ export class GameMenuScene extends Phaser.Scene {
     this.renderContent();
     this.bindMenuInput();
     this.input.on('wheel', (_p: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
-      if ((this.tab === 'equip' || this.tab === 'items') && this.focus === 'content' && dy !== 0) this.moveSelection(dy > 0 ? 1 : -1);
+      if ((this.tab === 'equip' || this.tab === 'items' || this.tab === 'quests') && this.focus === 'content' && dy !== 0) this.moveSelection(dy > 0 ? 1 : -1);
     });
     attachTouchControls(this, 'bottom', 'menu');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
@@ -451,10 +452,17 @@ export class GameMenuScene extends Phaser.Scene {
     });
 
     const spells = member.spells.map((id) => SPELLS[id]).filter((s) => s != null);
-    const allyHeals = spells.filter((s) => s.kind === 'heal' && s.target === 'ally');
-    this.magicSpellId = allyHeals.length > 0
-      ? (allyHeals.some((s) => s.id === this.magicSpellId) ? this.magicSpellId : allyHeals[0].id)
-      : undefined;
+    // Only healing spells work outside battle — everything else is grouped
+    // into a compact "battle-only" line below instead of cluttering the
+    // castable list with rows the player can never actually use here.
+    const castable = spells.filter((s) => s.kind === 'heal');
+    const battleOnly = spells.filter((s) => s.kind !== 'heal');
+    // Don't default to the first castable spell — the target portraits stay
+    // hidden until the player actually focuses or picks one, instead of
+    // showing up immediately whenever this tab has a healer selected.
+    if (this.magicSpellId && !castable.some((s) => s.id === this.magicSpellId)) {
+      this.magicSpellId = undefined;
+    }
     const selectedSpell = this.magicSpellId ? SPELLS[this.magicSpellId] : undefined;
 
     box.add(this.add.text(46, 168, `${member.name}   MP ${member.stats.mp}/${member.stats.maxMp}`,
@@ -469,40 +477,95 @@ export class GameMenuScene extends Phaser.Scene {
       return;
     }
 
-    box.add(this.add.text(46, 184, 'Only healing magic works outside battle.',
-      sharpText({ fontFamily: FONT, fontSize: '7px', color: '#5a6080', strokeThickness: 2 })));
+    let y = 186;
+    if (castable.length === 0) {
+      box.add(this.add.text(46, y, `${member.name} has no magic that works outside battle.`,
+        sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8', strokeThickness: 2, wordWrap: { width: 400 } })));
+      y += 20;
+    } else {
+      box.add(this.add.text(46, y, 'CASTABLE HERE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
+      y += 14;
+      castable.forEach((spell) => {
+        const rowY = y;
+        const cost = effectiveSpellCost(spell.id);
+        const afford = member.stats.mp >= cost;
+        const subColor = afford ? '#7df0a0' : '#ff8a8a';
+        if (spell.target === 'ally') {
+          const b = this.button(46, rowY, 156, `${spell.name}  ${cost}MP`, () => {
+            this.magicSpellId = spell.id;
+            this.menuNotice = 'Choose a target portrait.';
+            this.renderContent();
+          }, box, '8px');
+          b.chosen = spell.id === this.magicSpellId;
+          b.onFocus = () => {
+            if (this.magicSpellId === spell.id) return;
+            this.magicSpellId = spell.id;
+            this.menuNotice = 'Choose a target portrait.';
+            this.renderContent();
+          };
+          box.add(this.add.text(46, rowY + 22, afford ? `Heals ${this.spellHealAmount(member, spell)} HP` : `Needs ${cost} MP`,
+            sharpText({ fontFamily: FONT, fontSize: '7px', color: subColor, strokeThickness: 2 })));
+        } else {
+          this.button(46, rowY, 156, `${spell.name}  ${cost}MP`, () => this.castFieldPartyHeal(member, spell.id), box, '8px');
+          box.add(this.add.text(46, rowY + 22, afford ? `Heals the whole party ~${this.spellHealAmount(member, spell)} HP each` : `Needs ${cost} MP`,
+            sharpText({ fontFamily: FONT, fontSize: '7px', color: subColor, strokeThickness: 2, wordWrap: { width: 220 } })));
+        }
+        y += 32;
+      });
+    }
 
-    spells.forEach((spell, i) => {
-      const y = 202 + i * 32;
-      const cost = effectiveSpellCost(spell.id);
-      const elementColor = ELEMENT_COLOR[spell.element] ?? '#dfe4f5';
-      if (spell.kind === 'heal' && spell.target === 'ally') {
-        const b = this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => {
-          this.magicSpellId = spell.id;
-          this.menuNotice = 'Choose a target portrait.';
-          this.renderContent();
-        }, box, '8px');
-        b.chosen = spell.id === this.magicSpellId;
-        b.onFocus = () => {
-          if (this.magicSpellId === spell.id) return;
-          this.magicSpellId = spell.id;
-          this.menuNotice = 'Choose a target portrait.';
-          this.renderContent();
-        };
-        box.add(this.add.text(46, y + 22, `Heals ${this.spellHealAmount(member, spell)} HP`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2 })));
-      } else if (spell.kind === 'heal' && spell.target === 'party') {
-        this.button(46, y, 156, `${spell.name}  ${cost}MP`, () => this.castFieldPartyHeal(member, spell.id), box, '8px');
-        box.add(this.add.text(46, y + 22, `Heals the whole party ~${this.spellHealAmount(member, spell)} HP each`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: '#7df0a0', strokeThickness: 2, wordWrap: { width: 220 } })));
-      } else {
-        // Not a button: this spell can't be cast here, so it shouldn't look clickable.
-        box.add(this.add.text(46, y + 2, `${spell.name}  ${cost}MP`,
-          sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 })));
-        box.add(this.add.text(46, y + 15, `${spell.desc ?? 'Battle only.'}  (battle only)`,
-          sharpText({ fontFamily: FONT, fontSize: '7px', color: elementColor, strokeThickness: 2, wordWrap: { width: 220 } })));
-      }
-    });
+    if (battleOnly.length > 0) {
+      y += 4;
+      const boHeader = this.add.text(46, y, 'BATTLE-ONLY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080', strokeThickness: 2 }));
+      box.add(boHeader);
+      y += boHeader.height + 1;
+      // Wrapping row of spell names, each colored by its element (mirrors
+      // BattleScene's element badges) so the list still reads at a glance
+      // even though none of these can be cast from here.
+      let x = 46;
+      const rowStart = x;
+      const maxX = 446;
+      let lastRowHeight = 0;
+      battleOnly.forEach((spell, i) => {
+        const label = i < battleOnly.length - 1 ? `${spell.name}, ` : spell.name;
+        const t = this.add.text(x, y, label, sharpText({
+          fontFamily: FONT, fontSize: '8px', color: ELEMENT_COLOR[spell.element] ?? '#5a6080', strokeThickness: 2,
+        }));
+        box.add(t);
+        lastRowHeight = t.height;
+        x += t.width;
+        if (x > maxX) { x = rowStart; y += t.height; t.setPosition(x, y); x += t.width; }
+      });
+      y += lastRowHeight; // account for the last (unwrapped) line's height — nothing followed this block before now
+    }
+
+    // Limit Break: never castable here (battle-only), but shown so a player
+    // can see what an ally's two ultimates actually do before ever filling
+    // the gauge in battle, instead of discovering them only by triggering
+    // one (the gauge is shared — the choice happens in the battle menu).
+    // The spell list above is variable height (more spells learned = taller),
+    // so this advances y by each line's *actual measured* height rather than
+    // a guessed constant — otherwise a fuller spell list pushes this block
+    // past the panel's bottom edge. While the TARGET portrait column is
+    // showing on the right (ally-heal selected) there isn't room for full
+    // descriptions too — even a single wrapped line would run past the
+    // panel's bottom edge for a character with a full spell list — so this
+    // falls back to names only until the player backs out of targeting.
+    const compact = !!selectedSpell;
+    y += 2;
+    box.add(this.add.rectangle(46, y, compact ? 230 : 400, 1, 0x2f3658, 0.6).setOrigin(0, 0));
+    y += 3;
+    const gauge = member.limit ?? 0;
+    const lbHeader = this.add.text(46, y, `⚡ LIMIT BREAK  (${gauge}/100 · battle-only)`,
+      sharpText({ fontFamily: FONT, fontSize: '8px', color: gauge >= 100 ? '#ffe27a' : '#f0d36c', strokeThickness: 2 }));
+    box.add(lbHeader);
+    y += lbHeader.height + 1;
+    for (const lb of LIMIT_BREAKS[member.id] ?? []) {
+      const line = this.add.text(46, y, compact ? lb.name : `${lb.name} — ${lb.desc}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#9aa4c8', strokeThickness: 2, wordWrap: { width: 400 } }));
+      box.add(line);
+      y += line.height + 1;
+    }
 
     if (!selectedSpell) return;
     box.add(this.add.text(294, 184, 'TARGET', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
@@ -882,30 +945,70 @@ export class GameMenuScene extends Phaser.Scene {
     this.scene.start('Title');
   }
 
+  /** Flattened, scroll-ready quest log: active quests (full detail) first,
+   *  a divider, then completed ones (a compact dimmed line each). Each entry
+   *  knows its own render height since active/complete rows aren't the same
+   *  size — the log has grown past a screen's worth of quests, and only
+   *  grows further, so this can no longer just dump everything at fixed y. */
+  private questEntries(): Array<{ quest?: ReturnType<typeof questList>[number]; divider?: boolean; height: number }> {
+    const list = questList();
+    const active = list.filter((q) => q.status !== 'complete');
+    const done = list.filter((q) => q.status === 'complete');
+    const entries: Array<{ quest?: ReturnType<typeof questList>[number]; divider?: boolean; height: number }> = [];
+    for (const q of active) entries.push({ quest: q, height: 32 });
+    if (active.length > 0 && done.length > 0) entries.push({ divider: true, height: 13 });
+    for (const q of done) entries.push({ quest: q, height: 14 });
+    return entries;
+  }
+
   private renderQuests(box: Phaser.GameObjects.Container) {
     const list = questList();
     const done = list.filter((q) => q.status === 'complete');
     box.add(this.add.text(300, 56, `${done.length}/${list.length} complete`,
       sharpText({ fontFamily: FONT, fontSize: '9px', color: '#8a93b8' })));
 
-    // Active quests lead with full detail; completed ones trail as a compact,
-    // dimmed log so the open checklist is never buried by finished business.
-    const active = list.filter((q) => q.status !== 'complete');
-    let y = 82;
-    for (const q of active) {
-      box.add(this.add.text(46, y, `[ ] ${q.title}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
-      box.add(this.add.text(62, y + 11, q.text, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9aa2c8', strokeThickness: 2, wordWrap: { width: 390 } })));
-      box.add(this.add.text(62, y + 21, rewardTextForQuest(q.id), sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })));
-      y += 32;
+    const entries = this.questEntries();
+    const contentTop = 82;
+    const budget = 236; // keeps the last row's bottom edge clear of the footer, like items/equip
+    this.questScroll = Phaser.Math.Clamp(this.questScroll, 0, Math.max(0, entries.length - 1));
+
+    let y = contentTop;
+    let i = this.questScroll;
+    for (; i < entries.length; i++) {
+      const e = entries[i];
+      if (i > this.questScroll && y + e.height - contentTop > budget) break;
+      if (e.divider) {
+        box.add(this.add.text(46, y, 'COMPLETE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080' })));
+      } else if (e.quest!.status === 'complete') {
+        box.add(this.add.text(46, y, `[x] ${e.quest!.title}`, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#5a6080' })));
+      } else {
+        box.add(this.add.text(46, y, `[ ] ${e.quest!.title}`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5' })));
+        box.add(this.add.text(62, y + 11, e.quest!.text, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9aa2c8', strokeThickness: 2, wordWrap: { width: 390 } })));
+        box.add(this.add.text(62, y + 21, rewardTextForQuest(e.quest!.id), sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c', strokeThickness: 2 })));
+      }
+      y += e.height;
     }
-    if (active.length > 0 && done.length > 0) {
-      box.add(this.add.text(46, y, 'COMPLETE', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#5a6080' })));
-      y += 13;
+    if (this.questScroll > 0) {
+      box.add(this.add.text(474, contentTop, `▲${this.questScroll}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
     }
-    for (const q of done) {
-      box.add(this.add.text(46, y, `[x] ${q.title}`, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#5a6080' })));
-      y += 14;
+    const hiddenBelow = entries.length - i;
+    if (hiddenBelow > 0) {
+      box.add(this.add.text(474, y, `▼${hiddenBelow}`,
+        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })).setOrigin(1, 0));
     }
+    if (entries.length > ITEMS_LIST_ROWS) {
+      box.add(this.add.text(456, 56, '↑↓: scroll', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0));
+    }
+  }
+
+  /** Pure scroll, no selectable cursor to move — the quests tab has nothing
+   *  to click into, just a log to read. */
+  private moveQuestsVertical(dir: number): boolean {
+    const entries = this.questEntries();
+    this.questScroll = Phaser.Math.Clamp(this.questScroll + dir, 0, Math.max(0, entries.length - 1));
+    this.renderContent();
+    return true;
   }
 
   private button(
@@ -1065,12 +1168,19 @@ export class GameMenuScene extends Phaser.Scene {
 
   private ensureMagicMember() {
     const run = getRun();
-    const current = run.party[this.memberIndex];
-    if (current?.spells.length) return;
-    const fieldCaster = run.party.findIndex((member) => member.spells.some((id) => {
+    // Bug: this used to check `current.spells.length` — true for Kael/Lyra
+    // too, since they have battle spells, just none that work in the field.
+    // That short-circuited before ever checking for an actual field caster,
+    // so opening Magic with an attacker selected left Dawnmend undiscoverable
+    // (Mira's portrait had to be clicked manually) instead of landing on
+    // whoever can actually cast something here.
+    const hasFieldSpell = (member: Combatant) => member.spells.some((id) => {
       const spell = SPELLS[id];
       return spell?.kind === 'heal' && spell.target === 'ally';
-    }));
+    });
+    const current = run.party[this.memberIndex];
+    if (current && hasFieldSpell(current)) return;
+    const fieldCaster = run.party.findIndex(hasFieldSpell);
     if (fieldCaster >= 0) this.memberIndex = fieldCaster;
   }
 
@@ -1084,6 +1194,7 @@ export class GameMenuScene extends Phaser.Scene {
     }
     if (this.tab === 'equip' && this.moveEquipVertical(dir)) return;
     if (this.tab === 'items' && this.moveItemsVertical(dir)) return;
+    if (this.tab === 'quests' && this.moveQuestsVertical(dir)) return;
     this.moveSpatial(0, dir);
   }
 
@@ -1218,6 +1329,9 @@ export class GameMenuScene extends Phaser.Scene {
   }
 
   private enterContent() {
+    // Quests has no clickable rows to select into — it's a log to scroll,
+    // not a list to act on — so just flip focus without a target selectable.
+    if (this.tab === 'quests') { this.focus = 'content'; return; }
     const target = this.preferredContentTarget();
     if (!target) return;
     this.selectSelectable(target, false);

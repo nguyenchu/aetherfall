@@ -51,13 +51,24 @@ const MOMENTUM_MAX_STACKS = 5;
 const LIMIT_MAX = 100;
 const LIMIT_TAKEN_SCALE = 1.4;
 const LIMIT_ACT_GAIN = 4;
+// Kael's "Warden's Bulwark" Limit Break: party-wide damage-taken shield.
+const BULWARK_MULT = 0.5;
+const BULWARK_TURNS = 3;
+// Lyra's "Frostbind Eclipse" Limit Break: a weaker Cataclysm that chills
+// the whole enemy side instead of just hurting it.
+const FROSTBIND_SCALE = 1.4;
+const FROSTBIND_CHILL_TURNS = 2;
+// Mira's "Dawnbreaker Judgment" Limit Break: the offensive counterpart to
+// Aegis of Dawn — holy AoE instead of a full-party heal/revive/cleanse.
+const JUDGMENT_SCALE = 2.0;
 
 // --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
 // Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
 // The next actor is whoever needs the fewest ticks to cross the threshold at
 // their effective speed; everyone's readiness advances by that many ticks,
 // and the winner rolls over (keeps overflow speed) rather than resetting to
-// zero. Deterministic — no RNG — so the queue can be previewed exactly.
+// zero. Once seeded, advancement itself is deterministic — no RNG — so the
+// queue can be previewed exactly from any point in the battle.
 const READY_THRESHOLD = 1000;
 
 interface ReadinessEntry {
@@ -141,9 +152,13 @@ export class Battle {
 
   // --- CTB Queue --------------------------------------------------------------
 
-  /** Call once at battle start: zeroes the queue and telegraphs every enemy. */
+  /** Call once at battle start: seeds the queue and telegraphs every enemy.
+   * Readiness starts at a random point on each combatant's own gauge rather
+   * than a flat zero — agi still decides who's usually fastest (a high-agi
+   * combatant needs a smaller random head start to lead), but it stops being
+   * a guarantee that the same party member opens literally every fight. */
   start(): void {
-    for (const c of this.all()) c.readiness = 0;
+    for (const c of this.all()) c.readiness = Math.floor(Math.random() * READY_THRESHOLD);
     for (const e of this.living('enemy')) this.refreshIntent(e);
   }
 
@@ -204,12 +219,16 @@ export class Battle {
     return events;
   }
 
-  /** Non-mutating: the next `steps` actors in queue order, for UI preview. */
-  previewQueue(steps: number): Combatant[] {
+  /** Non-mutating: the next `steps` actors in queue order, for UI preview.
+   *  `hypothetical` layers an extra speed multiplier onto one combatant
+   *  without touching real state — lets the UI show what the order would
+   *  look like if a pending Haste/Slow cast actually landed, while the
+   *  player is still choosing a target (see BattleScene.renderTargetModal). */
+  previewQueue(steps: number, hypothetical?: { id: string; speedMult: number }): Combatant[] {
     const entries: ReadinessEntry[] = this.living('party').concat(this.living('enemy')).map((c) => ({
       id: c.id,
       readiness: c.readiness ?? 0,
-      speed: this.effectiveSpeed(c),
+      speed: this.effectiveSpeed(c) * (hypothetical && c.id === hypothetical.id ? hypothetical.speedMult : 1),
     }));
     const order: Combatant[] = [];
     for (let i = 0; i < steps && entries.length > 0; i++) {
@@ -298,6 +317,10 @@ export class Battle {
         else actor.speedStatuses[source] = { ...status, turns: status.turns - 1 };
       }
     }
+    if (actor.dmgTakenStatus) {
+      if (actor.dmgTakenStatus.turns - 1 <= 0) actor.dmgTakenStatus = undefined;
+      else actor.dmgTakenStatus = { ...actor.dmgTakenStatus, turns: actor.dmgTakenStatus.turns - 1 };
+    }
   }
 
   // --- Resolution ------------------------------------------------------------
@@ -335,6 +358,8 @@ export class Battle {
         actor.stats.mp -= effectiveCost;
         if (spell.kind === 'heal') {
           this.castHeal(actor, spell, cmd.targetId, events);
+        } else if (spell.kind === 'buff') {
+          this.castBuff(actor, spell, cmd.targetId, events);
         } else {
           this.castDamage(actor, spell, cmd.targetId, events);
         }
@@ -400,7 +425,7 @@ export class Battle {
       case 'limit': {
         if ((actor.limit ?? 0) < LIMIT_MAX) return; // menu shouldn't offer it otherwise
         actor.limit = 0;
-        this.executeLimitBreak(actor, events);
+        this.executeLimitBreak(actor, cmd.limitId, events);
         return;
       }
     }
@@ -418,9 +443,13 @@ export class Battle {
     return { dmg: Math.max(1, Math.round(dmg)), weak };
   }
 
-  private executeLimitBreak(actor: Combatant, events: BattleEvent[]): void {
-    switch (actor.id) {
-      case 'kael': {
+  /** Dispatches on the move's own id (unique across the whole roster) rather
+   *  than actor.id — each party member offers two (see content.ts
+   *  LIMIT_BREAKS): one offensive, one defensive/control, chosen in the
+   *  BattleScene submenu once the gauge is full. */
+  private executeLimitBreak(actor: Combatant, limitId: string, events: BattleEvent[]): void {
+    switch (limitId) {
+      case 'requiem': {
         const target = this.living('enemy')[0];
         if (!target) return;
         events.push({ kind: 'limit', text: `Kael unleashes AETHERBLADE REQUIEM!`, actorId: actor.id });
@@ -439,32 +468,54 @@ export class Battle {
         this.maybeKo(target, events);
         return;
       }
-      case 'lyra': {
+      case 'bulwark': {
+        events.push({ kind: 'limit', text: `Kael unleashes WARDEN'S BULWARK!`, actorId: actor.id });
+        for (const t of this.living('party')) {
+          t.dmgTakenStatus = { mult: BULWARK_MULT, turns: BULWARK_TURNS };
+          events.push({ kind: 'info', text: `${t.name} is shielded!`, targetId: t.id, parallel: true });
+        }
+        return;
+      }
+      case 'cataclysm': {
         events.push({ kind: 'limit', text: `Lyra unleashes CATACLYSM!`, actorId: actor.id });
         for (const target of this.living('enemy')) {
           const hit = this.limitDamage(target, actor.stats.int * 2.6, 'none');
           this.applyDamage(target, hit.dmg);
           events.push({
             kind: 'spell', text: `${target.name} is engulfed! −${hit.dmg}`,
-            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'none', spellId: 'cataclysm',
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'none', spellId: 'cataclysm', parallel: true,
           });
-          this.maybeKo(target, events);
+          this.maybeKo(target, events, true);
         }
         return;
       }
-      case 'mira': {
+      case 'frostbind': {
+        events.push({ kind: 'limit', text: `Lyra unleashes FROSTBIND ECLIPSE!`, actorId: actor.id });
+        for (const target of this.living('enemy')) {
+          const hit = this.limitDamage(target, actor.stats.int * FROSTBIND_SCALE, 'none');
+          this.applyDamage(target, hit.dmg);
+          events.push({
+            kind: 'spell', text: `${target.name} is chilled! −${hit.dmg}`,
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'none', spellId: 'frostbind', parallel: true,
+          });
+          this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: FROSTBIND_CHILL_TURNS }, events, true, true);
+          this.maybeKo(target, events, true);
+        }
+        return;
+      }
+      case 'aegis': {
         events.push({ kind: 'limit', text: `Mira unleashes AEGIS OF DAWN!`, actorId: actor.id });
         for (const t of this.party) {
           if (t.stats.hp <= 0) {
             t.stats.hp = Math.round(t.stats.maxHp * 0.5);
-            events.push({ kind: 'info', text: `${t.name} is revived!`, targetId: t.id, amount: -t.stats.hp });
+            events.push({ kind: 'info', text: `${t.name} is revived!`, targetId: t.id, amount: -t.stats.hp, parallel: true });
           } else {
             const healAmt = t.stats.maxHp - t.stats.hp;
             if (healAmt > 0) {
               t.stats.hp = t.stats.maxHp;
               events.push({
                 kind: 'spell', text: `${t.name} is bathed in dawnlight! +${healAmt} HP`,
-                actorId: actor.id, targetId: t.id, amount: -healAmt, element: 'holy', spellId: 'aegis',
+                actorId: actor.id, targetId: t.id, amount: -healAmt, element: 'holy', spellId: 'aegis', parallel: true,
               });
             }
           }
@@ -472,8 +523,21 @@ export class Battle {
           // freshly-revived ally shouldn't drop right back to venom ticking.
           if (t.ailments && Object.keys(t.ailments).length > 0) {
             t.ailments = undefined;
-            events.push({ kind: 'info', text: `${t.name} is cleansed of ailments.`, targetId: t.id });
+            events.push({ kind: 'info', text: `${t.name} is cleansed of ailments.`, targetId: t.id, parallel: true });
           }
+        }
+        return;
+      }
+      case 'judgment': {
+        events.push({ kind: 'limit', text: `Mira unleashes DAWNBREAKER JUDGMENT!`, actorId: actor.id });
+        for (const target of this.living('enemy')) {
+          const hit = this.limitDamage(target, actor.stats.int * JUDGMENT_SCALE, 'holy');
+          this.applyDamage(target, hit.dmg);
+          events.push({
+            kind: 'spell', text: `${target.name} is smitten! −${hit.dmg}${hit.weak ? ' Weak!' : ''}`,
+            actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'holy', spellId: 'judgment', weak: hit.weak, parallel: true,
+          });
+          this.maybeKo(target, events, true);
         }
         return;
       }
@@ -504,19 +568,16 @@ export class Battle {
       const sureBurn = actor.id === 'ashbrand' && actor.phaseTriggered === true && target.defending === true;
       this.applyAilment(target, actor.attackInflict, events, sureBurn);
     }
+    // Consecrated Censer and the like: a critical hit also lands an ailment,
+    // independent of (and stacking with) attackInflict's per-hit roll.
+    if (hit.crit && actor.critInflict) {
+      this.applyAilment(target, actor.critInflict, events);
+    }
     // Tide Warden's "Undertow": drags the target back in the CTB queue.
     if (actor.attackSpeedDebuff) {
       this.applySpeedStatus(target, 'slow', actor.attackSpeedDebuff.mult, actor.attackSpeedDebuff.turns, events);
     }
-    // Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang.
-    const lifesteal = (actor.side === 'party' ? this.bn.lifesteal : 0) + (actor.gear?.lifesteal ?? 0);
-    if (lifesteal > 0) {
-      const heal = Math.round(hit.dmg * lifesteal);
-      if (heal > 0 && actor.stats.hp > 0 && actor.stats.hp < actor.stats.maxHp) {
-        actor.stats.hp = Math.min(actor.stats.maxHp, actor.stats.hp + heal);
-        events.push({ kind: 'info', text: `${actor.name} drains ${heal} HP.`, actorId: actor.id, targetId: actor.id, amount: -heal });
-      }
-    }
+    this.applyLifesteal(actor, hit.dmg, events);
     // Thorn Pact: party reflects part of the damage taken.
     if (target.side === 'party' && this.bn.thorns > 0 && actor.stats.hp > 0) {
       const reflect = Math.round(hit.dmg * this.bn.thorns);
@@ -530,16 +591,29 @@ export class Battle {
     this.maybeKo(target, events);
   }
 
+  /** Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang. Covers
+   * physical damage only — plain attacks and physical-element skills — not
+   * elemental magic (see castDamage's callers). */
+  private applyLifesteal(actor: Combatant, dmg: number, events: BattleEvent[], parallel = false): void {
+    const lifesteal = (actor.side === 'party' ? this.bn.lifesteal : 0) + (actor.gear?.lifesteal ?? 0);
+    if (lifesteal <= 0) return;
+    const heal = Math.round(dmg * lifesteal);
+    if (heal > 0 && actor.stats.hp > 0 && actor.stats.hp < actor.stats.maxHp) {
+      actor.stats.hp = Math.min(actor.stats.maxHp, actor.stats.hp + heal);
+      events.push({ kind: 'info', text: `${actor.name} drains ${heal} HP.`, actorId: actor.id, targetId: actor.id, amount: -heal, parallel });
+    }
+  }
+
   /** Prism Sprite's reflect: a non-weakness hit bounces part of its damage
    * back at the attacker. Hitting the actual weakness bypasses it entirely,
    * rewarding correct play. */
-  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[]): void {
+  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[], parallel = false): void {
     if (!target.reflectFrac || hit.weak || actor.stats.hp <= 0) return;
     const reflect = Math.round(hit.dmg * target.reflectFrac);
     if (reflect <= 0) return;
     this.applyDamage(actor, reflect);
-    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect });
-    this.maybeKo(actor, events);
+    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect, parallel });
+    this.maybeKo(actor, events, parallel);
   }
 
   private castDamage(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
@@ -559,6 +633,7 @@ export class Battle {
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
       });
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
+      this.applyLifesteal(actor, hit.dmg, events);
       this.applyReflect(actor, target, hit, events);
       this.maybeKo(target, events);
       return;
@@ -568,6 +643,7 @@ export class Battle {
       ? [...this.living(enemySide)]
       : [this.aliveTargetOr(targetId, enemySide)].filter((t): t is Combatant => t != null);
     if (targets.length === 0) return;
+    const isAoe = targets.length > 1;
 
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
@@ -576,16 +652,17 @@ export class Battle {
         : spell.power + actor.stats.int * 0.8 - target.stats.int * 0.2;
       const hit = this.computeHit(actor, target, basePower, spell.element);
       this.applyDamage(target, hit.dmg);
-      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
+      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, isAoe);
       this.maybeGainMomentum(actor, hit.weak);
       events.push({
         kind: 'spell',
         text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
-        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
+        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak, parallel: isAoe,
       });
-      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
-      this.applyReflect(actor, target, hit, events);
-      this.maybeKo(target, events);
+      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
+      if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
+      this.applyReflect(actor, target, hit, events, isAoe);
+      this.maybeKo(target, events, isAoe);
     }
   }
 
@@ -594,16 +671,25 @@ export class Battle {
     const targets = spell.target === 'party'
       ? [...this.living(actor.side)]
       : [this.aliveTargetOr(targetId, actor.side) ?? actor];
+    const isAoe = targets.length > 1;
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
-      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id });
+      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id, parallel: isAoe });
       // Cleansing Light boon: healing also washes ailments away.
       if (actor.side === 'party' && this.bn.healsCure && target.ailments && Object.keys(target.ailments).length > 0) {
         target.ailments = undefined;
-        events.push({ kind: 'info', text: `${target.name} is cleansed of ailments.`, targetId: target.id });
+        events.push({ kind: 'info', text: `${target.name} is cleansed of ailments.`, targetId: target.id, parallel: isAoe });
       }
     }
+  }
+
+  /** Ally-targeted CTB speed buff (Mira's Dawnrush) — see applySpeedStatus. */
+  private castBuff(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
+    if (!spell.haste) return;
+    const target = this.aliveTargetOr(targetId, actor.side) ?? actor;
+    events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name} on ${target.name}.`, actorId: actor.id, targetId: target.id, element: spell.element, spellId: spell.id });
+    this.applySpeedStatus(target, 'haste', spell.haste.mult, spell.haste.turns, events);
   }
 
   // --- Boss Phase Transitions -----------------------------------------------
@@ -630,6 +716,22 @@ export class Battle {
     actor.speedStatuses = { ...actor.speedStatuses, haste: { mult: Math.min(2.5, cur + inc), turns: 999 } };
   }
 
+  /** Applies a boss phase-transition burst, honoring only Warden's
+   *  Bulwark's party-wide shield (target.dmgTakenStatus) — not VIT, crit,
+   *  weakness, or Defend. These bursts go through applyDamage() directly
+   *  rather than computeHit() on purpose (see the 2026-07-11 CONTEXT.md
+   *  audit): they're meant to be a flat "heal-or-die" spike even Defend
+   *  can't shrug off. Bulwark is different — a resource-gated, one-shot
+   *  party Limit Break sold specifically as an anti-burst shield — so
+   *  leaving it unable to touch the single biggest scripted hit in every
+   *  boss fight would make its own billing false. Returns the amount
+   *  actually dealt, for the event log to report honestly. */
+  private applyBossBurst(t: Combatant, dmg: number): number {
+    const dealt = t.dmgTakenStatus ? Math.max(1, Math.round(dmg * t.dmgTakenStatus.mult)) : dmg;
+    this.applyDamage(t, dealt);
+    return dealt;
+  }
+
   private executeBossPhase(boss: Combatant): BattleEvent[] {
     const events: BattleEvent[] = [];
 
@@ -638,9 +740,9 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Forest Shade tears apart — shadows pour from its wound!', actorId: boss.id });
         const dmg = Math.round(12 + boss.stats.int * 0.7);
         for (const t of this.living('party')) {
-          this.applyDamage(t, dmg);
-          events.push({ kind: 'spell', text: `Shadow Veil engulfs ${t.name}! −${dmg} HP`, actorId: boss.id, targetId: t.id, amount: dmg, element: 'none' });
-          this.maybeKo(t, events);
+          const dealt = this.applyBossBurst(t, dmg);
+          events.push({ kind: 'spell', text: `Shadow Veil engulfs ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'none', parallel: true });
+          this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
         boss.stats.int = Math.round(boss.stats.int * 1.3);
@@ -655,9 +757,9 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Tide Warden roars — the chamber floods in an instant!', actorId: boss.id });
         const surge = Math.round(18 + boss.stats.int * 0.8);
         for (const t of this.living('party')) {
-          this.applyDamage(t, surge);
-          events.push({ kind: 'spell', text: `Tidal Surge crashes into ${t.name}! −${surge} HP`, actorId: boss.id, targetId: t.id, amount: surge, element: 'ice' });
-          this.maybeKo(t, events);
+          const dealt = this.applyBossBurst(t, surge);
+          events.push({ kind: 'spell', text: `Tidal Surge crashes into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
+          this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
         const heal = Math.round(boss.stats.maxHp * 0.12);
@@ -673,9 +775,9 @@ export class Battle {
         events.push({ kind: 'phase', text: 'Ashbrand ignites — the entire shrine becomes fire!', actorId: boss.id });
         const fire = Math.round(24 + boss.stats.int * 0.9);
         for (const t of this.living('party')) {
-          this.applyDamage(t, fire);
-          events.push({ kind: 'spell', text: `Conflagration scorches ${t.name}! −${fire} HP`, actorId: boss.id, targetId: t.id, amount: fire, element: 'fire' });
-          this.maybeKo(t, events);
+          const dealt = this.applyBossBurst(t, fire);
+          events.push({ kind: 'spell', text: `Conflagration scorches ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'fire', parallel: true });
+          this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
         boss.stats.str = Math.round(boss.stats.str * 1.25);
@@ -690,9 +792,9 @@ export class Battle {
         events.push({ kind: 'phase', text: 'The Prism Sovereign shatters its own shell — light scatters into blades!', actorId: boss.id });
         const shards = Math.round(20 + boss.stats.int * 0.85);
         for (const t of this.living('party')) {
-          this.applyDamage(t, shards);
-          events.push({ kind: 'spell', text: `Refracted Blades tear into ${t.name}! −${shards} HP`, actorId: boss.id, targetId: t.id, amount: shards, element: 'ice' });
-          this.maybeKo(t, events);
+          const dealt = this.applyBossBurst(t, shards);
+          events.push({ kind: 'spell', text: `Refracted Blades tear into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
+          this.maybeKo(t, events, true);
           if (this.living('party').length === 0) break;
         }
         const heal = Math.round(boss.stats.maxHp * 0.12);
@@ -703,6 +805,22 @@ export class Battle {
         boss.speedStatuses = { ...boss.speedStatuses, haste: { mult: 1.15, turns: 999 } };
         boss.enrageOnOwnTurn = 0.15;
         events.push({ kind: 'info', text: 'The crystal overcharges — the Sovereign begins to move faster with every passing moment.' });
+        break;
+      }
+      case 'galebrand': {
+        events.push({ kind: 'phase', text: 'Galebrand tears loose from its own anchor-point — the storm inside it runs wild!', actorId: boss.id });
+        const surge = Math.round(20 + boss.stats.int * 0.85);
+        for (const t of this.living('party')) {
+          const dealt = this.applyBossBurst(t, surge);
+          events.push({ kind: 'spell', text: `Wild current rakes ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'none', parallel: true });
+          this.maybeKo(t, events, true);
+          if (this.living('party').length === 0) break;
+        }
+        // It can no longer hold its own power in — the storm burns through
+        // its own form for the rest of the fight (see tickOwnStatuses()'s
+        // generic burn handling; no new plumbing needed).
+        this.applyAilment(boss, { ailment: 'burn', chance: 1, rounds: 99 }, events, true);
+        events.push({ kind: 'info', text: 'The storm inside it has turned against it — and its strikes no longer answer to anything but the wind.' });
         break;
       }
       default:
@@ -730,7 +848,7 @@ export class Battle {
     if (actor.side === 'party') {
       dmg *= this.bn.dmgMult * (this.bn.elementMult[element] ?? 1);
       if (weak) dmg *= WEAK_MULT;
-      if (target.broken) dmg *= BREAK_MULT + this.bn.breakDmgBonus;
+      if (target.broken) dmg *= BREAK_MULT + this.bn.breakDmgBonus + (actor.gear?.breakBonusDmg ?? 0);
       // Vulnerable Flesh: any ailment on the target (not just DoTs) opens it
       // up to everything else too — synergizes with every ailment-applying
       // boon/gear/weapon in the pool.
@@ -750,11 +868,14 @@ export class Battle {
     // Prism ward: this element barely scratches it — switch to another school.
     if (target.wardElement && element !== 'none' && element === target.wardElement) dmg *= WARD_MULT;
     if (target.defending) dmg *= element === 'physical' ? 0.5 : 0.75;
+    // Warden's Bulwark: Kael's Limit Break shields the whole party for a
+    // few turns (see executeLimitBreak/tickOwnStatuses).
+    if (target.dmgTakenStatus) dmg *= target.dmgTakenStatus.mult;
     return { dmg: Math.max(1, Math.round(dmg)), crit, weak };
   }
 
   /** Removes guard pips on weakness hits and skill chips; triggers BREAK at 0. */
-  private chipGuard(actor: Combatant, target: Combatant, weak: boolean, guardHit: number, events: BattleEvent[]): void {
+  private chipGuard(actor: Combatant, target: Combatant, weak: boolean, guardHit: number, events: BattleEvent[], parallel = false): void {
     if (actor.side !== 'party' || target.side !== 'enemy') return;
     if (target.broken || (target.guard ?? 0) <= 0) return;
     const chip = (weak ? 1 + this.bn.guardChipBonus + (actor.gear?.guardChipBonus ?? 0) : 0) + guardHit;
@@ -763,9 +884,9 @@ export class Battle {
     if (target.guard === 0) {
       target.broken = true;
       target.intent = undefined;
-      events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id });
+      events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id, parallel });
       if (this.bn.breakInflictsChill) {
-        this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: 2 }, events, true);
+        this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: 2 }, events, true, parallel);
       }
     }
   }
@@ -793,18 +914,18 @@ export class Battle {
   // --- Ailments ---------------------------------------------------------------
 
   /** Spell inflicts; party boons can turn the chance roll into a certainty. */
-  private applySpellInflict(actor: Combatant, target: Combatant, inf: Inflict, events: BattleEvent[]): void {
+  private applySpellInflict(actor: Combatant, target: Combatant, inf: Inflict, events: BattleEvent[], parallel = false): void {
     const sure = actor.side === 'party' && this.bn.sureInflict.includes(inf.ailment);
-    this.applyAilment(target, inf, events, sure);
+    this.applyAilment(target, inf, events, sure, parallel);
   }
 
   /** Rolls the chance and applies/refreshes an ailment on a living target. */
-  private applyAilment(target: Combatant, inf: Inflict, events: BattleEvent[], sure = false): void {
+  private applyAilment(target: Combatant, inf: Inflict, events: BattleEvent[], sure = false, parallel = false): void {
     if (target.stats.hp <= 0) return;
     if (!sure && Math.random() >= inf.chance) return;
     // Gear immunity: Tidewarden Mail shrugs off chill, Ashenguard Plate fire.
     if (target.gear?.resist.includes(inf.ailment)) {
-      events.push({ kind: 'info', text: `${target.name}'s gear wards it off!`, targetId: target.id });
+      events.push({ kind: 'info', text: `${target.name}'s gear wards it off!`, targetId: target.id, parallel });
       return;
     }
     const had = (target.ailments?.[inf.ailment] ?? 0) > 0;
@@ -812,7 +933,7 @@ export class Battle {
     target.ailments[inf.ailment] = Math.max(target.ailments[inf.ailment] ?? 0, inf.rounds);
     // Refreshing an active ailment is silent to keep the log readable.
     if (!had) {
-      events.push({ kind: 'ailment', text: AILMENT_APPLY_TEXT[inf.ailment](target.name), targetId: target.id, ailment: inf.ailment });
+      events.push({ kind: 'ailment', text: AILMENT_APPLY_TEXT[inf.ailment](target.name), targetId: target.id, ailment: inf.ailment, parallel });
     }
   }
 
@@ -825,6 +946,10 @@ export class Battle {
     target.speedStatuses[source] = { mult, turns };
     if (source === 'slow') {
       events.push({ kind: 'info', text: `${target.name} is dragged under — its next turns slip away!`, targetId: target.id });
+    } else if (source === 'haste' && target.side === 'party') {
+      // Enemy self-haste (Overcharge, enrageOnOwnTurn) predates this and was
+      // always silent — only the player-facing cast gets a log line.
+      events.push({ kind: 'info', text: `${target.name} feels time quicken around them!`, targetId: target.id });
     }
   }
 
@@ -833,25 +958,27 @@ export class Battle {
     for (const c of this.party) c.ailments = undefined;
   }
 
-  private maybeKo(t: Combatant, events: BattleEvent[]): void {
+  private maybeKo(t: Combatant, events: BattleEvent[], parallel = false): void {
     if (t.stats.hp > 0) return;
     // Anchor's Promise: once per battle, a fallen hero returns.
     if (t.side === 'party' && this.bn.reviveOnce && !this.reviveUsed) {
       this.reviveUsed = true;
       t.stats.hp = Math.round(t.stats.maxHp * 0.4);
-      events.push({ kind: 'info', text: `The Anchor flares — ${t.name} returns to the fight!`, targetId: t.id, amount: -t.stats.hp });
+      events.push({ kind: 'info', text: `The Anchor flares — ${t.name} returns to the fight!`, targetId: t.id, amount: -t.stats.hp, parallel });
       return;
     }
     // Living Cinders and the like detonate as they die, hitting the whole party.
     if (t.side === 'enemy' && t.deathBurst) {
       const b = t.deathBurst;
       t.deathBurst = undefined; // consume so it can never double-fire
-      events.push({ kind: 'info', text: `${t.name} bursts apart!`, actorId: t.id });
+      events.push({ kind: 'info', text: `${t.name} bursts apart!`, actorId: t.id, parallel });
+      // This inner blast always hits the whole party at once, regardless of
+      // whether the death that triggered it was itself part of a batch.
       for (const p of this.living('party')) {
         const hit = this.computeHit(t, p, b.power, b.element);
         this.applyDamage(p, hit.dmg);
-        events.push({ kind: 'spell', text: `${p.name} is caught in the blast (${hit.dmg}).`, targetId: p.id, amount: hit.dmg, element: b.element, weak: hit.weak });
-        this.maybeKo(p, events);
+        events.push({ kind: 'spell', text: `${p.name} is caught in the blast (${hit.dmg}).`, targetId: p.id, amount: hit.dmg, element: b.element, weak: hit.weak, parallel: true });
+        this.maybeKo(p, events, true);
       }
     }
     // Spreading Rot: a Burning or Poisoned enemy's affliction leaps to
@@ -863,11 +990,11 @@ export class Battle {
         const others = this.living('enemy').filter((e) => e.id !== t.id);
         if (others.length > 0) {
           const victim = others[Math.floor(Math.random() * others.length)];
-          this.applyAilment(victim, { ailment, chance: 1, rounds: Math.max(2, rounds) }, events, true);
+          this.applyAilment(victim, { ailment, chance: 1, rounds: Math.max(2, rounds) }, events, true, parallel);
         }
       }
     }
-    events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id });
+    events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id, parallel });
   }
 
   // --- AI -------------------------------------------------------------------
@@ -889,6 +1016,15 @@ export class Battle {
       if (defender) return { type: 'attack', targetId: defender.id };
     }
 
+    // Galebrand's Wild Current: past phase 2, half its own turns the storm
+    // picks a target at random — no weighting toward the wounded, no
+    // avoiding whoever's bracing. The other half it's still coherent —
+    // reads as losing control, not having none.
+    if (e.id === 'galebrand' && e.phaseTriggered && Math.random() < 0.5) {
+      const wild = targets[Math.floor(Math.random() * targets.length)];
+      return { type: 'attack', targetId: wild.id };
+    }
+
     // A defending target only takes half damage from a physical hit (75% from
     // magic) — usually the weaker play, so prefer whoever isn't bracing
     // unless everyone is (Ashbrand's hunt-the-defender case is handled above).
@@ -900,7 +1036,13 @@ export class Battle {
     // the one actually close to falling. Not relentless, though — pure focus
     // fire feels unfair and makes protecting a wounded member impossible.
     const weakest = pool.reduce((w, c) => (c.stats.hp / c.stats.maxHp) < (w.stats.hp / w.stats.maxHp) ? c : w);
-    const target = Math.random() < 0.6 ? weakest : pool[Math.floor(Math.random() * pool.length)];
+    // Tide Warden's Undertow: past phase 2, every strike drags its target
+    // back in the turn queue (see strike()'s attackSpeedDebuff) — so it
+    // hunts whoever is closest to acting next (highest readiness) instead
+    // of the usual HP-ratio weakest. Undertow punishes momentum, not health.
+    const soonest = pool.reduce((s, c) => (c.readiness ?? 0) > (s.readiness ?? 0) ? c : s);
+    const priority = e.id === 'tide_warden' && e.phaseTriggered ? soonest : weakest;
+    const target = Math.random() < 0.6 ? priority : pool[Math.floor(Math.random() * pool.length)];
 
     // Cast occasionally if MP allows; bosses cast more often.
     const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
@@ -959,7 +1101,7 @@ export class Battle {
 function hitTags(hit: { crit: boolean; weak: boolean }): string {
   let tags = '';
   if (hit.weak) tags += ' Weak!';
-  if (hit.crit) tags += ' CRIT!';
+  if (hit.crit) tags += ' Critical!';
   return tags;
 }
 

@@ -49,8 +49,10 @@ export const PALETTE: Record<string, number> = {
   t: 0x4a5aa8, // scholar robe shadow
   K: 0x4a7a3a, // merchant coat olive
   j: 0x2f5a28, // merchant coat shadow
-  Z: 0x2a2438, // hood base (dark purple-gray)
-  z: 0x171420, // hood deepest shadow
+  E: 0x2a2438, // hood base (dark purple-gray)
+  q: 0x171420, // hood deepest shadow
+  Z: 0x4a6a8a, // storm slate-blue base
+  z: 0x2a3a4e, // storm slate-blue shadow
 };
 
 // Each value is top-to-bottom rows. Width is the longest row.
@@ -230,6 +232,112 @@ export const SPRITES: Record<string, string[]> = {
     '.....oooooo.....',
   ],
 
+  // --- Named Sanctuary NPCs: variants on the hero silhouettes above (same
+  // rig, different palette) so each reads as its own person instead of the
+  // party sprites they used to stand in for. Used both in the overworld
+  // (SanctuaryScene npcs()) and as DialogueScene portraits (see dialogue.ts
+  // SPEAKER_PORTRAIT). ---
+
+  // --- Merchant: brown leather trader's coat, satchel at her side ---
+  e_merchant: [
+    '......oooo......',
+    '.....oWWWwo.....',
+    '....oWWWWWwo....',
+    '....oWSSSSwo....',
+    '....oSeSSeSo....',
+    '.....osSSso.....',
+    '.....oWWWwo.WWW.',
+    '....oWWWWWwoWwW.',
+    '...ooWWWWWwooW..',
+    '...oSoWWWWwoSo..',
+    '....owWWWWwo.W..',
+    '....oWWWWWwo.w..',
+    '....oWWWWWwo....',
+    '....owWWWWwo....',
+    '.....owWWwo.....',
+    '.....oooooo.....',
+  ],
+
+  // --- Warden Eda: silver plate armor, gate guard captain ---
+  e_wardeneda: [
+    '......oooo......',
+    '.....oNNNno.....',
+    '....oNNNNNno....',
+    '....oNSSSSno....',
+    '....oSeSSeSo....',
+    '.....osSSso.....',
+    '.....oNNNno.NNN.',
+    '....oNNNNNnoNnN.',
+    '...ooNNNNNnooW..',
+    '...oSoNNNNnoSo..',
+    '....onNNNNno.W..',
+    '....oNNNNNno.w..',
+    '....oNNNNNno....',
+    '....onNNNNno....',
+    '.....onNNno.....',
+    '.....oooooo.....',
+  ],
+
+  // --- Scholar Voss: deep blue archivist's robe ---
+  e_scholarvoss: [
+    '......oooo......',
+    '.....oUUUuo.....',
+    '....oUUUUUuo....',
+    '....oUSSSSuo....',
+    '....oSeSSeSo....',
+    '.....osSSso.....',
+    '.....oUUUuo.UUU.',
+    '....oUUUUUuoUuU.',
+    '...ooUUUUUuooW..',
+    '...oSoUUUUuoSo..',
+    '....ouUUUUuo.W..',
+    '....oUUUUUuo.w..',
+    '....oUUUUUuo....',
+    '....ouUUUUuo....',
+    '.....ouUUuo.....',
+    '.....oooooo.....',
+  ],
+
+  // --- Child: small green homespun tunic ---
+  e_child: [
+    '......oooo......',
+    '.....okkklo.....',
+    '....okkkkklo....',
+    '....okSSSSlo....',
+    '....oSeSSeSo....',
+    '.....osSSso.....',
+    '.....okkklo.kkk.',
+    '....okkkkkloklk.',
+    '...ookkkkklooW..',
+    '...oSokkkkloSo..',
+    '....olkkkklo.W..',
+    '....okkkkklo.w..',
+    '....okkkkklo....',
+    '....olkkkklo....',
+    '.....olkklo.....',
+    '.....oooooo.....',
+  ],
+
+  // --- Stranger: hooded purple cloak, face barely visible ---
+  e_stranger: [
+    '.....ooppoo.....',
+    '.....oppppo.....',
+    '....oppppppo....',
+    '....opSSSSpo....',
+    '....oSeSSeSo....',
+    '..p..osSSso.....',
+    '..p.oppppppo....',
+    '..p.oppppppo....',
+    '..pooppppppoo...',
+    '.opoSoppppoSo...',
+    '..p.oppppppo....',
+    '.....oppppo.....',
+    '.....oSooSo.....',
+    '.....oSooSo.....',
+    '.....opoopo.....',
+    '.....oo..oo.....',
+  ],
+
   // --- Drowned Ghoul: hunched, mottled green, glowing eyes, ragged maw ---
   e_ghoul: [
     '....oooooo....',
@@ -285,93 +393,11 @@ export const SPRITES: Record<string, string[]> = {
     '..oo......oo..',
   ],
 
-  // --- Forest Shade (Ch1 boss): finned maw shape recast as a mossy, near-black
-  // wraith with two glowing red eyes — the anchor guardian consumed by dark. ---
-  e_forestshade: [
-    '........oooo........',
-    '......ooYyYYoo......',
-    '.....oYYYYYYYYo.....',
-    '.oo.oYYyYYYYyYYo.oo.',
-    'oFYooYYYYYYYYYYooYFo',
-    'oYYoYYXXYYYYXXYyoYYo',
-    '.oYoYYYYYYYYYYYyoYo.',
-    '.oYoYYYyYYYYyYYYoYo.',
-    '..ooYYYYYYYYYYYYoo..',
-    '.oYYyYYYYYYYYYYyYYo.',
-    '.oFYFYFYFYFYFYFYFYo.',
-    '.oooooooooooooooooo.',
-    '..oYFYFYFYFYFYFYFo..',
-    '...oYYYYYYYYYYYYo...',
-    '....oYYyYYYYyYYo....',
-    '.....ooYYYYYYoo.....',
-    '.......oooooo.......',
-  ],
-
-  // --- Tide Warden (Ch2 boss): the deep-sea leviathan shape, eyes recast icy
-  // pale-cyan (its chill inflict) instead of a fire-boss's red glow. ---
-  e_tidewarden: [
-    '........oooo........',
-    '......ooDdDDoo......',
-    '.....oDDDDDDDDo.....',
-    '.oo.oDDdDDDDdDDo.oo.',
-    'oVDooDDDDDDDDDDooDVo',
-    'oDDoDDIIDDDDIIDdoDDo',
-    '.oDoDDDDDDDDDDDdoDo.',
-    '.oDoDDDdDDDDdDDDoDo.',
-    '..ooDDDDDDDDDDDDoo..',
-    '.oDDdDDDDDDDDDDdDDo.',
-    '.oFDFDFDFDFDFDFDFDo.',
-    '.oooooooooooooooooo.',
-    '..oDFDFDFDFDFDFDFo..',
-    '...oDDDDDDDDDDDDo...',
-    '....oDDdDDDDdDDo....',
-    '.....ooDDDDDDoo.....',
-    '.......oooooo.......',
-  ],
-
-  // --- Ashbrand (Ch3 boss): the same maw in the ember palette, molten cracks
-  // where the deep-sea boss had cold blue plating. ---
-  e_ashbrand: [
-    '........oooo........',
-    '......ooRrRRoo......',
-    '.....oRRRRRRRRo.....',
-    '.oo.oRRrRRRRrRRo.oo.',
-    'oJRooRRRRRRRRRRooRJo',
-    'oRRoRRXXRRRRXXRroRRo',
-    '.oRoRRRRRRRRRRRroRo.',
-    '.oRoRRRrRRRRrRRRoRo.',
-    '..ooRRRRRRRRRRRRoo..',
-    '.oRRrRRRRRRRRRRrRRo.',
-    '.oFRFRFRFRFRFRFRFRo.',
-    '.oooooooooooooooooo.',
-    '..oRFRFRFRFRFRFRFo..',
-    '...oRRRRRRRRRRRRo...',
-    '....oRRrRRRRrRRo....',
-    '.....ooRRRRRRoo.....',
-    '.......oooooo.......',
-  ],
-
-  // --- Prism Sovereign (Ch4 boss): the maw shape cut from crystal instead of
-  // flesh — purple facets, luminous white facet-eyes. ---
-  e_prismsovereign: [
-    '........oooo........',
-    '......ooPpPPoo......',
-    '.....oPPPPPPPPo.....',
-    '.oo.oPPpPPPPpPPo.oo.',
-    'oQPooPPPPPPPPPPooPQo',
-    'oPPoPPFFPPPPFFPpoPPo',
-    '.oPoPPPPPPPPPPPpoPo.',
-    '.oPoPPPpPPPPpPPPoPo.',
-    '..ooPPPPPPPPPPPPoo..',
-    '.oPPpPPPPPPPPPPpPPo.',
-    '.oFPFPFPFPFPFPFPFPo.',
-    '.oooooooooooooooooo.',
-    '..oPFPFPFPFPFPFPFo..',
-    '...oPPPPPPPPPPPPo...',
-    '....oPPpPPPPpPPo....',
-    '.....ooPPPPPPoo.....',
-    '.......oooooo.......',
-  ],
+  // Boss silhouettes (e_forestshade, e_tidewarden, e_ashbrand,
+  // e_prismsovereign, e_galebrand) moved to art/bossSprites.ts — each now
+  // gets its own procedural geometry instead of one shared hand-drawn
+  // template recast per boss, so they read as distinct creatures rather
+  // than palette swaps of the same shape.
 
   // --- Ember Hound: crouching fire-wolf, flame mane, burning eyes ---
   e_ember: [
@@ -513,19 +539,19 @@ export const SPRITES: Record<string, string[]> = {
   // matching the "???" name and the mystery the writing intends.
   portrait_stranger: [
     '.....ooooooooo.....',
-    '....oZZZZZoZZZo....',
-    '...oZZZZZZoZZZZo...',
-    '...oZzZZZzoZZzZo...',
-    '...oZzzZzzoZzzZo...',
-    '...oZzzzzzozzzZo...',
-    '...oZzz..zo.zzZo...',
-    '....oZzzZo.zzZo....',
-    '.....oZZZo.ZZo.....',
-    '......oZo..Zo......',
+    '....oEEEEEoEEEo....',
+    '...oEEEEEEoEEEEo...',
+    '...oEqEEEqoEEqEo...',
+    '...oEqqEqqoEqqEo...',
+    '...oEqqqqqoqqqEo...',
+    '...oEqq..qo.qqEo...',
+    '....oEqqEo.qqEo....',
+    '.....oEEEo.EEo.....',
+    '......oEo..Eo......',
     '.......o...o.......',
-    '......oZZo.Zo......',
-    '.....oZzZZozZo.....',
-    '....oZZzZZZzZZo....',
-    '...oZZZzZZZzZZZo...',
+    '......oEEo.Eo......',
+    '.....oEqEEoqEo.....',
+    '....oEEqEEEqEEo....',
+    '...oEEEqEEEqEEEo...',
   ],
 };

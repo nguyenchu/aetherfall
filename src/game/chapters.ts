@@ -15,6 +15,9 @@
 //   ~  Current (Sunken) — sweeps you further in your direction of travel
 //   ^  Embers (Ashen)   — a little party HP damage each time you cross it
 //   *  Prism Pad (Crystal) — teleports to its paired pad (see `teleports`)
+//   G  Gust (Tempest)   — shoves you one further tile in a fixed direction
+//                         (see `gusts`), unlike Current which continues
+//                         whatever direction you were already moving in
 
 import type { Combatant, Element, Stats } from './types';
 
@@ -127,6 +130,8 @@ export interface AreaDef {
   chests: Record<string, ChestContents>;
   /** Prism Pad pairs ('*' tiles): 'col,row' -> destination 'col,row' */
   teleports?: Record<string, string>;
+  /** Gust tiles ('G'): 'col,row' -> fixed shove direction */
+  gusts?: Record<string, 'up' | 'down' | 'left' | 'right'>;
   map: string[];
 }
 
@@ -163,6 +168,14 @@ export const THEMES: Record<string, AreaTheme> = {
     accent: 0x8a4ae0,
     fogColor: 0x6a3ac0, fogAlpha: 0.16,
   },
+  tempest: {
+    id: 'tempest',
+    bg: 0x070c11,
+    floor: 0x16222c, floorAlt: 0x1b2a36,
+    wall: 0x0a131a,
+    accent: 0x6ac8f0,
+    fogColor: 0x4aa8d8, fogAlpha: 0.18,
+  },
 };
 
 // Area 1 – Ashenveil Forest. 24 cols × 15 rows — cramped, twisty grove.
@@ -198,7 +211,7 @@ const AREA_1: AreaDef = {
     '#.....##......##.......#',
     '#....H.................#',
     '#......................#',
-    '#<.........P...........#',
+    '#<..P..................#',
     '########################',
   ],
 };
@@ -233,7 +246,7 @@ const AREA_2: AreaDef = {
     '#.......##....##.......#',
     '#..##.........T....##..#',
     '#..##..............##..#',
-    '#<.........P...........#',
+    '#<..P..................#',
     '########################',
   ],
 };
@@ -349,7 +362,7 @@ const AREA_3: AreaDef = {
     '#....................................#',
     '#....................................#',
     '#....................................#',
-    '#<...........P.......................#',
+    '#<..P................................#',
     '######################################',
   ],
 };
@@ -385,7 +398,7 @@ const AREA_4: AreaDef = {
     '#..............#........T............#',
     '#....................................#',
     '#....................................#',
-    '#<...........P.......................#',
+    '#<..P................................#',
     '######################################',
   ],
 };
@@ -588,7 +601,7 @@ const AREA_5: AreaDef = {
     '#........................#',
     '#........................#',
     '#........................#',
-    '#<.........P.............#',
+    '#<..P....................#',
     '##########################',
   ],
 };
@@ -627,7 +640,7 @@ const AREA_6: AreaDef = {
     '#........................#',
     '#........................#',
     '#........................#',
-    '#<.........P.............#',
+    '#<..P....................#',
     '##########################',
   ],
 };
@@ -678,7 +691,7 @@ const AREA_7: AreaDef = {
     '#.........................>............#',
     '#......................................#',
     '#......................................#',
-    '#<...............P.....................#',
+    '#<..P..................................#',
     '########################################',
   ],
 };
@@ -721,12 +734,202 @@ const AREA_8: AreaDef = {
     '#....###........................###....#',
     '#....###........................###....#',
     '#......................................#',
-    '#<...............P.....................#',
+    '#<..P..................................#',
     '########################################',
   ],
 };
 
-export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8];
+// ---------------------------------------------------------------------------
+// Chapter 5 enemies — Tempest Anchor (depth 9-10)
+// ---------------------------------------------------------------------------
+
+function galeHarrier(id: string): Combatant {
+  return armed({
+    id, name: 'Gale Harrier', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0x9fc8e0, size: 18,
+    spells: [], goldReward: 29, xpReward: 36,
+    attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
+    // Rides the crosswind — permanently hasted, so it acts far more often
+    // than its packmates and rewards being focused down first.
+    speedStatuses: { haste: { mult: 1.25, turns: 999 } },
+    stats: s(78, 22, 20, 7, 2),
+  }, ['ice'], 1);
+}
+
+function cliffStalker(id: string): Combatant {
+  return armed({
+    id, name: 'Cliff Stalker', side: 'enemy',
+    spriteKey: 'e_crawler', color: 0x5a7a8a, size: 28,
+    spells: [], goldReward: 27, xpReward: 34,
+    attackInflict: { ailment: 'venom', chance: 0.3, rounds: 3 },
+    // Drags whoever it hits off-balance on the cliff edge, staggering their
+    // footing (and their place in the turn order) for a couple of rounds.
+    attackSpeedDebuff: { mult: 0.65, turns: 2 },
+    stats: s(122, 25, 11, 17, 2),
+  }, ['holy'], 2);
+}
+
+function stormSentry(id: string): Combatant {
+  return armed({
+    id, name: 'Storm-Warped Sentry', side: 'enemy',
+    spriteKey: 'e_warden', color: 0x3a4a5e, size: 32,
+    spells: [], goldReward: 32, xpReward: 38,
+    // A living lightning rod: careless non-weakness hits arc part of their
+    // damage right back at the attacker.
+    reflectFrac: 0.35,
+    stats: s(150, 27, 9, 21, 2),
+  }, ['holy'], 3);
+}
+
+// Tempest signature: a lightning caster — same shape as Gale Harrier, but
+// its frost/smite volleys, plus the odd mend for a hurting packmate, make
+// it the priority kill in mixed packs.
+function squallWisp(id: string): Combatant {
+  return armed({
+    id, name: 'Squall Wisp', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0xc0e8ff, size: 18,
+    spells: ['frost', 'smite', 'squall_mend'], goldReward: 35, xpReward: 44,
+    stats: s(90, 9, 17, 6, 25, 36),
+  }, ['fire'], 1);
+}
+
+function thunderheadSentinel(): Combatant {
+  return armed({
+    id: 'elite0', name: 'Thunderhead Sentinel', side: 'enemy',
+    spriteKey: 'e_warden', color: 0x4a6a8a, size: 36,
+    spells: ['frost'], goldReward: 105, xpReward: 150, isElite: true,
+    stats: s(380, 30, 13, 27, 12, 22),
+  }, ['ice'], 4);
+}
+
+function galebrand(): Combatant {
+  return armed({
+    id: 'galebrand', name: 'Galebrand', side: 'enemy',
+    spriteKey: 'e_galebrand', color: 0x3a4a5e, size: 44,
+    spells: ['frost', 'smite'], goldReward: 150, xpReward: 275,
+    isBoss: true,
+    stats: s(860, 30, 22, 20, 34, 100),
+  }, ['fire'], 5);
+}
+
+type Ch5EncounterGroup = 'harriers' | 'harrier_stalker' | 'stalker_sentry' | 'squalls' | 'elite' | 'ch5_boss';
+
+export function makeChapter5Encounter(group: Ch5EncounterGroup): Combatant[] {
+  switch (group) {
+    case 'harriers':        return [galeHarrier('e0'), galeHarrier('e1')];
+    case 'harrier_stalker': return [galeHarrier('e0'), cliffStalker('e1')];
+    case 'stalker_sentry':  return [cliffStalker('e0'), stormSentry('e1')];
+    case 'squalls':         return [galeHarrier('e0'), squallWisp('e1'), galeHarrier('e2')];
+    case 'elite':           return [thunderheadSentinel(), squallWisp('e1')];
+    case 'ch5_boss':        return [galebrand()];
+  }
+}
+
+// Area 9 – Stormcrag Heights. 36 cols × 20 rows — a cliffside coastal trail.
+// The exposed outer edge (lined with Gust tiles) is the fast route; a
+// sheltered inner stair is the safe detour. The elite guards a dead-end
+// alcove reachable only off the exposed path.
+const AREA_9: AreaDef = {
+  id: 'tempest_1',
+  name: 'Stormcrag Heights',
+  theme: THEMES.tempest,
+  encounters: {
+    '20,4':  'harrier_stalker',
+    '6,7':   'harriers',
+    '28,8':  'squalls',
+    '6,12':  'stalker_sentry',
+    '28,14': 'harrier_stalker',
+    '17,16': 'harriers',
+    '34,3':  'elite',
+  },
+  scripts: {},
+  chests: {
+    '33,3': { gold: 65, equipment: 'squallblade' },
+  },
+  gusts: {
+    '25,3': 'right',
+    '26,3': 'right',
+    '9,15': 'left',
+    '10,15': 'left',
+  },
+  map: [
+    '####################################',
+    '#.................>................#',
+    '#..................................#',
+    '#........................GG......TX#',
+    '#....H.............................#',
+    '#..................................#',
+    '#....................###...........#',
+    '#....................###...........#',
+    '#..................................#',
+    '#...............#..................#',
+    '#...............#..................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#........GG........................#',
+    '#..................................#',
+    '#..................................#',
+    '#<..P..............................#',
+    '####################################',
+  ],
+};
+
+// Area 10 – Skybreak Anchorage. Boss area. 36 cols × 20 rows.
+// Galebrand's arena: a mostly open, exposed cliff-top around the shattered
+// anchor spire — no cover, mirroring Cinder Floor's bare layout, with a
+// scattering of Gust tiles at the edges as ambient atmosphere (not tied to
+// boss HP, same as Ashen's static Embers).
+const AREA_10: AreaDef = {
+  id: 'tempest_2',
+  name: 'Skybreak Anchorage',
+  theme: THEMES.tempest,
+  encounters: {
+    '17,10': 'ch5_boss',
+  },
+  scripts: {
+    '16,5': 'ch5_story',
+  },
+  chests: {
+    '20,15': { gold: 60, items: { tonic: 1 } },
+  },
+  gusts: {
+    '2,2': 'down',
+    '33,2': 'down',
+    '2,17': 'up',
+    '33,17': 'up',
+  },
+  map: [
+    '####################################',
+    '#..................................#',
+    '#.G..............................G.#',
+    '#..................................#',
+    '#..................................#',
+    '#...............S..................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#......H...........................#',
+    '#................B.................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#...................T..............#',
+    '#..................................#',
+    '#.G..............................G.#',
+    '#<..P..............................#',
+    '####################################',
+  ],
+};
+
+export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8, AREA_9, AREA_10];
+
+/** Total number of authored chapters (2 depths each). Used instead of a
+ * hardcoded chapter count so victory/ending logic self-updates as more
+ * chapters are added. */
+export const TOTAL_CHAPTERS = ALL_AREAS.length / 2;
 
 /** Returns the area for the given depth (1-based). */
 // When a Rift run is active (see rift.ts), it overrides the fixed chapter areas
@@ -773,6 +976,7 @@ export function makeEncounterForArea(area: AreaDef, group: string, ngPlus = 0): 
     : area.id.startsWith('sunken') ? makeChapter2Encounter(group as Ch2EncounterGroup)
     : area.id.startsWith('ashen')  ? makeChapter3Encounter(group as Ch3EncounterGroup)
     : area.id.startsWith('crystal') ? makeChapter4Encounter(group as Ch4EncounterGroup)
+    : area.id.startsWith('tempest') ? makeChapter5Encounter(group as Ch5EncounterGroup)
     : makeChapter1Encounter(group as EncounterGroup);
   return scaleForNgPlus(enemies, ngPlus);
 }

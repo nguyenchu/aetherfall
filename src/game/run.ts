@@ -166,6 +166,29 @@ export function isQuestActive(id: string): boolean {
   return (save.quests[id] ?? 'active') === 'active';
 }
 
+/** Milestone/delivery quests have no NPC or boss to trigger them — call
+ * this whenever the player is somewhere safe to check in (Sanctuary) and
+ * complete anything whose condition is now met. Returns whichever quests
+ * completed just now, so the caller can show a notice. */
+export function checkMilestoneQuests(): QuestDef[] {
+  const completed: QuestDef[] = [];
+  const tryComplete = (id: string, met: boolean) => {
+    if (!met || !isQuestActive(id)) return;
+    const q = completeQuest(id);
+    if (q) completed.push(q);
+  };
+  tryComplete('milestone_level10', state.party.some((c) => (c.level ?? 1) >= 10));
+  tryComplete('milestone_boons', state.boons.length >= 6);
+  tryComplete('milestone_gold', state.gold >= 500);
+  tryComplete('milestone_depth9', state.depth >= 9);
+  if (isQuestActive('bounty_sigils') && (state.inventory.warden_sigils ?? 0) >= 5) {
+    state.inventory.warden_sigils -= 5;
+    const q = completeQuest('bounty_sigils');
+    if (q) completed.push(q);
+  }
+  return completed;
+}
+
 // --- Sanctuary Economy ------------------------------------------------------
 
 export function hpBlessingCost(): number {
@@ -332,6 +355,8 @@ const GEAR_DROPS: Record<number, string[]> = {
   6: ['ashenguard_plate', 'cinder_band'],
   7: ['geode_plate', 'prism_band'],
   8: ['geode_plate', 'prism_band'],
+  9: ['windrent_plate', 'thunderhead_band'],
+  10: ['windrent_plate', 'thunderhead_band'],
 };
 
 // Depth-tiered sell junk, one flavor per chapter.
@@ -340,6 +365,7 @@ const JUNK_DROPS: Record<number, string> = {
   3: 'tide_pearl', 4: 'tide_pearl',
   5: 'cinder_shard', 6: 'cinder_shard',
   7: 'prism_shard', 8: 'prism_shard',
+  9: 'storm_shard', 10: 'storm_shard',
 };
 
 export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
@@ -408,6 +434,9 @@ export function equipmentPrice(itemId: string): number | undefined {
     tidewrought_mace: 160,
     tidewarden_mail: 130,
     vampire_fang: 140,
+    consecrated_censer: 160,
+    serpents_kiss: 155,
+    fracture_band: 145,
     sunbrand: 220,
     ashenguard_plate: 180,
     cinder_band: 150,
@@ -419,6 +448,13 @@ export function equipmentPrice(itemId: string): number | undefined {
     geode_plate: 200,
     radiant_mace: 260,
     watchers_ward: 190,
+    // Chapter 5 tier:
+    tempest_rod: 240,
+    stormguard_plate: 235,
+    thunderhead_band: 215,
+    squallblade: 260,
+    windrent_plate: 215,
+    stormward_mace: 280,
   };
   return prices[itemId] ?? 55;
 }
@@ -569,6 +605,7 @@ function refreshGearEffects(c: Combatant): void {
   const fx = gearFor([slots.weapon, slots.armor, slots.charm]);
   c.attackElement = fx.attackElement;
   c.attackInflict = fx.attackInflict;
+  c.critInflict = fx.critInflict;
   c.gear = fx.gear;
 }
 

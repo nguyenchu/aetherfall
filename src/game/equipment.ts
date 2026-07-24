@@ -15,12 +15,14 @@ export type EquipSlot = 'weapon' | 'armor' | 'charm';
 export interface EquipEffects {
   attackElement?: Element; // weapon: basic attacks strike as this element
   attackInflict?: Inflict; // basic attacks may apply an ailment
+  critInflict?: Inflict; // basic attacks that land as a critical hit may also apply an ailment
   critBonus?: number; // added to crit chance
   lifesteal?: number; // fraction of attack damage returned as HP
   mpRegen?: number; // MP restored each round in battle
   guardChipBonus?: number; // extra guard pips on weakness hits
   healBonus?: number; // flat bonus to healing spells
   resist?: Ailment[]; // immune to these ailments
+  breakBonusDmg?: number; // extra damage multiplier against broken (staggered) enemies
 }
 
 /** How BootScene draws the item's icon. */
@@ -222,9 +224,42 @@ export const EQUIPMENT: Record<string, Equipment> = {
     users: ['kael', 'lyra', 'mira'],
     bonus: { str: 1 },
     trait: 'Thirsting',
-    description: 'A drowned predator\'s tooth. Attacks feed you 15% of the damage.',
+    description: 'A drowned predator\'s tooth. Physical damage feeds you 15% of the damage.',
     effects: { lifesteal: 0.15 },
     icon: { kind: 'orb', base: 0xaa3344, accent: 0xff8a8a },
+  },
+  consecrated_censer: {
+    id: 'consecrated_censer',
+    name: 'Consecrated Censer',
+    slot: 'weapon',
+    users: ['mira'],
+    bonus: { str: 5, int: 3 },
+    trait: 'Zealous strike',
+    description: 'A censer swung in judgment. Strikes count as holy, and a well-placed hit sears the wicked.',
+    effects: { attackElement: 'holy', critInflict: { ailment: 'burn', chance: 1, rounds: 2 } },
+    icon: { kind: 'mace', base: 0xffd36c, accent: 0xff8a5a },
+  },
+  serpents_kiss: {
+    id: 'serpents_kiss',
+    name: 'Serpent\'s Kiss',
+    slot: 'weapon',
+    users: ['kael'],
+    bonus: { str: 5, agi: 3 },
+    trait: 'Envenomed edge',
+    description: 'A blade drawn along something that should not still be moving. Attacks may Poison.',
+    effects: { attackInflict: { ailment: 'venom', chance: 0.25, rounds: 3 } },
+    icon: { kind: 'blade', base: 0x4a6a3a, accent: 0x8aff6c },
+  },
+  fracture_band: {
+    id: 'fracture_band',
+    name: 'Fracture Band',
+    slot: 'charm',
+    users: ['kael', 'lyra', 'mira'],
+    bonus: { agi: 2 },
+    trait: 'Merciless',
+    description: 'Struck from the same steel Wardens use to stagger their prey. Deals extra damage to staggered enemies.',
+    effects: { breakBonusDmg: 0.2 },
+    icon: { kind: 'ring', base: 0x6cd8f0, accent: 0xdff6ff },
   },
 
   // --- Chapter 3 tier (Ashen Peaks) ---------------------------------------------
@@ -385,6 +420,73 @@ export const EQUIPMENT: Record<string, Equipment> = {
     icon: { kind: 'orb', base: 0x8a93b8, accent: 0xdfe4f5 },
   },
 
+  // --- Chapter 5 tier (Tempest Anchor) -------------------------------------------
+  squallblade: {
+    id: 'squallblade',
+    name: 'Squallblade',
+    slot: 'weapon',
+    users: ['kael'],
+    bonus: { str: 8, agi: 2 },
+    trait: 'Ungrounded edge',
+    description: 'Cut from a bolt that struck the anchor and never fully grounded. Its edge carries no charge of its own — nothing for a ward to catch.',
+    effects: { attackElement: 'none', critBonus: 0.05 },
+    icon: { kind: 'blade', base: 0x9fc8e0, accent: 0xc0e8ff },
+  },
+  tempest_rod: {
+    id: 'tempest_rod',
+    name: 'Tempest Rod',
+    slot: 'weapon',
+    users: ['lyra'],
+    bonus: { int: 8, maxMp: 9 },
+    trait: 'Storm focus',
+    description: 'Fused where lightning met crystal, again and again. Amplifies spellpower and holds a deeper reserve.',
+    icon: { kind: 'staff', base: 0x4a6a8a, accent: 0x9fc8e0 },
+  },
+  stormward_mace: {
+    id: 'stormward_mace',
+    name: 'Stormward Mace',
+    slot: 'weapon',
+    users: ['mira'],
+    bonus: { str: 7, int: 8 },
+    trait: 'Storm-blessed',
+    description: 'Blessed at the mended Tempest Anchor. Strikes count as holy, and its wielder heals a little deeper for it.',
+    effects: { attackElement: 'holy', healBonus: 12 },
+    icon: { kind: 'mace', base: 0x6ac8f0, accent: 0xfff4b8 },
+  },
+  stormguard_plate: {
+    id: 'stormguard_plate',
+    name: 'Stormguard Plate',
+    slot: 'armor',
+    users: ['kael', 'mira'],
+    bonus: { maxHp: 24, vit: 6 },
+    trait: 'Storm-tempered',
+    description: 'Plate quenched in storm-charged rain. The cold no longer bites through it.',
+    effects: { resist: ['chill'] },
+    icon: { kind: 'armor', base: 0x3a4a5e, accent: 0x9fc8e0 },
+  },
+  windrent_plate: {
+    id: 'windrent_plate',
+    name: 'Windrent Plate',
+    slot: 'armor',
+    users: ['kael', 'mira'],
+    bonus: { maxHp: 26, vit: 7 },
+    trait: 'Storm-scarred',
+    description: 'Weathered a hundred storms atop the heights. Venom finds no purchase in the cracks.',
+    effects: { resist: ['venom'] },
+    icon: { kind: 'armor', base: 0x2a3a4e, accent: 0x6ac8f0 },
+  },
+  thunderhead_band: {
+    id: 'thunderhead_band',
+    name: 'Thunderhead Band',
+    slot: 'charm',
+    users: ['kael', 'lyra', 'mira'],
+    bonus: { maxMp: 7, int: 2 },
+    trait: 'Static charge',
+    description: 'Crackles with charge that never fully discharges. Restores 3 MP every round.',
+    effects: { mpRegen: 3 },
+    icon: { kind: 'ring', base: 0x9fc8e0, accent: 0xf6f9ff },
+  },
+
   // --- Rift tier: found only in the Rift's own chests, past chapter 4 ----------
   rift_edge: {
     id: 'rift_edge',
@@ -426,7 +528,7 @@ export const EQUIPMENT: Record<string, Equipment> = {
     users: ['kael', 'mira'],
     bonus: { maxHp: 26, vit: 6 },
     trait: 'Collapsed matter',
-    description: 'Armor grown from matter the Rift couldn\'t finish consuming. Attacks feed you 10% of the damage.',
+    description: 'Armor grown from matter the Rift couldn\'t finish consuming. Physical damage feeds you 10% of the damage.',
     effects: { lifesteal: 0.1 },
     icon: { kind: 'armor', base: 0x2a1f3a, accent: 0x8a5ad0 },
   },
@@ -472,26 +574,30 @@ export function equipmentBonus(ids: Array<string | undefined>): Partial<Stats> {
 export function gearFor(ids: Array<string | undefined>): {
   attackElement?: Element;
   attackInflict?: Inflict;
+  critInflict?: Inflict;
   gear: GearEffects;
 } {
-  const gear: GearEffects = { critBonus: 0, lifesteal: 0, mpRegen: 0, guardChipBonus: 0, healBonus: 0, resist: [] };
+  const gear: GearEffects = { critBonus: 0, lifesteal: 0, mpRegen: 0, guardChipBonus: 0, healBonus: 0, resist: [], breakBonusDmg: 0 };
   let attackElement: Element | undefined;
   let attackInflict: Inflict | undefined;
+  let critInflict: Inflict | undefined;
   for (const id of ids) {
     const fx = id ? EQUIPMENT[id]?.effects : undefined;
     if (!fx) continue;
     if (fx.attackElement) attackElement = fx.attackElement;
     if (fx.attackInflict) attackInflict = fx.attackInflict;
+    if (fx.critInflict) critInflict = fx.critInflict;
     if (fx.critBonus) gear.critBonus += fx.critBonus;
     if (fx.lifesteal) gear.lifesteal += fx.lifesteal;
     if (fx.mpRegen) gear.mpRegen += fx.mpRegen;
     if (fx.guardChipBonus) gear.guardChipBonus += fx.guardChipBonus;
     if (fx.healBonus) gear.healBonus += fx.healBonus;
+    if (fx.breakBonusDmg) gear.breakBonusDmg = (gear.breakBonusDmg ?? 0) + fx.breakBonusDmg;
     for (const a of fx.resist ?? []) {
       if (!gear.resist.includes(a)) gear.resist.push(a);
     }
   }
-  return { attackElement, attackInflict, gear };
+  return { attackElement, attackInflict, critInflict, gear };
 }
 
 const AILMENT_VERB: Record<Ailment, string> = { burn: 'burn', chill: 'chill', venom: 'poison' };
@@ -501,13 +607,16 @@ export function equipmentEffectText(item: Equipment): string[] {
   const fx = item.effects;
   if (!fx) return [];
   const parts: string[] = [];
-  if (fx.attackElement) parts.push(`Attacks strike as ${fx.attackElement.toUpperCase()}`);
+  if (fx.attackElement === 'none') parts.push('Attacks carry no element — bypasses elemental wards');
+  else if (fx.attackElement) parts.push(`Attacks strike as ${fx.attackElement.toUpperCase()}`);
   if (fx.attackInflict) parts.push(`${Math.round(fx.attackInflict.chance * 100)}% to ${AILMENT_VERB[fx.attackInflict.ailment]} on hit`);
+  if (fx.critInflict) parts.push(`Critical hits also ${AILMENT_VERB[fx.critInflict.ailment]}${fx.critInflict.chance < 1 ? ` (${Math.round(fx.critInflict.chance * 100)}%)` : ''}`);
   if (fx.critBonus) parts.push(`+${Math.round(fx.critBonus * 100)}% crit`);
-  if (fx.lifesteal) parts.push(`Attacks heal ${Math.round(fx.lifesteal * 100)}% of damage`);
+  if (fx.lifesteal) parts.push(`Physical damage heals ${Math.round(fx.lifesteal * 100)}% back`);
   if (fx.mpRegen) parts.push(`+${fx.mpRegen} MP each round`);
   if (fx.guardChipBonus) parts.push(`Weakness hits chip +${fx.guardChipBonus} guard`);
   if (fx.healBonus) parts.push(`Healing +${fx.healBonus}`);
+  if (fx.breakBonusDmg) parts.push(`+${Math.round(fx.breakBonusDmg * 100)}% damage to staggered enemies`);
   if (fx.resist && fx.resist.length > 0) parts.push(`Immune to ${fx.resist.join(', ')}`);
   return parts;
 }

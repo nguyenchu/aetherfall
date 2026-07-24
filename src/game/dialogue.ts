@@ -17,6 +17,21 @@ export interface DialogueLine {
 
 export type Script = DialogueLine[];
 
+// Default portrait per speaker, used when a line doesn't set its own
+// `portrait` — every Warden Eda / Scholar Voss / Child / Stranger / Merchant
+// line in this file relies on this rather than repeating the texture key on
+// every single line (see art/spriteData.ts for the sprites themselves).
+export const SPEAKER_PORTRAIT: Record<string, string> = {
+  Kael: 'portrait_kael',
+  Lyra: 'portrait_lyra',
+  Mira: 'portrait_mira',
+  'Warden Eda': 'e_wardeneda',
+  'Scholar Voss': 'e_scholarvoss',
+  Child: 'e_child',
+  Merchant: 'e_merchant',
+  '???': 'e_stranger',
+};
+
 const NARRATOR = 0x8a93b8;
 
 export const SCRIPTS: Record<string, Script> = {
@@ -157,14 +172,37 @@ export const SCRIPTS: Record<string, Script> = {
     { text: 'Deep beneath Sanctuary, something that has been patient for a very long time stops being patient.', color: NARRATOR },
   ],
 
+  // Chapter 5 — Tempest Anchor story trigger before Galebrand.
+  ch5_story: [
+    { text: 'The cliff trail ends at open sky — a broken spire of rock lashed by wind that never settles on one direction.', color: NARRATOR },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'This one\'s different. The others were drained from outside, hollowed out on purpose. This is coming apart from the inside.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Like it\'s just... losing the shape of itself.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'No sigil. No blade. No casing. Whoever\'s been doing this — they never touched this anchor at all.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Then what\'s wrong with it?' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Maybe nothing\'s "wrong." Maybe this is just what happens if nobody comes back for you.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Then let\'s make sure someone did.' },
+    { text: 'The wind rises to a scream. Something vast and unraveling turns toward them.', color: NARRATOR },
+  ],
+
+  ch5_win: [
+    { text: 'The wind dies all at once. Galebrand\'s fractured light gathers itself back into one shape — barely.', color: NARRATOR },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'It held together. Not something I expected to be proud of, but here we are.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Five now. And this one wasn\'t even anyone\'s fault.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Maybe. Or maybe we just haven\'t found the mark yet.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Kael—' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'I\'m not saying it to be difficult. I\'m saying it because "nobody\'s fault" hasn\'t been true yet.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Seven anchors left. If even one of them is failing on its own, without any help—' },
+    { text: 'Far below Sanctuary, in the place no map has ever shown, something that has been waiting stops waiting a little more.', color: NARRATOR },
+  ],
+
   ending: [
-    { text: 'Four anchors restored. Four corrupted guardians returned to the light.', color: NARRATOR },
+    { text: 'Five anchors restored. Five corrupted guardians returned to the light.', color: NARRATOR },
     { text: 'The world still sinks — but slower now. Sanctuary stands.', color: NARRATOR },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Toren\'s blade is with me now. However this ends, that\'s one name I get to remember properly.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I used to think restoring anchors was about not failing again. Now I think it\'s about everyone still ahead of us who hasn\'t failed yet.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens kept faith for a thousand years without knowing why. Now we know. That\'s not nothing.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Whatever left that sigil by our well didn\'t need to reach us. It could have. That\'s the part that doesn\'t let me sleep.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Eight anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Seven anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Let them.' },
     { text: '— The story continues in a future update —', color: NARRATOR },
     { text: 'Thank you for playing Aetherfall.', color: NARRATOR },
@@ -228,6 +266,29 @@ export const SCRIPTS: Record<string, Script> = {
     { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Pip dug something up by the old well last night. I didn\'t touch it — it felt cold, like the stuff you bring back from the anchors.' },
     { text: 'Under a flat stone, wrapped in cloth: a small, tarnished watch-sigil — the same mark from the grove, and from the casing in the depths.', color: NARRATOR },
     { speaker: 'Child', color: 0x6cf0c2, portrait: 'portrait_child', text: 'Is that bad? You look like it\'s bad.' },
+  ],
+  // Post-Ch5 NPC follow-ups
+  npc_keeper_after5: [
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Five anchors. And that one wasn\'t touched by whoever\'s been doing this — I could tell it rattled you.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I\'ve been going through the old deployment orders again — the ones that sent Kael\'s line out. There\'s a name on the authorization that isn\'t a Warden\'s name.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I\'ve served forty years. I don\'t recognize it. I don\'t know how that\'s possible.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I\'ll find out who signed that order if it\'s the last thing I do here. Watch yourselves — I don\'t think it\'ll like being found.' },
+  ],
+  npc_scholar_after5: [
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Five now, and the Tempest Anchor was never drained — it simply wore out. That matters more than it sounds.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'It means the seal fails on its own timeline too, not only where someone pushes it. The Hollow doesn\'t need a hand at the anchor. It just needs enough time.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'I found something else. The old records name twelve wardens who first raised the anchors — not the Wardens of Sanctuary. Older. A line before the line.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'I think whoever is doing this was one of them. I have no proof. Just a very old fear that keeps matching the evidence.' },
+  ],
+  npc_stranger_after5: [
+    { speaker: '???', color: 0x8a93b8, text: 'Five. That one cost it nothing, and it still didn\'t like watching you take it back.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Seven anchors remain. Some it drained on purpose. Some are just old. It counts them the same either way.' },
+    { speaker: '???', color: 0x8a93b8, text: 'I was there when Kael\'s line went out. I didn\'t wear this face then. Ask me again when you\'re ready to hear the rest of it.' },
+  ],
+  npc_child_after5: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Five stars. I ran out of room on the wall, so now they\'re going around the window frame.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'The digging under the city got louder last night. Pip wouldn\'t go near the well at all, not even for me.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum says it\'s just old pipes settling. Pip doesn\'t believe her. I didn\'t say I don\'t either.' },
   ],
 };
 
