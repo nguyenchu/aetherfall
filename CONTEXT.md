@@ -1,6 +1,39 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-23.
+> Paste this into a new session to continue the work. Last updated: 2026-07-24.
+
+## 2026-07-24 (bugfix): Retreat Cascaded Into the Previous Chapter's Boss Floor
+
+Bug report: "pil tilbake går til veldig rare plasser nå" (the back arrow
+goes to very strange places now) — disambiguated via a quick multiple-
+choice check to mean `DescentScene`'s "previous floor" `'<'` portal (added
+in the large batch of pending work committed at the very start of this
+session, so never specifically audited on its own before now).
+
+Root cause: `goHome()`'s retreat condition was a flat `depth > 1` — every
+chapter is exactly two strata (entrance = odd depth, boss = the next even
+one; see `analytics.ts`'s `chapterOfDepth`), but that check treated *any*
+depth past 1 as "stepping back one stratum is valid," with no concept of
+"stratum within the current chapter." From a later chapter's own entrance
+floor (e.g. depth 7, Ch4's Crystal Depths), pressing `'<'` didn't go home
+like a chapter entrance should — it stepped straight back into the
+*previous* chapter's boss arena (depth 6), an already-cleared area with no
+reason to return to it. Compounding it: every entrance floor's spawn point
+sits right next to its own `'<'` tile by design (it's "the way back"), so
+landing at one after a confusing jump made it easy to immediately trigger
+*another* retreat without meaning to — the "very strange places," plural.
+
+Fix (`DescentScene.ts`): retreat now only steps back a stratum when
+currently on a boss floor (`depth % 2 === 0`); from an entrance floor it
+goes to town regardless of depth, matching the pre-existing depth-1
+behavior. `hintLabel()`'s "previous floor" vs. "return home" text updated
+to the same condition so the on-screen hint doesn't lie.
+
+Verified live via Playwright + the run.ts dev-import hook (jump depth
+directly, no floor-by-floor grind): seeded depth 7 (Ch4 entrance), walked
+onto `'<'` — now correctly opens RunSummary/town, not another Descent
+restart. Seeded depth 8 (Ch4 boss floor), walked onto `'<'` — correctly
+retreats to depth 7, staying in Descent. `tsc --noEmit` clean.
 
 ## 2026-07-23 (gui 3): Sanctuary's Decor Was Noise, Not Detail — Cut Back
 
