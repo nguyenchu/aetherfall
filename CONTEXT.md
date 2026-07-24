@@ -2,6 +2,47 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-07-24.
 
+## 2026-07-24 (audit): Chapter 5 Economy Check + Re-Auditing the Session's Big Batch
+
+Ask: "hva skal vi forbedre nå?" -> user picked both proposed options: a
+Chapter 5 item/quest economy pass (the same kind of check 2026-07-09 (d)
+did for chapters 1-4, never redone for the newer chapter) and a fresh
+audit of the large batch of changes committed at the very start of this
+session (dual Limit Breaks, boss presentation, NPC/UX polish) — motivated
+by having just found a real regression (the retreat-cascade bug above)
+hiding in that same batch, unaudited until something broke.
+
+**Economy check.** Chapter 4->5 equipment pricing (`run.ts`'s sell-price
+table) increases cleanly on both the shop-gear floor and the boss-reward
+ceiling — no issue. But every one of the four per-NPC side-quest chains
+(Eda/Voss/Child/Stranger's ch2/ch3/ch4/ch5-gated check-ins, added by the
+2026-07-16 Inotia-3 pass) dips in gold right at tier 4: Eda and Voss both
+50->35, Child 30->25, Stranger 45->40 — the same shape of bug the
+2026-07-09 (d) audit fixed for the boss-quest chain, just never checked
+here. Fixed Eda (`eda_watchline` 35->50), Voss (`voss_hollow` 35->50), and
+Child (`pip_digging` 25->30) back up to their tier-3 level. Left
+Stranger's `stranger_truth` alone — its dip is smaller and it's the one
+of the four whose tier-4 reward also includes real equipment
+(`watchers_ward`), matching the exact "equipment outweighs a modest gold
+dip" call the 2026-07-09 (d) audit already made once.
+
+**Batch re-audit.** Checked, no issues found: every `{type:'limit'}`
+command construction has exactly one call site and always supplies a
+valid `limitId` (the type change from optional to required didn't leave
+a stale caller); boss sprite keys in `bossSprites.ts` match every boss's
+`spriteKey` in `chapters.ts` exactly; the Sanctuary shop's "sell the whole
+stack" rows all read live inventory (`getRun().inventory[id]`) rather than
+a stale count captured at render time; the Haste queue-preview's
+hypothetical state doesn't need an explicit reset on every exit path
+because the next turn's plain `renderQueue()` call in `advance()`
+overwrites it regardless of how the previous turn ended; `GameMenuScene`'s
+Limit Break block's manual y-position tracking (needed since the spell
+list above it is variable height) holds up across the empty-castable and
+zero-battle-only-spells edge cases. No further fixes from this pass —
+the two bugs already caught and fixed earlier today (retreat cascade,
+Bulwark vs. boss bursts) appear to have been the real issues in this
+batch.
+
 ## 2026-07-24 (bugfix): Retreat Cascaded Into the Previous Chapter's Boss Floor
 
 Bug report: "pil tilbake går til veldig rare plasser nå" (the back arrow
