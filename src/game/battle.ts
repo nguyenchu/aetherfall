@@ -823,6 +823,22 @@ export class Battle {
         events.push({ kind: 'info', text: 'The storm inside it has turned against it — and its strikes no longer answer to anything but the wind.' });
         break;
       }
+      case 'frostmaw': {
+        events.push({ kind: 'phase', text: 'Frostmaw finally completes the blow it was frozen mid-swing — ice shatters outward in every direction!', actorId: boss.id });
+        const burst = Math.round(22 + boss.stats.int * 0.85);
+        for (const t of this.living('party')) {
+          const dealt = this.applyBossBurst(t, burst);
+          events.push({ kind: 'spell', text: `A wave of shards tears into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
+          this.maybeKo(t, events, true);
+          if (this.living('party').length === 0) break;
+        }
+        // Its own shattered form now throws fragments back at anything that
+        // doesn't land on its weakness — same reflectFrac field the trash
+        // reflect-mobs already use, no new plumbing needed.
+        boss.reflectFrac = 0.3;
+        events.push({ kind: 'info', text: 'The shattered ice around it now flies back at whatever strikes it without finding the crack.' });
+        break;
+      }
       default:
         events.push({ kind: 'phase', text: `${boss.name} transforms!`, actorId: boss.id });
     }

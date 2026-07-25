@@ -97,6 +97,23 @@ server's cache before the code.
 `tsc --noEmit` clean throughout. Playwright installed/removed the same way
 prior verify sessions have.
 
+**Follow-up same session: Frostmaw had no phase-2 identity.** Asked "hva nå?"
+after committing; before proposing new work, checked the fresh chapter for
+the exact gap the 2026-07-22 boss-AI audit already found once (Tide Warden
+was the one boss with no phase-2 behavior, generic "transforms!" only) — and
+found Frostmaw had the same gap, introduced fresh by this session's own add
+(never got a case in `executeBossPhase()`). Fixed: at 50% HP, Frostmaw now
+gets an AoE burst (`22 + int*0.85`, same `applyBossBurst`-bypasses-VIT
+pattern every other boss burst uses) themed as "the blow it was frozen
+mid-swing finally landing," plus a permanent `reflectFrac = 0.3` afterward
+(reusing the existing field trash reflect-mobs already use — no new
+plumbing) so its shattered form throws fragments back at non-weakness hits.
+Verified with a standalone script exercising the real `Battle.executeTurn`
+path (`battle.ts` has no Phaser dependency): burst landed for 54 on a
+160-max-HP hero (~34%, in line with prior chapters' "squishy but not
+one-shottable" bar), `reflectFrac` confirmed set post-phase. `tsc --noEmit`
+clean; scratch test script deleted after, not committed.
+
 ## 2026-07-24 (audit): Chapter 5 Economy Check + Re-Auditing the Session's Big Batch
 
 Ask: "hva skal vi forbedre nå?" -> user picked both proposed options: a
