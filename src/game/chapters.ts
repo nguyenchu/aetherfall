@@ -12,7 +12,9 @@
 // Per-chapter field mechanics (DescentScene.ts), each tinted so they're
 // always visible, never invisible traps:
 //   V  Thicket (Forest) — much higher random-encounter chance than open floor
-//   ~  Current (Sunken) — sweeps you further in your direction of travel
+//   ~  Current (Sunken) / icy slick (Frost) — sweeps you further in your
+//                         direction of travel; same tile, reused as-is since
+//                         the behavior (DescentScene.ts) is theme-agnostic
 //   ^  Embers (Ashen)   — a little party HP damage each time you cross it
 //   *  Prism Pad (Crystal) — teleports to its paired pad (see `teleports`)
 //   G  Gust (Tempest)   — shoves you one further tile in a fixed direction
@@ -175,6 +177,14 @@ export const THEMES: Record<string, AreaTheme> = {
     wall: 0x0a131a,
     accent: 0x6ac8f0,
     fogColor: 0x4aa8d8, fogAlpha: 0.18,
+  },
+  frost: {
+    id: 'frost',
+    bg: 0x070c12,
+    floor: 0x18222e, floorAlt: 0x1e2a38,
+    wall: 0x0c1622,
+    accent: 0x8ad4f0,
+    fogColor: 0xaee0f5, fogAlpha: 0.2,
   },
 };
 
@@ -924,7 +934,177 @@ const AREA_10: AreaDef = {
   ],
 };
 
-export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8, AREA_9, AREA_10];
+// ---------------------------------------------------------------------------
+// Chapter 6 enemies — Frost Anchor (depth 11-12)
+// ---------------------------------------------------------------------------
+
+function frostfang(id: string): Combatant {
+  return armed({
+    id, name: 'Frostfang', side: 'enemy',
+    spriteKey: 'e_ghoul', color: 0xaed4ea, size: 24,
+    spells: [], goldReward: 32, xpReward: 40,
+    attackInflict: { ailment: 'chill', chance: 0.3, rounds: 2 },
+    // Runs the ice ahead of the rest of the pack — permanently hasted, same
+    // shape as Gale Harrier, so it's the one worth cutting down first.
+    speedStatuses: { haste: { mult: 1.25, turns: 999 } },
+    stats: s(95, 24, 22, 8, 2),
+  }, ['fire'], 1);
+}
+
+function rimebackCrawler(id: string): Combatant {
+  return armed({
+    id, name: 'Rimeback Crawler', side: 'enemy',
+    spriteKey: 'e_crawler', color: 0x6a8aa0, size: 28,
+    spells: [], goldReward: 33, xpReward: 42,
+    // The ice underfoot throws off whoever it hits, same footing-loss shape
+    // as Cliff Stalker.
+    attackSpeedDebuff: { mult: 0.65, turns: 2 },
+    stats: s(150, 27, 12, 19, 2),
+  }, ['holy'], 2);
+}
+
+function frostwardedSentinel(id: string): Combatant {
+  return armed({
+    id, name: 'Frostwarded Sentinel', side: 'enemy',
+    spriteKey: 'e_warden', color: 0x3a5468, size: 32,
+    spells: [], goldReward: 39, xpReward: 46,
+    // A mirror-bright ice shell — careless non-weakness hits glance back.
+    reflectFrac: 0.35,
+    stats: s(185, 29, 10, 23, 2),
+  }, ['holy'], 3);
+}
+
+function glacialWisp(id: string): Combatant {
+  return armed({
+    id, name: 'Glacial Wisp', side: 'enemy',
+    spriteKey: 'e_sprite', color: 0xcdeefc, size: 18,
+    spells: ['frost', 'smite'], goldReward: 42, xpReward: 53,
+    stats: s(110, 10, 18, 7, 28, 40),
+  }, ['fire'], 1);
+}
+
+function frostboundColossus(): Combatant {
+  return armed({
+    id: 'elite0', name: 'Frostbound Colossus', side: 'enemy',
+    spriteKey: 'e_warden', color: 0x4a6a80, size: 36,
+    spells: ['frost'], goldReward: 125, xpReward: 175, isElite: true,
+    stats: s(460, 33, 15, 30, 14, 25),
+  }, ['fire'], 4);
+}
+
+function frostmaw(): Combatant {
+  return armed({
+    id: 'frostmaw', name: 'Frostmaw', side: 'enemy',
+    spriteKey: 'e_frostmaw', color: 0x2a4a5e, size: 44,
+    spells: ['frost', 'smite'], goldReward: 170, xpReward: 310,
+    isBoss: true,
+    stats: s(1050, 33, 20, 24, 38, 110),
+  }, ['fire'], 5);
+}
+
+type Ch6EncounterGroup = 'frostfangs' | 'frostfang_crawler' | 'crawler_sentinel' | 'glacial_pack' | 'elite' | 'ch6_boss';
+
+export function makeChapter6Encounter(group: Ch6EncounterGroup): Combatant[] {
+  switch (group) {
+    case 'frostfangs':       return [frostfang('e0'), frostfang('e1')];
+    case 'frostfang_crawler': return [frostfang('e0'), rimebackCrawler('e1')];
+    case 'crawler_sentinel': return [rimebackCrawler('e0'), frostwardedSentinel('e1')];
+    case 'glacial_pack':     return [frostfang('e0'), glacialWisp('e1'), frostfang('e2')];
+    case 'elite':            return [frostboundColossus(), glacialWisp('e1')];
+    case 'ch6_boss':         return [frostmaw()];
+  }
+}
+
+// Area 11 – Frostbound Reach. 36 cols × 20 rows. Same proven shape as
+// Stormcrag Heights (a winding hall with a sheltered detour and a dead-end
+// elite alcove) — reskinned rather than redesigned from scratch, with '~'
+// (Sunken's Current, generic and theme-agnostic — see DescentScene's
+// movement handler) reused as icy slicks that sweep you onward, exactly
+// the same "sweep further in your direction of travel" read this chapter
+// needs, just re-flavored as ice instead of water.
+const AREA_11: AreaDef = {
+  id: 'frost_1',
+  name: 'Frostbound Reach',
+  theme: THEMES.frost,
+  encounters: {
+    '20,4':  'frostfang_crawler',
+    '6,7':   'frostfangs',
+    '28,8':  'glacial_pack',
+    '6,12':  'crawler_sentinel',
+    '28,14': 'frostfang_crawler',
+    '17,16': 'frostfangs',
+    '34,3':  'elite',
+  },
+  scripts: {},
+  chests: {
+    '33,3': { gold: 70, equipment: 'rimeglass_blade' },
+  },
+  map: [
+    '####################################',
+    '#.................>................#',
+    '#..................................#',
+    '#........................~~......TX#',
+    '#....H.............................#',
+    '#..................................#',
+    '#....................###...........#',
+    '#....................###...........#',
+    '#..................................#',
+    '#...............#..................#',
+    '#...............#..................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#........~~........................#',
+    '#..................................#',
+    '#..................................#',
+    '#<..P..............................#',
+    '####################################',
+  ],
+};
+
+// Area 12 – Glacial Sanctum. Boss area. 36 cols × 20 rows.
+// Frostmaw's arena: same open shattered-anchor-chamber shape Skybreak
+// Anchorage used, with scattered icy slicks as ambient atmosphere (not tied
+// to boss HP, same as Ashen's static Embers or Tempest's static Gusts).
+const AREA_12: AreaDef = {
+  id: 'frost_2',
+  name: 'Glacial Sanctum',
+  theme: THEMES.frost,
+  encounters: {
+    '17,10': 'ch6_boss',
+  },
+  scripts: {
+    '16,5': 'ch6_story',
+  },
+  chests: {
+    '20,15': { gold: 65, items: { tonic: 1 } },
+  },
+  map: [
+    '####################################',
+    '#..................................#',
+    '#.~..............................~.#',
+    '#..................................#',
+    '#..................................#',
+    '#...............S..................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#......H...........................#',
+    '#................B.................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#..................................#',
+    '#...................T..............#',
+    '#..................................#',
+    '#.~..............................~.#',
+    '#<..P..............................#',
+    '####################################',
+  ],
+};
+
+export const ALL_AREAS: AreaDef[] = [AREA_1, AREA_2, AREA_3, AREA_4, AREA_5, AREA_6, AREA_7, AREA_8, AREA_9, AREA_10, AREA_11, AREA_12];
 
 /** Total number of authored chapters (2 depths each). Used instead of a
  * hardcoded chapter count so victory/ending logic self-updates as more
@@ -977,6 +1157,7 @@ export function makeEncounterForArea(area: AreaDef, group: string, ngPlus = 0): 
     : area.id.startsWith('ashen')  ? makeChapter3Encounter(group as Ch3EncounterGroup)
     : area.id.startsWith('crystal') ? makeChapter4Encounter(group as Ch4EncounterGroup)
     : area.id.startsWith('tempest') ? makeChapter5Encounter(group as Ch5EncounterGroup)
+    : area.id.startsWith('frost')   ? makeChapter6Encounter(group as Ch6EncounterGroup)
     : makeChapter1Encounter(group as EncounterGroup);
   return scaleForNgPlus(enemies, ngPlus);
 }

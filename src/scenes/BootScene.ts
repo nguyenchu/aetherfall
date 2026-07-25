@@ -41,6 +41,7 @@ export class BootScene extends Phaser.Scene {
     this.buildItemIcons();
     this.buildEquipmentIcons();
     this.buildSanctuaryDecor();
+    this.buildDescentDecor();
 
     this.scene.start('Intro');
   }
@@ -205,6 +206,46 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0x6a7ac0, 0.6).fillCircle(9, 9, 2.4); // water glint
       g.fillStyle(0x8a6cf0, 1).fillCircle(11, 11, 2.4); // aether spire core
       g.fillStyle(0xdfe4f5, 0.8).fillCircle(11, 11, 1); // spire glint
+    });
+  }
+
+  // One quiet, static ground prop per dungeon theme (DescentScene scatters
+  // these procedurally across plain floor tiles — see DUNGEON_DECOR there).
+  // Deliberately muted and non-glowing, unlike each theme's real field-
+  // mechanic tile (Thicket/Current/Embers/Prism Pad/Gust, all bright and
+  // pulsing) — the 2026-07-23 Sanctuary decor pass found that anything too
+  // bright/saturated reads as interactive, so these stay dim and still.
+  private buildDescentDecor() {
+    this.makeDecorTexture('decor_dungeon_forest', 16, 16, (g) => {
+      g.fillStyle(0x3a5a34, 0.8).fillEllipse(8, 12, 9, 4); // moss tuft
+      g.fillStyle(0x8a5a42, 1).fillEllipse(5, 9, 3, 2); // mushroom cap
+      g.fillStyle(0xe8dcc0, 1).fillRect(4, 10, 2, 3); // stem
+      g.fillStyle(0xa06848, 1).fillEllipse(10, 8, 2.5, 1.8); // second cap
+      g.fillStyle(0xe8dcc0, 1).fillRect(9, 9, 1.5, 3); // second stem
+    });
+    this.makeDecorTexture('decor_dungeon_sunken', 16, 16, (g) => {
+      g.fillStyle(0x2a3a34, 0.7).fillEllipse(8, 13, 8, 3); // silt base
+      g.fillStyle(0x3a7a5a, 1).fillTriangle(5, 13, 6, 4, 7, 13); // kelp frond
+      g.fillStyle(0x4a9a72, 1).fillTriangle(9, 13, 10, 6, 11, 13);
+      g.fillStyle(0xc07a6a, 0.9).fillCircle(8, 11, 2); // coral bulb
+    });
+    this.makeDecorTexture('decor_dungeon_ashen', 16, 16, (g) => {
+      g.fillStyle(0x2a2420, 0.85).fillEllipse(8, 12, 9, 4); // cooled ash mound
+      g.fillStyle(0x3a322c, 1).fillCircle(6, 10, 2); // rubble stone
+      g.fillStyle(0x463c34, 1).fillCircle(10, 11, 1.6);
+      g.fillStyle(0x8a5238, 0.35).fillCircle(8, 11, 1); // one faint, dim ember fleck
+    });
+    this.makeDecorTexture('decor_dungeon_crystal', 16, 16, (g) => {
+      g.fillStyle(0x241c3a, 0.7).fillEllipse(8, 13, 8, 3); // ground shadow
+      g.fillStyle(0x4a3a68, 1).fillTriangle(6, 13, 5, 6, 8, 13); // shard
+      g.fillStyle(0x5a4a7a, 1).fillTriangle(9, 13, 10, 5, 12, 13); // shard
+      g.fillStyle(0x6a5a8e, 0.8).fillTriangle(8, 13, 8, 8, 9.5, 13); // shard
+    });
+    this.makeDecorTexture('decor_dungeon_tempest', 16, 16, (g) => {
+      g.fillStyle(0x2a2e34, 0.7).fillEllipse(8, 13, 8, 3); // ground shadow
+      g.fillStyle(0x4a4a52, 1).fillRect(4, 8, 8, 2); // splintered plank
+      g.fillStyle(0x3a3a42, 1).fillRect(5, 10, 6, 1.5);
+      g.fillStyle(0x5a5a64, 0.9).fillTriangle(11, 8, 14, 6, 13, 10); // torn cloth scrap
     });
   }
 

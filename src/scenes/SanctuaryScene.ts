@@ -59,6 +59,9 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'tempest_rod', flag: 'ch5_complete' },
   { id: 'stormguard_plate', flag: 'ch5_complete' },
   { id: 'thunderhead_band', flag: 'ch5_complete' },
+  { id: 'frostbound_rod', flag: 'ch6_complete' },
+  { id: 'rimeguard_plate', flag: 'ch6_complete' },
+  { id: 'glacial_band', flag: 'ch6_complete' },
 ];
 
 // Merchant consumable stock beyond the always-available Elixir/Tonic.
@@ -93,7 +96,7 @@ const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase
 
 // Sanctuary, the last city of light — a keep built around its own Anchor
 // shard (see IntroScene's cosmology), not a rectangle with a wall around it.
-// The octagonal fortress ring narrows to five carved gate alcoves: the
+// The octagonal fortress ring narrows to six carved gate alcoves: the
 // always-open Chapter 1 gate (top) plus one per later chapter, so the shape
 // itself says "expeditions launch from here" instead of being arbitrary.
 // Warden Eda and Scholar Voss keep their posts flanking the Anchor shrine at
@@ -119,9 +122,9 @@ const MAP = [
   '#####.............................#####',
   '######...........................######',
   '#######.......C....P....V.......#######',
-  '#######..##############..##############',
-  '#######..##############..##############',
-  '#######..##############..##############',
+  '#######..######..######..##############',
+  '#######..######..######..##############',
+  '#######..######..######..##############',
   '#######################################',
   '#######################################',
 ];
@@ -159,12 +162,14 @@ interface ChapterPortal {
 }
 
 // Each pos sits inside its own carved gate alcove in the outer wall (see
-// MAP) -- right gate for Ch2, left for Ch3, the two bottom gates for Ch4/5.
+// MAP) -- right gate for Ch2, left for Ch3, the three bottom gates for
+// Ch4/5/6 (middle bottom gate added for Ch6, between the pre-existing pair).
 const CHAPTER_PORTALS: ChapterPortal[] = [
   { chapter: 2, flag: 'ch1_complete', pos: { x: 36, y: 10 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
   { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 10 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
   { chapter: 4, flag: 'ch3_complete', pos: { x: 24, y: 18 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
   { chapter: 5, flag: 'ch4_complete', pos: { x: 8, y: 18 }, areaName: 'Stormcrag Heights', tint: 0x6ac8f0, labelColor: '#8ad8f5', targetDepth: 9 },
+  { chapter: 6, flag: 'ch5_complete', pos: { x: 16, y: 18 }, areaName: 'Frostbound Reach', tint: 0x8ad4f0, labelColor: '#aee0f5', targetDepth: 11 },
 ];
 
 interface Npc {
@@ -199,6 +204,7 @@ interface LiveNpc {
 }
 
 function npcs(): Record<string, Npc> {
+  const ch6Done = hasFlag('ch6_complete');
   const ch5Done = hasFlag('ch5_complete');
   const ch4Done = hasFlag('ch4_complete');
   const ch3Done = hasFlag('ch3_complete');
@@ -207,33 +213,37 @@ function npcs(): Record<string, Npc> {
   return {
     K: {
       spriteKey: 'e_wardeneda', scale: 1, name: 'Warden Eda', kind: 'dialogue',
-      scriptId: ch5Done ? 'npc_keeper_after5' : ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
-      // eda_orders is the ch5 payoff — the unrecognized name on Kael's old
-      // orders. eda_watchline is the ch4 payoff to her "I served with Kael's
-      // watch-line" hint — same one-off-then-chained pattern as the Stranger.
-      // eda_sunken/eda_hollow are the ch2/ch3 check-ins in between.
-      questActive: isQuestActive(ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda'),
-      questId: ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda',
+      scriptId: ch6Done ? 'npc_keeper_after6' : ch5Done ? 'npc_keeper_after5' : ch4Done ? 'npc_keeper_after4' : ch3Done ? 'npc_keeper_after3' : ch2Done ? 'npc_keeper_after2' : ch1Done ? 'npc_keeper_after' : 'npc_keeper',
+      // eda_name is the ch6 payoff — the mark on the deployment order,
+      // older than the Wardens. eda_orders is the ch5 payoff — the
+      // unrecognized name itself. eda_watchline is the ch4 payoff to her
+      // "I served with Kael's watch-line" hint — same one-off-then-chained
+      // pattern as the Stranger. eda_sunken/eda_hollow are the ch2/ch3
+      // check-ins in between.
+      questActive: isQuestActive(ch6Done ? 'eda_name' : ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda'),
+      questId: ch6Done ? 'eda_name' : ch5Done ? 'eda_orders' : ch4Done ? 'eda_watchline' : ch3Done ? 'eda_hollow' : ch2Done ? 'eda_sunken' : 'speak_eda',
       wander: true,
     },
     L: {
       spriteKey: 'e_scholarvoss', scale: 1, name: 'Scholar Voss', kind: 'dialogue',
-      scriptId: ch5Done ? 'npc_scholar_after5' : ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
-      // voss_twelve is the ch5 payoff — the "line before the line" theory.
-      // voss_hollow is the ch4 payoff to the "Twisting Hollow" reveal from
-      // npc_scholar_after3. voss_peaks/voss_texts are the ch2/ch3 check-ins.
-      questActive: isQuestActive(ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors'),
-      questId: ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors',
+      scriptId: ch6Done ? 'npc_scholar_after6' : ch5Done ? 'npc_scholar_after5' : ch4Done ? 'npc_scholar_after4' : ch3Done ? 'npc_scholar_after3' : ch2Done ? 'npc_scholar_after2' : ch1Done ? 'npc_scholar_after' : 'npc_scholar',
+      // voss_seal is the ch6 payoff — something strong enough to just break
+      // an anchor outright. voss_twelve is the ch5 payoff — the "line before
+      // the line" theory. voss_hollow is the ch4 payoff to the "Twisting
+      // Hollow" reveal from npc_scholar_after3. voss_peaks/voss_texts are
+      // the ch2/ch3 check-ins.
+      questActive: isQuestActive(ch6Done ? 'voss_seal' : ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors'),
+      questId: ch6Done ? 'voss_seal' : ch5Done ? 'voss_twelve' : ch4Done ? 'voss_hollow' : ch3Done ? 'voss_texts' : ch2Done ? 'voss_peaks' : 'learn_of_anchors',
       wander: true,
     },
     C: {
       spriteKey: 'e_child', scale: 0.8, name: 'Child', kind: 'dialogue',
-      scriptId: ch5Done ? 'npc_child_after5' : ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
-      // pip_wont_settle is the ch5 payoff. pip_digging is the ch4 payoff —
-      // the sigil Pip digs up by the well. child_current/child_stars are the
-      // ch2/ch3 check-ins.
-      questActive: ch1Done && isQuestActive(ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip'),
-      questId: ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
+      scriptId: ch6Done ? 'npc_child_after6' : ch5Done ? 'npc_child_after5' : ch4Done ? 'npc_child_after4' : ch3Done ? 'npc_child_after3' : ch2Done ? 'npc_child_after2' : ch1Done ? 'npc_child_after1' : 'npc_child',
+      // pip_quiet_night is the ch6 payoff. pip_wont_settle is the ch5 payoff.
+      // pip_digging is the ch4 payoff — the sigil Pip digs up by the well.
+      // child_current/child_stars are the ch2/ch3 check-ins.
+      questActive: ch1Done && isQuestActive(ch6Done ? 'pip_quiet_night' : ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip'),
+      questId: ch6Done ? 'pip_quiet_night' : ch5Done ? 'pip_wont_settle' : ch4Done ? 'pip_digging' : ch3Done ? 'child_stars' : ch2Done ? 'child_current' : 'find_pip',
       wander: true,
     },
     V: { spriteKey: 'e_merchant', scale: 1, name: 'Merchant', kind: 'vendor' },
@@ -241,15 +251,16 @@ function npcs(): Record<string, Npc> {
     ...(ch1Done ? {
       T: {
         spriteKey: 'e_stranger', scale: 0.9, name: '???', kind: 'dialogue' as const,
-        scriptId: ch5Done ? 'npc_stranger_after5' : ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
+        scriptId: ch6Done ? 'npc_stranger_after6' : ch5Done ? 'npc_stranger_after5' : ch4Done ? 'npc_stranger_after4' : ch3Done ? 'npc_stranger_after3' : ch2Done ? 'npc_stranger_after2' : 'npc_stranger',
         // heed_the_stranger is a one-off "you've noticed them" bootstrap quest
         // (completes on first talk after ch1); stranger_truth is the ch4
-        // payoff, stranger_witness the ch5 one — completeQuest() no-ops on an
-        // already-complete id, so this switch is what makes each subsequent
-        // quest ever fire at all. stranger_warning/stranger_hollow are the
-        // ch2/ch3 check-ins in between.
-        questActive: isQuestActive(ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger'),
-        questId: ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger',
+        // payoff, stranger_witness the ch5 one, stranger_confession the ch6
+        // one ("the rest of it" they stalled on in after5) — completeQuest()
+        // no-ops on an already-complete id, so this switch is what makes each
+        // subsequent quest ever fire at all. stranger_warning/stranger_hollow
+        // are the ch2/ch3 check-ins in between.
+        questActive: isQuestActive(ch6Done ? 'stranger_confession' : ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger'),
+        questId: ch6Done ? 'stranger_confession' : ch5Done ? 'stranger_witness' : ch4Done ? 'stranger_truth' : ch3Done ? 'stranger_hollow' : ch2Done ? 'stranger_warning' : 'heed_the_stranger',
         wander: true,
       },
     } : {}),
@@ -739,10 +750,10 @@ export class SanctuaryScene extends Phaser.Scene {
   /** Generates a fresh Rift floor for the current tier and descends into it.
    *  Theme pool is capped to chapters actually cleared (see generateRift) —
    *  the Rift itself opens at ch4_complete, so without this a fresh Chapter 4
-   *  finisher could roll the Chapter 5 (tempest/Galebrand) theme blind. */
+   *  finisher could roll a later chapter's theme blind. */
   private enterRift() {
     this.state = 'busy';
-    const maxChapter = hasFlag('ch5_complete') ? 5 : 4;
+    const maxChapter = hasFlag('ch6_complete') ? 6 : hasFlag('ch5_complete') ? 5 : 4;
     setRiftArea(generateRift(getSave().ngPlus, maxChapter));
     getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
     this.cameras.main.fadeOut(250, 7, 6, 14);

@@ -1,6 +1,101 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-24.
+> Paste this into a new session to continue the work. Last updated: 2026-07-25.
+
+## 2026-07-25: Chapter 6 (Frost Anchor) + Three Smaller Follow-ups
+
+Ask: "hva jobber vi videre på?" (what are we working on next). The prior
+session's log ended clean (economy check + batch re-audit, no open threads),
+so this one proposed four concrete candidates instead of guessing — the user
+picked all four. Worked them smallest-to-largest.
+
+**1. Galebrand phase-2 AI — audited, found already done.** Proposed this as a
+gap based on a misreading of the 2026-07-22 log entry; re-checked the actual
+code first and found Galebrand already has a full phase-2 kit (`battle.ts`:
+a party-wide "Wild Current" burst on phase trigger, a permanent self-inflicted
+burn, and 50%-random-targeting AI). Corrected course with the user instead of
+doing a redundant audit. No change made.
+
+**2. Kael's old-unit thread — real gap found and fixed.** The ch4/ch5 tiers
+already had a rich, escalating thread (Eda's mystery deployment-order name,
+Voss's "line before the line" theory, the Stranger's hints), but the ch5
+Stranger payoff (`stranger_witness`, "press them for what they remember")
+dead-ended on a stall: "Ask me again when you're ready to hear the rest of
+it" — a promise the game never delivers on. Extended `npc_stranger_after5`
+(`dialogue.ts`) with the actual memory: Kael found his own way back alone,
+the other six scattered, Toren held the retreat, and the deployment order
+traces back to a face the Stranger wore before this one. Verified live
+(Playwright): all 7 lines render correctly, longest line wraps cleanly, no
+console errors.
+
+**3. Descent dungeon decor pass.** `DescentScene.ts` had zero ambient floor
+detail (unlike Sanctuary's lantern/fountain pass). Added one static, muted
+ground-clutter texture per theme (`BootScene.buildDescentDecor()`: moss/
+mushrooms for forest, kelp/coral for sunken, cooled ash for ashen, dim
+crystal shards for crystal, wind debris for tempest), scattered
+procedurally on plain floor tiles only (never on walls/portals/mechanic
+tiles). First pass at 1-in-8 density looked like wallpaper (screenshot-
+confirmed); dropped to 1-in-45 plus per-tile alpha/flip jitter to break up
+the repetition — reads as occasional detail now. Deliberately kept dim/
+static, unlike each theme's bright pulsing field-mechanic tile, so it can't
+repeat the "read as interactive" mistake the 2026-07-23 Sanctuary decor pass
+made and had to walk back.
+
+**4. Chapter 6 — the Frost Anchor.** User picked the setting via a quick
+options question (frozen ruins over shadow-catacombs or a desert anchor).
+Full chapter add, mirroring every existing chapter's wiring exactly:
+- `chapters.ts`: `frost` theme, 6 new enemies (Frostfang, Rimeback Crawler,
+  Frostwarded Sentinel, Glacial Wisp trash; Frostbound Colossus elite;
+  Frostmaw boss — stats scaled ~1.22x off Chapter 5's numbers, same ratio
+  Ch4->Ch5 used), `AREA_11`/`AREA_12` (`Frostbound Reach` / `Glacial
+  Sanctum`) reusing Stormcrag Heights/Skybreak Anchorage's exact proven
+  layout with `'~'` (Sunken's Current — theme-agnostic in DescentScene,
+  reused as an icy slide with zero engine changes) swapped in for `'G'`.
+  Added the dispatcher branch in `makeEncounterForArea` — the exact spot a
+  past Rift bug (2026-07-23) already burned once from a forgotten gate.
+- `equipment.ts`/`content.ts`: 6-piece Ch6 gear tier + `frost_shard` sell
+  junk, following the established price/stat progression exactly.
+- `quests.ts`/`dialogue.ts`: `defeat_frostmaw` + 4 tier-6 NPC check-ins,
+  `ch6_story`/`ch6_win`, and a rewritten `ending` (six anchors restored/six
+  remain, folding in Frostmaw's own reveal: unlike every other anchor this
+  one was struck once, hard, by something old enough to predate Kael's
+  unit — a deliberate contrast with Tempest's "just wore out").
+- `SanctuaryScene.ts`: a genuinely new gate — split the bottom wall's left
+  solid block into a third alcove (cols 15-16) between the existing Ch4/Ch5
+  gates, validated with a throwaway flood-fill script (same method the
+  2026-07-23 octagon build used) before touching the real map. Plus the
+  4 NPCs' dynamic scriptId/questId chains, `SHOP_GEAR`, and the Rift's
+  `maxChapter` gate all extended one tier.
+- `rift.ts`, `run.ts` (loot tables + sell prices), `BattleScene.ts` (boss
+  epithet/flag/quest/win-script/phase-flash tables), `ChapterClearScene.ts`
+  (fixed the `TEASE[5]` text, which used to be the final-chapter vague
+  catch-all and now needs to concretely tease Ch6), `bossSprites.ts` (a new
+  jagged-ice-shard silhouette with one shard frozen mid-flight, echoing the
+  "struck once, stopped moving" concept), `banter.ts`.
+
+Verified live end-to-end via Playwright: forced ch1-5-complete + a level-25
+party, jumped straight to depth 12, triggered Frostmaw directly, forced 1 HP,
+landed the kill through the real UI. Confirmed the full chain — `ch6_win`
+dialogue, `ending` (now correctly triggers at Ch6 instead of Ch5, since
+`TOTAL_CHAPTERS` self-updates), `ch6_complete` flag set, quest completed,
+`frostward_mace` granted, all 4 NPCs flip to their after6 tier, shop stocks
+the 3 new items, Rift's theme pool includes `frost` — zero console errors.
+Screenshot confirmed the new gate renders cleanly between Stormcrag Heights
+and Crystal Depths with no overlap.
+
+**A real gotcha hit during verification, not a game bug**: mid-test, a
+freshly-added area started resolving to the wrong (stale) theme even though
+a fresh `import()` of the same module in the same page returned the correct
+answer — Vite's dev server was serving the already-running game bundle a
+stale pre-transform-cached version of `chapters.ts` after dozens of edits
+in one long session. Killing the dev server, clearing `node_modules/.vite`,
+and restarting fresh fixed it immediately. Worth remembering for future
+long single-session live-verification passes: if a fresh `getArea()` call
+disagrees with what the running scene actually renders, suspect the dev
+server's cache before the code.
+
+`tsc --noEmit` clean throughout. Playwright installed/removed the same way
+prior verify sessions have.
 
 ## 2026-07-24 (audit): Chapter 5 Economy Check + Re-Auditing the Session's Big Batch
 

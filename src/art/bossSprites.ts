@@ -1,4 +1,4 @@
-// Boss silhouettes: each of the 5 chapter bosses gets its own distinct
+// Boss silhouettes: each of the 6 chapter bosses gets its own distinct
 // shape via real geometry, generated once at boot alongside the rest of the
 // cast (see sprites.ts) — not the same "finned maw" outline recolored five
 // times. NEAREST-filtered like everything else in the game so it still
@@ -163,6 +163,40 @@ const BOSSES: BossSpec[] = [
       g.lineStyle(2, OUTLINE, 0.9);
       g.strokeCircle(cx, cy, s * 0.15);
       eyes(g, cx, cy, s * 0.07, s * 0.035, spec.glow);
+    },
+  },
+  {
+    // Frostmaw (Ch6) — jagged ice shards frozen mid-shatter, one shard still
+    // caught mid-flight and detached from the body; the guardian struck once,
+    // hard enough that it never finished moving.
+    key: 'e_frostmaw', base: 0x6a9ac0, shadow: 0x2a4a5e, glow: 0xeaffff,
+    shape: (g, s, spec) => {
+      const cx = s / 2, cy = s / 2;
+      const shards = 7;
+      const lens = [1, 0.55, 0.82, 0.5, 0.95, 0.6, 0.88];
+      const pts: Pt[] = [];
+      for (let i = 0; i < shards * 2; i++) {
+        const a = (Math.PI * 2 * i) / (shards * 2) - Math.PI / 2;
+        const outer = i % 2 === 0;
+        const r = outer ? (s / 2 - 2) * lens[(i / 2) | 0] : s * 0.2;
+        pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+      }
+      fillPoly(g, pts, spec.base);
+      g.fillStyle(spec.shadow, 0.55);
+      g.fillCircle(cx, cy, s * 0.22);
+      g.lineStyle(2, OUTLINE, 0.9);
+      g.strokePoints(pts, true);
+      // One shard still "in flight", detached from the body — the moment it
+      // shattered, frozen rather than finished.
+      const fa = -Math.PI / 2 + 0.3;
+      const fr = s / 2 + 3;
+      const tip = { x: cx + Math.cos(fa) * (fr + 6), y: cy + Math.sin(fa) * (fr + 6) };
+      const b1 = { x: cx + Math.cos(fa - 0.18) * fr, y: cy + Math.sin(fa - 0.18) * fr };
+      const b2 = { x: cx + Math.cos(fa + 0.18) * fr, y: cy + Math.sin(fa + 0.18) * fr };
+      fillPoly(g, [b1, b2, tip], spec.base, 0.9);
+      g.lineStyle(1.5, OUTLINE, 0.85);
+      g.strokePoints([b1, b2, tip], true);
+      eyes(g, cx, cy - s * 0.02, s * 0.09, s * 0.04, spec.glow);
     },
   },
 ];

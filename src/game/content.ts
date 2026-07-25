@@ -225,6 +225,15 @@ export const ITEMS: Record<string, Item> = {
     sellPrice: 30,
     description: 'A fragment of glass fused mid-strike, still faintly charged.',
   },
+  frost_shard: {
+    id: 'frost_shard',
+    name: 'Frost Shard',
+    kind: 'sell',
+    power: 0,
+    target: 'none',
+    sellPrice: 35,
+    description: 'A shard of anchor-ice that hasn\'t melted since it broke.',
+  },
   warden_sigils: {
     id: 'warden_sigils',
     name: 'Warden Sigils',

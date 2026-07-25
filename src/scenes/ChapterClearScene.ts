@@ -37,7 +37,8 @@ export class ChapterClearScene extends Phaser.Scene {
     2: 'Past the water, the Ashen Wastes still burn.',
     3: 'Only the Crystal Depths remain between you and the dark.',
     4: 'Past the crystal, the storm-wracked heights await.',
-    5: 'Seven anchors remain, scattered and waiting.',
+    5: 'Past the storm, a frozen anchor waits in a silence that isn\'t natural.',
+    6: 'Six anchors remain, scattered and waiting.',
   };
 
   create() {

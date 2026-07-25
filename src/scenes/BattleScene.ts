@@ -235,19 +235,20 @@ export class BattleScene extends Phaser.Scene {
     ashbrand: 'The Ember That Will Not Die',
     prism_sovereign: 'Sovereign of the Shattered Depths',
     galebrand: 'The Gale Undone',
+    frostmaw: 'The Cold That Never Thawed',
   };
 
   /** Per-chapter flag/quest/win-script lookups, keyed by chapterOfDepth() —
    * a single table instead of a hardcoded depth-ternary chain repeated at
    * every call site, so it self-extends as chapters are added. */
   private static readonly CHAPTER_FLAG: Record<number, string> = {
-    1: 'ch1_complete', 2: 'ch2_complete', 3: 'ch3_complete', 4: 'ch4_complete', 5: 'ch5_complete',
+    1: 'ch1_complete', 2: 'ch2_complete', 3: 'ch3_complete', 4: 'ch4_complete', 5: 'ch5_complete', 6: 'ch6_complete',
   };
   private static readonly CHAPTER_QUEST: Record<number, string> = {
-    1: 'clear_ch1', 2: 'clear_ch2', 3: 'defeat_ashbrand', 4: 'defeat_prism_sovereign', 5: 'defeat_galebrand',
+    1: 'clear_ch1', 2: 'clear_ch2', 3: 'defeat_ashbrand', 4: 'defeat_prism_sovereign', 5: 'defeat_galebrand', 6: 'defeat_frostmaw',
   };
   private static readonly CHAPTER_WIN_SCRIPT: Record<number, string> = {
-    1: 'ch1_win', 2: 'ch2_win', 3: 'ch3_win', 4: 'ch4_win', 5: 'ch5_win',
+    1: 'ch1_win', 2: 'ch2_win', 3: 'ch3_win', 4: 'ch4_win', 5: 'ch5_win', 6: 'ch6_win',
   };
 
   /**
@@ -2064,6 +2065,7 @@ export class BattleScene extends Phaser.Scene {
       ashbrand:        0x440800,
       prism_sovereign: 0x2a0a44,
       galebrand:       0x223344,
+      frostmaw:        0x0a2233,
     };
     const color = bossId ? (bossColors[bossId] ?? 0x111122) : 0x111122;
     const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, color, 0.85)

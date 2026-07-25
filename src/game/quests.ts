@@ -195,6 +195,43 @@ export const QUESTS: QuestDef[] = [
     unlockFlag: 'ch5_complete',
     rewards: { gold: 30, items: { potion: 1 } },
   },
+  {
+    id: 'defeat_frostmaw',
+    title: 'Still the Frost',
+    text: 'Defeat Frostmaw, the guardian frozen mid-motion when the Frost Anchor failed all at once.',
+    unlockFlag: 'ch5_complete',
+    rewards: { gold: 240, equipment: ['frostward_mace'], items: { warden_sigils: 2 } },
+  },
+  // Sixth-tier NPC check-ins, unlocked once Chapter 6 is clear — the same
+  // four NPCs' existing after6 dialogue.
+  {
+    id: 'eda_name',
+    title: 'A Name Recognized',
+    text: 'Warden Eda finally placed the name on Kael\'s old deployment orders. Hear what she found.',
+    unlockFlag: 'ch6_complete',
+    rewards: { gold: 60, items: { tonic: 1 } },
+  },
+  {
+    id: 'voss_seal',
+    title: 'What the Seal Costs',
+    text: 'Scholar Voss has a theory about why the Frost Anchor failed all at once, with no hand at it. Hear her out.',
+    unlockFlag: 'ch6_complete',
+    rewards: { gold: 60, items: { warden_sigils: 1 } },
+  },
+  {
+    id: 'stranger_confession',
+    title: 'The Rest of It',
+    text: 'The Stranger promised you the rest of what they remember. Go collect on it.',
+    unlockFlag: 'ch6_complete',
+    rewards: { gold: 50, items: { tonic: 1 } },
+  },
+  {
+    id: 'pip_quiet_night',
+    title: 'A Quiet Night, For Once',
+    text: 'The digging under the city has stopped. Pip wants you to see why that\'s not a relief.',
+    unlockFlag: 'ch6_complete',
+    rewards: { gold: 30, items: { potion: 1 } },
+  },
   // Milestone quests: no NPC or boss to trigger them — they complete on
   // their own once their condition is met (checkMilestoneQuests(), run.ts),
   // checked whenever the player is back in Sanctuary. A different shape of

@@ -89,6 +89,11 @@ export const DESCENT_BANTER: BanterBeat[] = [
     { ...KAEL, text: 'That\'s supposed to be good news.' },
     { ...LYRA, text: 'Is it?' },
   ] },
+  { id: 'd_ch6_struck', minFlag: 'ch6_complete', lines: [
+    { ...LYRA, text: 'Six now. That one still doesn\'t sit right with me.' },
+    { ...KAEL, text: 'The one that got hit, not drained.' },
+    { ...LYRA, text: 'That one. Something out there can just reach out and break one. When it feels like it.' },
+  ] },
 ];
 
 export const SANCTUARY_BANTER: BanterBeat[] = [
@@ -120,6 +125,10 @@ export const SANCTUARY_BANTER: BanterBeat[] = [
   { id: 's_five_stars', minFlag: 'ch5_complete', lines: [
     { ...MIRA, text: 'Five stars around that window frame now. The kid ran out of wall.' },
     { ...KAEL, text: 'Running out of wall\'s a good problem to have.' },
+  ] },
+  { id: 's_six_stars', minFlag: 'ch6_complete', lines: [
+    { ...MIRA, text: 'Six stars now. The kid\'s started on the ceiling.' },
+    { ...KAEL, text: 'Ambitious.' },
   ] },
   { id: 's_stranger_riddles', lines: [
     { ...LYRA, text: 'Sometimes I think the Stranger just likes being cryptic. Nobody needs to talk in riddles that much.' },

@@ -357,6 +357,8 @@ const GEAR_DROPS: Record<number, string[]> = {
   8: ['geode_plate', 'prism_band'],
   9: ['windrent_plate', 'thunderhead_band'],
   10: ['windrent_plate', 'thunderhead_band'],
+  11: ['frostbitten_plate', 'glacial_band'],
+  12: ['frostbitten_plate', 'glacial_band'],
 };
 
 // Depth-tiered sell junk, one flavor per chapter.
@@ -366,6 +368,7 @@ const JUNK_DROPS: Record<number, string> = {
   5: 'cinder_shard', 6: 'cinder_shard',
   7: 'prism_shard', 8: 'prism_shard',
   9: 'storm_shard', 10: 'storm_shard',
+  11: 'frost_shard', 12: 'frost_shard',
 };
 
 export function grantBattleLoot(depth: number, boss: boolean, elite = false): string[] {
@@ -455,6 +458,13 @@ export function equipmentPrice(itemId: string): number | undefined {
     squallblade: 260,
     windrent_plate: 215,
     stormward_mace: 280,
+    // Chapter 6 tier:
+    frostbound_rod: 260,
+    rimeguard_plate: 250,
+    glacial_band: 235,
+    rimeglass_blade: 280,
+    frostbitten_plate: 235,
+    frostward_mace: 300,
   };
   return prices[itemId] ?? 55;
 }

@@ -17,6 +17,20 @@ const GUST_DIR: Record<'up' | 'down' | 'left' | 'right', [number, number]> = {
   up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0],
 };
 
+// One quiet ground-clutter texture per theme (built in BootScene) — purely
+// decorative, scattered over plain floor tiles only, see drawMap().
+const DUNGEON_DECOR: Record<string, string> = {
+  forest: 'decor_dungeon_forest',
+  sunken: 'decor_dungeon_sunken',
+  ashen: 'decor_dungeon_ashen',
+  crystal: 'decor_dungeon_crystal',
+  tempest: 'decor_dungeon_tempest',
+};
+// Sparse — a scattered handful per map, not a repeating pattern. 1-in-8
+// looked like wallpaper in practice (same single texture stamped on ~1 in
+// every 2 open tiles' neighborhood); 1-in-45 reads as occasional detail.
+const DECOR_DENSITY = 45;
+
 const PLAYER_SCALE_X = 1.08;
 const PLAYER_SCALE_Y = 1.35;
 const STEP_MS = 105;
@@ -229,6 +243,18 @@ export class DescentScene extends Phaser.Scene {
         this.add.image(c * GAME.tile, r * GAME.tile, texKey).setOrigin(0, 0).setDepth(0);
 
         if (ch === 'P') { this.px = c; this.py = r; }
+
+        // Ambient ground clutter — plain floor only, so it never overlaps a
+        // wall, portal, chest, spring, story beat, or field-mechanic tile.
+        if (ch === '.') {
+          const decorKey = DUNGEON_DECOR[tid];
+          if (decorKey && tileVariant(c + 1, r + 1, DECOR_DENSITY) === 0) {
+            const flip = tileVariant(c + 2, r + 2, 2) === 0;
+            const alpha = 0.75 + tileVariant(c + 3, r + 3, 4) * 0.08; // 0.75-0.99, breaks up repetition
+            this.add.image(c * GAME.tile, r * GAME.tile, decorKey)
+              .setOrigin(0, 0).setDepth(0.5).setFlipX(flip).setAlpha(alpha);
+          }
+        }
 
         const tileKey = `${c},${r}`;
         if (ch === 'X' && !hasFlag(`enc_${depth}_${tileKey}`)) {

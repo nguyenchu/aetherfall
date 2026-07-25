@@ -195,14 +195,34 @@ export const SCRIPTS: Record<string, Script> = {
     { text: 'Far below Sanctuary, in the place no map has ever shown, something that has been waiting stops waiting a little more.', color: NARRATOR },
   ],
 
+  // Chapter 6 — Frost Anchor story trigger before Frostmaw.
+  ch6_story: [
+    { text: 'The passage ends in a hall of black ice, walls stopped mid-shatter as if time itself flinched.', color: NARRATOR },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'This isn\'t decay. Something hit this anchor once, hard enough to freeze the moment it happened.' },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I can still feel it. Not draining, not tired. Struck.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Whatever\'s strong enough to do that in one blow isn\'t something we\'ve faced yet.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Then let\'s not be the first to find out what it can do twice.' },
+    { text: 'From the frozen wreckage, something that was mid-motion when the world stopped starts moving again.', color: NARRATOR },
+  ],
+
+  ch6_win: [
+    { text: 'The black ice cracks and falls away. Frostmaw shudders, then finally, fully stops.', color: NARRATOR },
+    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Six now. And this is the first one that scares me more after seeing what did it than before.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'One clean blow. No warning, no draining, no waiting. We need to know what\'s capable of that.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'The casing on this one was old. Older than watch-work. Whoever struck this anchor did it before my line ever existed.' },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Then it isn\'t only chasing your unit, Kael. It\'s older than that.' },
+    { text: 'Six anchors remain. Deep beneath Sanctuary, something ancient enough to remember when this one was struck stirs at the thought of being found.', color: NARRATOR },
+  ],
+
   ending: [
-    { text: 'Five anchors restored. Five corrupted guardians returned to the light.', color: NARRATOR },
+    { text: 'Six anchors restored. Six corrupted guardians returned to the light.', color: NARRATOR },
     { text: 'The world still sinks — but slower now. Sanctuary stands.', color: NARRATOR },
     { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Toren\'s blade is with me now. However this ends, that\'s one name I get to remember properly.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I used to think restoring anchors was about not failing again. Now I think it\'s about everyone still ahead of us who hasn\'t failed yet.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens kept faith for a thousand years without knowing why. Now we know. That\'s not nothing.' },
     { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'Whatever left that sigil by our well didn\'t need to reach us. It could have. That\'s the part that doesn\'t let me sleep.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Seven anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Whatever struck the Frost Anchor did it before my line ever existed. This was never only about the seven of us.' },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Six anchors remain. And whoever\'s behind this now knows exactly who\'s coming.' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'Let them.' },
     { text: '— The story continues in a future update —', color: NARRATOR },
     { text: 'Thank you for playing Aetherfall.', color: NARRATOR },
@@ -283,12 +303,40 @@ export const SCRIPTS: Record<string, Script> = {
   npc_stranger_after5: [
     { speaker: '???', color: 0x8a93b8, text: 'Five. That one cost it nothing, and it still didn\'t like watching you take it back.' },
     { speaker: '???', color: 0x8a93b8, text: 'Seven anchors remain. Some it drained on purpose. Some are just old. It counts them the same either way.' },
-    { speaker: '???', color: 0x8a93b8, text: 'I was there when Kael\'s line went out. I didn\'t wear this face then. Ask me again when you\'re ready to hear the rest of it.' },
+    { speaker: '???', color: 0x8a93b8, text: 'I was there when Kael\'s line went out. I didn\'t wear this face then. You want the rest of it — fine.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Eight went in. Kael found his own way back, later, alone. The other six scattered when the ground opened under them. Toren held the retreat — you already carry what that cost.' },
+    { speaker: '???', color: 0x8a93b8, text: 'The rest I lost track of. Not dead, as far as I know. Not free either.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Ask Warden Eda about the name on that deployment order. It won\'t match anyone she\'s met — because whoever signed it hadn\'t worn a face like this one yet.' },
+    { speaker: '???', color: 0x8a93b8, text: 'That\'s all I\'ll give you tonight. I don\'t think you\'ll like where it points. But you\'ve earned knowing.' },
   ],
   npc_child_after5: [
     { speaker: 'Child', color: 0x6cf0c2, text: 'Five stars. I ran out of room on the wall, so now they\'re going around the window frame.' },
     { speaker: 'Child', color: 0x6cf0c2, text: 'The digging under the city got louder last night. Pip wouldn\'t go near the well at all, not even for me.' },
     { speaker: 'Child', color: 0x6cf0c2, text: 'Mum says it\'s just old pipes settling. Pip doesn\'t believe her. I didn\'t say I don\'t either.' },
+  ],
+  // Post-Ch6 NPC follow-ups
+  npc_keeper_after6: [
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Six anchors. Whatever struck this one hit it clean, all at once. I\'ve never seen a seal fail like that.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'I found the name. Or — I found where it should be, and it isn\'t a name at all. Just a mark, older than any script we still read.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Older than the Wardens. Older than Sanctuary, maybe. I don\'t have a name for you, Kael. I have something worse: proof it was never one of ours to begin with.' },
+    { speaker: 'Warden Eda', color: 0xf0d36c, text: 'Watch yourselves. Whatever wore that mark first is old enough that "watch yourselves" might not be enough.' },
+  ],
+  npc_scholar_after6: [
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Six now, and the Frost Anchor is the first that didn\'t fail slowly. Something broke it in a single strike.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'That changes my theory. The anchors aren\'t just failing with age or neglect — something out there is now strong enough to simply break one when it chooses to.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'The line before the line, the twelve wardens older than Sanctuary — I don\'t think they failed. I think something got strong enough that failing stopped mattering.' },
+    { speaker: 'Scholar Voss', color: 0x6c9cf0, text: 'Six anchors remain. I no longer think "slowly" is a word we can count on.' },
+  ],
+  npc_stranger_after6: [
+    { speaker: '???', color: 0x8a93b8, text: 'Six. That\'s the first one that made me flinch too. Draw your own conclusions about what that means.' },
+    { speaker: '???', color: 0x8a93b8, text: 'Six anchors remain. You came to collect. Fine.' },
+    { speaker: '???', color: 0x8a93b8, text: 'I\'ve worn more faces than I\'ve told you about — longer than Sanctuary\'s walls have stood. Longer than the mark on that order, maybe. I\'m honestly not certain anymore, and that should worry you more than a straight answer would.' },
+    { speaker: '???', color: 0x8a93b8, text: 'I\'m not your enemy. I\'ve told you that much true, at least. Whether that\'s worth anything is yours to decide, not mine.' },
+  ],
+  npc_child_after6: [
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Six stars now. But Pip stopped barking at the well three nights ago. Just... stopped.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'Mum says that\'s good. Pip doesn\'t act like it\'s good. He won\'t even look at the well anymore.' },
+    { speaker: 'Child', color: 0x6cf0c2, text: 'I asked the Stranger why quiet would be bad. They said "because it means it stopped needing to dig." I don\'t know what that means. I don\'t think I want to.' },
   ],
 };
 
