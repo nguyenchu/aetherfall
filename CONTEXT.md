@@ -114,6 +114,26 @@ path (`battle.ts` has no Phaser dependency): burst landed for 54 on a
 one-shottable" bar), `reflectFrac` confirmed set post-phase. `tsc --noEmit`
 clean; scratch test script deleted after, not committed.
 
+**Follow-up: Chapter 6 survivability audit, same method as 2026-07-11/
+2026-07-23's chapter checks.** Wrote a standalone script replaying every
+chapter 1-5 boss + elite kill (plus a looser "+3 randoms/area" variant) via
+the real `makeEncounterForArea`/`grantXp` to get a level floor at depth-11
+entry: L10 (bosses+elites, zero random battles) to L12 (looser estimate),
+HP 81-91 for Lyra depending on floor. Checked every Chapter 6 enemy's worst
+hit (400 sampled trials each of basic attack + spells, via real
+`Battle.executeTurn`, plus Frostmaw's phase-2 burst via the real
+`executeBossPhase` path — not hand-duplicated this time, having just been
+bitten by a stale hand-copied formula earlier in this same audit). Found one
+real issue: Frostmaw's phase-2 burst hit 66.7% of Lyra's HP at the worst-case
+floor — clearly above the ~51-57% ceiling every chapter's audit has held to
+so far. Fixed by lowering the burst's flat base from 22 to 12 (matching
+Forest Shade's own flat base), landing it at 54.3%/48.4% across both floors.
+Trash (35-53%) and the elite/boss's basic attack (52.7-61.7%) sit at or
+just above the established ceiling — flagged for the user rather than
+nerfing STR unilaterally, since that's a broader damage-output lever than a
+single burst formula. `tsc --noEmit` clean; scratch script deleted, not
+committed.
+
 ## 2026-07-24 (audit): Chapter 5 Economy Check + Re-Auditing the Session's Big Batch
 
 Ask: "hva skal vi forbedre nå?" -> user picked both proposed options: a

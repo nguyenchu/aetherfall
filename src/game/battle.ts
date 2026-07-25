@@ -825,7 +825,7 @@ export class Battle {
       }
       case 'frostmaw': {
         events.push({ kind: 'phase', text: 'Frostmaw finally completes the blow it was frozen mid-swing — ice shatters outward in every direction!', actorId: boss.id });
-        const burst = Math.round(22 + boss.stats.int * 0.85);
+        const burst = Math.round(12 + boss.stats.int * 0.85);
         for (const t of this.living('party')) {
           const dealt = this.applyBossBurst(t, burst);
           events.push({ kind: 'spell', text: `A wave of shards tears into ${t.name}! −${dealt} HP`, actorId: boss.id, targetId: t.id, amount: dealt, element: 'ice', parallel: true });
