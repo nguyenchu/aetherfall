@@ -50,18 +50,23 @@ const SHOP_GEAR: Array<{ id: string; flag: string }> = [
   { id: 'consecrated_censer', flag: 'ch1_complete' },
   { id: 'serpents_kiss', flag: 'ch1_complete' },
   { id: 'fracture_band', flag: 'ch1_complete' },
+  { id: 'tidebound_tome', flag: 'ch1_complete' },
+  { id: 'tidewoven_robe', flag: 'ch1_complete' },
   { id: 'winter_staff', flag: 'ch2_complete' },
   { id: 'dawnstar', flag: 'ch2_complete' },
   { id: 'emberweave_robe', flag: 'ch2_complete' },
   { id: 'stormglass_rod', flag: 'ch4_complete' },
   { id: 'hollowguard_plate', flag: 'ch4_complete' },
   { id: 'prism_band', flag: 'ch4_complete' },
+  { id: 'prism_veil', flag: 'ch4_complete' },
   { id: 'tempest_rod', flag: 'ch5_complete' },
   { id: 'stormguard_plate', flag: 'ch5_complete' },
   { id: 'thunderhead_band', flag: 'ch5_complete' },
+  { id: 'stormveil_robe', flag: 'ch5_complete' },
   { id: 'frostbound_rod', flag: 'ch6_complete' },
   { id: 'rimeguard_plate', flag: 'ch6_complete' },
   { id: 'glacial_band', flag: 'ch6_complete' },
+  { id: 'rimeveil_robe', flag: 'ch6_complete' },
 ];
 
 // Merchant consumable stock beyond the always-available Elixir/Tonic.

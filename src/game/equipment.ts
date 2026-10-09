@@ -261,6 +261,35 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { breakBonusDmg: 0.2 },
     icon: { kind: 'ring', base: 0x6cd8f0, accent: 0xdff6ff },
   },
+  // Kael and Mira each got a second Chapter 2 weapon choice above
+  // (Toren's Blade/Serpent's Kiss; Consecrated Censer) — Lyra had none,
+  // just the one Stormcaller Rod stat-stick. A sustain-focused alternative
+  // (mpRegen instead of raw power) gives her the same kind of real choice.
+  tidebound_tome: {
+    id: 'tidebound_tome',
+    name: 'Tidebound Tome',
+    slot: 'weapon',
+    users: ['lyra'],
+    bonus: { int: 4, maxMp: 8 },
+    trait: 'Waterlogged pages',
+    description: 'Soaked and dried a hundred times over; the words still hold their power. Restores 1 MP every round.',
+    effects: { mpRegen: 1 },
+    icon: { kind: 'staff', base: 0x2a5a8a, accent: 0x9ad8ff },
+  },
+  // Lyra had no armor upgrade at all between Aether Robe (starting) and
+  // Emberweave Robe (Chapter 3) — Kael and Mira both got Tidewarden Mail
+  // here. Mirrors its chill resist so it's a real sidegrade, not a reskin.
+  tidewoven_robe: {
+    id: 'tidewoven_robe',
+    name: 'Tidewoven Robe',
+    slot: 'armor',
+    users: ['lyra', 'mira'],
+    bonus: { maxHp: 8, maxMp: 7, int: 1 },
+    trait: 'Warden-woven',
+    description: 'Woven by the same Wardens who keep the warmth in their mail. Cannot be chilled.',
+    effects: { resist: ['chill'] },
+    icon: { kind: 'robe', base: 0x2a5a8a, accent: 0x6cd8f0 },
+  },
 
   // --- Chapter 3 tier (Ashen Peaks) ---------------------------------------------
   sunbrand: {
@@ -395,6 +424,20 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { resist: ['venom'] },
     icon: { kind: 'armor', base: 0x4a3a6a, accent: 0x8a5ad0 },
   },
+  // Lyra's armor drought continues past Chapter 3 unless we give her one
+  // here too — Kael/Mira get two plate choices (chill/venom) this tier,
+  // she gets none without this. Mirrors Geode Plate's venom resist.
+  prism_veil: {
+    id: 'prism_veil',
+    name: 'Prism Veil',
+    slot: 'armor',
+    users: ['lyra', 'mira'],
+    bonus: { maxHp: 12, maxMp: 9, int: 2 },
+    trait: 'Crystalline weave',
+    description: 'Threads spun from the same hollow geodes as the Depths\' own plate. Venom cannot take root in it.',
+    effects: { resist: ['venom'] },
+    icon: { kind: 'robe', base: 0x4a3a6a, accent: 0x8a5ad0 },
+  },
   prism_band: {
     id: 'prism_band',
     name: 'Prism Band',
@@ -475,6 +518,19 @@ export const EQUIPMENT: Record<string, Equipment> = {
     effects: { resist: ['venom'] },
     icon: { kind: 'armor', base: 0x2a3a4e, accent: 0x6ac8f0 },
   },
+  // Same gap again: Kael/Mira get two plate choices this tier, Lyra gets
+  // none. Mirrors Stormguard Plate's chill resist.
+  stormveil_robe: {
+    id: 'stormveil_robe',
+    name: 'Stormveil Robe',
+    slot: 'armor',
+    users: ['lyra', 'mira'],
+    bonus: { maxHp: 14, maxMp: 10, int: 2 },
+    trait: 'Storm-tempered weave',
+    description: 'Woven from the same storm-charged rain that quenched the Anchor\'s plate. The cold no longer bites through it.',
+    effects: { resist: ['chill'] },
+    icon: { kind: 'robe', base: 0x3a4a5e, accent: 0x9fc8e0 },
+  },
   thunderhead_band: {
     id: 'thunderhead_band',
     name: 'Thunderhead Band',
@@ -541,6 +597,20 @@ export const EQUIPMENT: Record<string, Equipment> = {
     description: 'Worn numb by the deepest cold in Aetherfall. Heat glances off it now.',
     effects: { resist: ['burn'] },
     icon: { kind: 'armor', base: 0x2a4a5e, accent: 0x6ac8f0 },
+  },
+  // Same gap, final tier: mirrors Frostbitten Plate's burn resist instead of
+  // repeating chill again, since Prism Veil and Stormveil Robe already
+  // covered venom and chill for Lyra in the two tiers before this one.
+  rimeveil_robe: {
+    id: 'rimeveil_robe',
+    name: 'Rimeveil Robe',
+    slot: 'armor',
+    users: ['lyra', 'mira'],
+    bonus: { maxHp: 16, maxMp: 11, int: 3 },
+    trait: 'Numbed weave',
+    description: 'Spun numb by the same cold that dulled the anchor\'s own plate. Heat glances off it now.',
+    effects: { resist: ['burn'] },
+    icon: { kind: 'robe', base: 0x2a4a5e, accent: 0x6ac8f0 },
   },
   glacial_band: {
     id: 'glacial_band',

@@ -37,6 +37,10 @@ export interface Boon {
   breakInflictsChill?: boolean; // breaking an enemy also Chills it
   hasLastStand?: boolean; // bonus damage/crit for a hero below 30% HP
   hasGuardiansWrath?: boolean; // defending empowers the bearer's next action
+  speedMult?: number; // multiplies the whole party's CTB turn speed
+  vanguardBonus?: number; // bonus damage on a hit that lands while the target is still at full HP
+  executionHeal?: number; // fraction of max HP healed to the living party whenever an enemy dies
+  spellCostReduction?: number; // flat MP shaved off every party spell cast (floor 0)
 }
 
 export const BOONS: Record<string, Boon> = {
@@ -105,6 +109,17 @@ export const BOONS: Record<string, Boon> = {
     name: 'Deep Pockets', desc: 'Items restore 60% more.',
     potionBoost: 0.6,
   },
+  swift_aether: {
+    id: 'swift_aether', rarity: 'rare',
+    name: 'Swift Aether', desc: "The party's turn order speed +12%.",
+    speedMult: 1.12,
+  },
+  vanguards_edge: {
+    id: 'vanguards_edge', rarity: 'rare',
+    name: "Vanguard's Edge",
+    desc: 'Hits that land on a still-untouched (full HP) enemy deal +25% damage.',
+    vanguardBonus: 0.25,
+  },
   anchors_promise: {
     id: 'anchors_promise', rarity: 'epic',
     name: "Anchor's Promise", desc: 'Once per battle, a fallen hero returns at 40% HP.',
@@ -124,6 +139,11 @@ export const BOONS: Record<string, Boon> = {
     id: 'cleansing_light', rarity: 'common',
     name: 'Cleansing Light', desc: 'Healing spells also cure Burn, Chill and Venom.',
     healsCure: true,
+  },
+  focused_mind: {
+    id: 'focused_mind', rarity: 'common',
+    name: 'Focused Mind', desc: 'All spells cost 1 less MP.',
+    spellCostReduction: 1,
   },
   kindling_soul: {
     id: 'kindling_soul', rarity: 'rare',
@@ -173,6 +193,12 @@ export const BOONS: Record<string, Boon> = {
     desc: 'Below 30% HP, a hero deals +40% damage and gains +15% crit chance.',
     hasLastStand: true,
   },
+  reapers_bargain: {
+    id: 'reapers_bargain', rarity: 'epic',
+    name: "Reaper's Bargain",
+    desc: 'Whenever an enemy falls, the living party heals for 8% of their max HP.',
+    executionHeal: 0.08,
+  },
   guardians_wrath: {
     id: 'guardians_wrath', rarity: 'rare',
     name: "Guardian's Wrath",
@@ -205,6 +231,10 @@ export interface BoonTotals {
   breakInflictsChill: boolean;
   hasLastStand: boolean;
   hasGuardiansWrath: boolean;
+  speedMult: number;
+  vanguardBonus: number;
+  executionHeal: number;
+  spellCostReduction: number;
 }
 
 export function boonTotals(ids: string[]): BoonTotals {
@@ -215,6 +245,7 @@ export function boonTotals(ids: string[]): BoonTotals {
     sureInflict: [], dotMult: 1, healsCure: false,
     vulnerableBonus: 0, spreadAilmentOnDeath: false, hasMomentum: false,
     breakInflictsChill: false, hasLastStand: false, hasGuardiansWrath: false,
+    speedMult: 1, vanguardBonus: 0, executionHeal: 0, spellCostReduction: 0,
   };
   for (const id of ids) {
     const b = BOONS[id];
@@ -244,6 +275,10 @@ export function boonTotals(ids: string[]): BoonTotals {
     if (b.breakInflictsChill) t.breakInflictsChill = true;
     if (b.hasLastStand) t.hasLastStand = true;
     if (b.hasGuardiansWrath) t.hasGuardiansWrath = true;
+    if (b.speedMult) t.speedMult *= b.speedMult;
+    if (b.vanguardBonus) t.vanguardBonus += b.vanguardBonus;
+    if (b.executionHeal) t.executionHeal += b.executionHeal;
+    if (b.spellCostReduction) t.spellCostReduction += b.spellCostReduction;
   }
   return t;
 }

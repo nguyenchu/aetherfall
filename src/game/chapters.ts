@@ -20,6 +20,11 @@
 //   G  Gust (Tempest)   — shoves you one further tile in a fixed direction
 //                         (see `gusts`), unlike Current which continues
 //                         whatever direction you were already moving in
+//   Y  Ward Lever        crossing it unseals every '=' tile in the same
+//   =  Sealed Ward        area for the rest of this visit (resets next
+//                         time you re-enter) — a small backtrack-to-unlock
+//                         secret, unlike the other tiles above (which are
+//                         theme-agnostic auto-triggers with no memory)
 
 import type { Combatant, Element, Stats } from './types';
 
@@ -988,7 +993,11 @@ function frostboundColossus(): Combatant {
     id: 'elite0', name: 'Frostbound Colossus', side: 'enemy',
     spriteKey: 'e_warden', color: 0x4a6a80, size: 36,
     spells: ['frost'], goldReward: 125, xpReward: 175, isElite: true,
-    stats: s(460, 33, 15, 30, 14, 25),
+    // STR trimmed from 33 (2026-07-26 audit): basic attack peaked at 61.7%
+    // of a level-10-floor Lyra's max HP, above the 51-57% ceiling every
+    // other chapter's elite/boss holds to (see the 2026-07-25 survivability
+    // audit, which flagged this and deferred the STR call to the user).
+    stats: s(460, 30, 15, 30, 14, 25),
   }, ['fire'], 4);
 }
 
@@ -998,7 +1007,9 @@ function frostmaw(): Combatant {
     spriteKey: 'e_frostmaw', color: 0x2a4a5e, size: 44,
     spells: ['frost', 'smite'], goldReward: 170, xpReward: 310,
     isBoss: true,
-    stats: s(1050, 33, 20, 24, 38, 110),
+    // STR trimmed from 33, same reasoning as Frostbound Colossus above —
+    // shares the same basic-attack formula and the same 61.7% peak.
+    stats: s(1050, 30, 20, 24, 38, 110),
   }, ['fire'], 5);
 }
 
@@ -1022,6 +1033,12 @@ export function makeChapter6Encounter(group: Ch6EncounterGroup): Combatant[] {
 // movement handler) reused as icy slicks that sweep you onward, exactly
 // the same "sweep further in your direction of travel" read this chapter
 // needs, just re-flavored as ice instead of water.
+//
+// Also debuts the Ward Lever/Sealed Ward pair (see the tile-key comment
+// above): a lever tucked into the southern hall (30,16) unseals a small
+// pocket off the main room (31-33,12) holding a bonus chest — a genuine
+// backtrack-to-unlock secret, distinct from every prior chapter's
+// auto-trigger-only field mechanics.
 const AREA_11: AreaDef = {
   id: 'frost_1',
   name: 'Frostbound Reach',
@@ -1038,6 +1055,7 @@ const AREA_11: AreaDef = {
   scripts: {},
   chests: {
     '33,3': { gold: 70, equipment: 'rimeglass_blade' },
+    '33,12': { gold: 55, items: { hi_potion: 1 } },
   },
   map: [
     '####################################',
@@ -1051,12 +1069,12 @@ const AREA_11: AreaDef = {
     '#..................................#',
     '#...............#..................#',
     '#...............#..................#',
-    '#..................................#',
-    '#..................................#',
-    '#..................................#',
+    '#.............................######',
+    '#.............................=..T##',
+    '#.............................######',
     '#..................................#',
     '#........~~........................#',
-    '#..................................#',
+    '#.............................Y....#',
     '#..................................#',
     '#<..P..............................#',
     '####################################',

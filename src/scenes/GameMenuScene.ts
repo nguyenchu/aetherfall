@@ -35,6 +35,10 @@ interface Selectable {
   equipItemId?: string | null;
   /** Inventory id this row/target belongs to (items tab), for scroll nav. */
   itemId?: string;
+  /** Set only on Magic tab's heal-target portraits (not the party-switch
+   *  portraits, built from the same portraitButton helper) — lets
+   *  focusMostWoundedHealTarget find the right one by combatant id. */
+  healTargetId?: string;
 }
 
 export class GameMenuScene extends Phaser.Scene {
@@ -495,6 +499,7 @@ export class GameMenuScene extends Phaser.Scene {
             this.magicSpellId = spell.id;
             this.menuNotice = 'Choose a target portrait.';
             this.renderContent();
+            this.focusMostWoundedHealTarget();
           }, box, '8px');
           b.chosen = spell.id === this.magicSpellId;
           b.onFocus = () => {
@@ -502,6 +507,7 @@ export class GameMenuScene extends Phaser.Scene {
             this.magicSpellId = spell.id;
             this.menuNotice = 'Choose a target portrait.';
             this.renderContent();
+            this.focusMostWoundedHealTarget();
           };
           box.add(this.add.text(46, rowY + 22, afford ? `Heals ${this.spellHealAmount(member, spell)} HP` : `Needs ${cost} MP`,
             sharpText({ fontFamily: FONT, fontSize: '7px', color: subColor, strokeThickness: 2 })));
@@ -570,10 +576,25 @@ export class GameMenuScene extends Phaser.Scene {
     if (!selectedSpell) return;
     box.add(this.add.text(294, 184, 'TARGET', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a58cff', strokeThickness: 2 })));
     run.party.forEach((target, i) => {
-      this.portraitButton(box, target, 286, 200 + i * 42, 156, 36, false, () => {
+      const portrait = this.portraitButton(box, target, 286, 200 + i * 42, 156, 36, false, () => {
         this.castFieldMagic(member, selectedSpell.id, target);
       }, 'compact');
+      portrait.healTargetId = target.id;
     });
+  }
+
+  /** Same idea as BattleScene's smartHeal default (see beginTargeting there):
+   *  land the cursor on whoever's most wounded instead of wherever it
+   *  happened to be sitting (usually still the spell button just picked) —
+   *  otherwise reaching the right portrait meant extra, unpredictable
+   *  spatial-nav presses every time. Silently no-ops if nobody needs it or
+   *  the target list isn't actually on screen yet. */
+  private focusMostWoundedHealTarget() {
+    const living = getRun().party.filter((c) => c.stats.hp > 0);
+    if (living.length === 0) return;
+    const most = living.reduce((w, c) => (c.stats.hp / c.stats.maxHp) < (w.stats.hp / w.stats.maxHp) ? c : w);
+    const portrait = this.selectables.find((s) => s.healTargetId === most.id);
+    if (portrait) this.selectSelectable(portrait, false);
   }
 
   /** Actual field-heal amount for display: mirrors castSpellOutOfBattle's formula. */

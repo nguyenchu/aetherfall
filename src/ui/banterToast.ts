@@ -10,11 +10,19 @@ const PORTRAIT_X = -114;
  *  exploring. Cycles through each line in sequence, then fades out — unlike
  *  DialogueScene it never pauses input or movement. Each line gets a small
  *  portrait chip (glowing backdrop + colored ring in the speaker's own
- *  accent color) rather than just a name label. */
+ *  accent color) rather than just a name label.
+ *
+ *  Docked under the top HUD strip (title/area name/gold/boons), not over
+ *  the bottom-center of the viewport: the camera keeps the player roughly
+ *  centered on screen, so a bottom-center toast used to sit right on top of
+ *  the player and the map beneath them for its whole 2.8-3.4s-per-line
+ *  runtime. The top strip has nothing under it but sky/wall tiles at the
+ *  edge of most rooms, so a toast there reads as HUD, not as something
+ *  blocking the dungeon. */
 export function showBanterToast(scene: Phaser.Scene, lines: BanterLine[]): void {
   if (lines.length === 0) return;
-  const restY = GAME.height - 60;
-  const box = scene.add.container(GAME.width / 2, restY + 14).setDepth(998).setAlpha(0);
+  const restY = 54;
+  const box = scene.add.container(GAME.width / 2, restY - 14).setDepth(998).setAlpha(0);
   const bg = scene.add.rectangle(0, 0, 268, 48, 0x0d1024, 0.94).setStrokeStyle(1, 0x2f3658, 0.9);
 
   // Square glow to match the portrait's own shape (and the same "spotlighted
@@ -48,7 +56,7 @@ export function showBanterToast(scene: Phaser.Scene, lines: BanterLine[]): void 
     if (portraitImg && scene.textures.exists(line.portrait)) portraitImg.setTexture(line.portrait);
     scene.time.delayedCall(i === lines.length - 1 ? 3400 : 2800, () => {
       if (i + 1 < lines.length) showLine(i + 1);
-      else scene.tweens.add({ targets: box, y: restY + 14, alpha: 0, duration: 260, ease: 'Cubic.In', onComplete: () => box.destroy() });
+      else scene.tweens.add({ targets: box, y: restY - 14, alpha: 0, duration: 260, ease: 'Cubic.In', onComplete: () => box.destroy() });
     });
   };
   showLine(0);

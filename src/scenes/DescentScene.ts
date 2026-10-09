@@ -68,6 +68,11 @@ export class DescentScene extends Phaser.Scene {
   private playerShadow!: Phaser.GameObjects.Ellipse;
   private tileImages = new Map<string, Phaser.GameObjects.Image>();
   private springImages = new Map<string, Phaser.GameObjects.Image>();
+  // Ward Lever/Sealed Ward (see chapters.ts tile-key comment): the one field
+  // mechanic with memory — resets fresh every time the area is (re-)entered.
+  private wardOpen = false;
+  private wardImages = new Map<string, Phaser.GameObjects.Image>();
+  private leverImages = new Map<string, Phaser.GameObjects.Image>();
   private walkFrame = 0;
   private facing: Facing = 'down';
   private px = 0;
@@ -94,6 +99,9 @@ export class DescentScene extends Phaser.Scene {
     this.unsubs = [];
     this.tileImages.clear();
     this.springImages.clear();
+    this.wardOpen = false;
+    this.wardImages.clear();
+    this.leverImages.clear();
     this.pendingEncounterKey = null;
     this.randomBattleSteps = 0;
 
@@ -303,6 +311,24 @@ export class DescentScene extends Phaser.Scene {
             .setOrigin(0, 0).setTint(0x9fc8e0).setAlpha(0.5).setDepth(1);
           this.tweens.add({ targets: img, alpha: { from: 0.3, to: 0.65 }, duration: 450, yoyo: true, repeat: -1 });
         }
+        if (ch === 'Y') {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0x66e8ff).setAlpha(0.85).setDepth(2);
+          if (this.wardOpen) {
+            img.setAlpha(0.3);
+          } else {
+            this.tweens.add({ targets: img, alpha: { from: 0.55, to: 1 }, duration: 400, yoyo: true, repeat: -1 });
+          }
+          this.leverImages.set(tileKey, img);
+        }
+        // Sealed Ward: rendered on top of its (already-floor) base tile, so
+        // it reads as a visible barrier rather than an invisible wall —
+        // removed the instant the area's lever is found (see resolveTile).
+        if (ch === '=' && !this.wardOpen) {
+          const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
+            .setOrigin(0, 0).setTint(0xaee8ff).setAlpha(0.75).setDepth(1);
+          this.wardImages.set(tileKey, img);
+        }
       }
     }
   }
@@ -404,7 +430,7 @@ export class DescentScene extends Phaser.Scene {
     const nx = this.px + d.x;
     const ny = this.py + d.y;
     const ch = this.map[ny]?.[nx];
-    if (!ch || ch === '#') {
+    if (this.isBlocked(ch)) {
       this.moveLockedUntil = time + 110;
       return;
     }
@@ -418,7 +444,7 @@ export class DescentScene extends Phaser.Scene {
       const sx = this.px + d.x;
       const sy = this.py + d.y;
       const sch = this.map[sy]?.[sx];
-      if (!sch || sch === '#') break;
+      if (this.isBlocked(sch)) break;
       this.px = sx;
       this.py = sy;
     }
@@ -481,6 +507,20 @@ export class DescentScene extends Phaser.Scene {
         this.playerShadow.setPosition(this.tileCenter(this.px), this.tileCenter(this.py) + 8);
         this.floatText('The prism light bends around you...', '#c78aff', 0);
       }
+      return;
+    }
+    if (ch === 'Y' && !this.wardOpen) {
+      this.wardOpen = true;
+      for (const img of this.wardImages.values()) {
+        this.tweens.add({ targets: img, alpha: 0, duration: 350, onComplete: () => img.destroy() });
+      }
+      this.wardImages.clear();
+      const lever = this.leverImages.get(tileKey);
+      if (lever) {
+        this.tweens.killTweensOf(lever);
+        this.tweens.add({ targets: lever, alpha: 0.3, duration: 350 });
+      }
+      this.floatText('The frost ward shatters — a sealed path opens!', '#66e8ff', 0);
       return;
     }
     if (ch === 'G') {
@@ -740,6 +780,11 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private tileCenter(n: number): number { return n * GAME.tile + GAME.tile / 2; }
+
+  /** A wall, off the map, or a Sealed Ward that hasn't been unsealed yet. */
+  private isBlocked(ch: string | undefined): boolean {
+    return !ch || ch === '#' || (ch === '=' && !this.wardOpen);
+  }
 
   private walkPlayerTo(x: number, y: number) {
     this.walkFrame = 1 - this.walkFrame;

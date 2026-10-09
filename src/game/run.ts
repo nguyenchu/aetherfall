@@ -440,6 +440,8 @@ export function equipmentPrice(itemId: string): number | undefined {
     consecrated_censer: 160,
     serpents_kiss: 155,
     fracture_band: 145,
+    tidebound_tome: 145,
+    tidewoven_robe: 135,
     sunbrand: 220,
     ashenguard_plate: 180,
     cinder_band: 150,
@@ -449,6 +451,7 @@ export function equipmentPrice(itemId: string): number | undefined {
     prism_band: 190,
     prism_edge: 240,
     geode_plate: 200,
+    prism_veil: 205,
     radiant_mace: 260,
     watchers_ward: 190,
     // Chapter 5 tier:
@@ -457,6 +460,7 @@ export function equipmentPrice(itemId: string): number | undefined {
     thunderhead_band: 215,
     squallblade: 260,
     windrent_plate: 215,
+    stormveil_robe: 225,
     stormward_mace: 280,
     // Chapter 6 tier:
     frostbound_rod: 260,
@@ -464,6 +468,7 @@ export function equipmentPrice(itemId: string): number | undefined {
     glacial_band: 235,
     rimeglass_blade: 280,
     frostbitten_plate: 235,
+    rimeveil_robe: 245,
     frostward_mace: 300,
   };
   return prices[itemId] ?? 55;

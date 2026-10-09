@@ -253,7 +253,7 @@ export class Battle {
     return id;
   }
 
-  /** agi × chill × Haste/Slow stack — the one place turn speed is computed. */
+  /** agi × chill × Haste/Slow stack × Swift Aether — the one place turn speed is computed. */
   private effectiveSpeed(c: Combatant): number {
     let mult = c.ailments?.chill ? CHILL_AGI_MULT : 1;
     if (c.speedStatuses) {
@@ -261,6 +261,7 @@ export class Battle {
         if (status) mult *= status.mult;
       }
     }
+    if (c.side === 'party') mult *= this.bn.speedMult;
     return Math.max(1, c.stats.agi * mult);
   }
 
@@ -353,7 +354,7 @@ export class Battle {
         const spell = SPELLS[cmd.spellId];
         if (!spell) return;
         const mod = getRun().modifier;
-        const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) : 0));
+        const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) - this.bn.spellCostReduction : 0));
         if (actor.stats.mp < effectiveCost) return;
         actor.stats.mp -= effectiveCost;
         if (spell.kind === 'heal') {
@@ -871,6 +872,12 @@ export class Battle {
       if (this.bn.vulnerableBonus && target.ailments && Object.keys(target.ailments).length > 0) {
         dmg *= 1 + this.bn.vulnerableBonus;
       }
+      // Vanguard's Edge: rewards opening on a target nobody's touched yet —
+      // checked before applyDamage, so this is still true for every target
+      // of an AoE opener, not just the first one hit.
+      if (this.bn.vanguardBonus && target.stats.hp === target.stats.maxHp) {
+        dmg *= 1 + this.bn.vanguardBonus;
+      }
       // Guardian's Wrath: consumed by executeTurn() right after this action resolves.
       if (actor.guardBuffed) dmg *= GUARDIANS_WRATH_MULT;
       const lastStand = this.bn.hasLastStand && actor.stats.hp / actor.stats.maxHp <= LAST_STAND_THRESHOLD;
@@ -1008,6 +1015,15 @@ export class Battle {
           const victim = others[Math.floor(Math.random() * others.length)];
           this.applyAilment(victim, { ailment, chance: 1, rounds: Math.max(2, rounds) }, events, true, parallel);
         }
+      }
+    }
+    // Reaper's Bargain: securing a kill knits the whole living party back up.
+    if (t.side === 'enemy' && this.bn.executionHeal > 0) {
+      for (const p of this.living('party')) {
+        const heal = Math.round(p.stats.maxHp * this.bn.executionHeal);
+        if (heal <= 0 || p.stats.hp >= p.stats.maxHp) continue;
+        p.stats.hp = Math.min(p.stats.maxHp, p.stats.hp + heal);
+        events.push({ kind: 'info', text: `${p.name} draws on ${t.name}'s fading Aether — +${heal} HP.`, targetId: p.id, amount: -heal, parallel: true });
       }
     }
     events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id, parallel });

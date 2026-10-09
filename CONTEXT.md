@@ -1,6 +1,370 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-25.
+> Paste this into a new session to continue the work. Last updated: 2026-07-26.
+
+## 2026-07-26 (housekeeping): Balance Audit + Bundle Splitting; Mira-Select Bug Still Open
+
+Ask: "hva skal vi jobbe videre med?" — proposed three concrete candidates
+grounded in the session's own open threads (an unreproduced bug report, a
+pile of same-day content additions never independently checked, and the
+build's own repeated bundle-size warning); the user picked all three.
+
+**1. Mira-select bug — still unreproduced, parked pending exact repro.**
+Tried two more angles beyond the original battle-menu misdiagnosis: real
+keyboard nav (Right/Right/Z) onto Mira's portrait in both the Stats tab and
+the Magic tab, and a direct look at `portraitButton`'s click/tap handlers
+for any rect-vs-image conflict. All worked correctly in every test — Mira
+gets selected, her spells/stats show, casting on her actually lands. Left
+as an open thread; needs the user's exact steps (which tab, what was
+selected right before Z) to make further progress rather than guessing a
+third time.
+
+**2. Balance audit of today's 4 new boons + 5 new Lyra equipment pieces.**
+Verified through the real `Battle` engine (not hand math), each against its
+closest same-rarity peer:
+- `vanguards_edge` (rare): +24% on a fresh-enemy opener (matches its nominal
+  +25%, sampling noise) vs. `deadly_precision`'s +7.1% *per hit, every hit,
+  all fight* — since Vanguard's Edge only ever fires once per enemy (first
+  hit only), it's actually the *weaker* of the two in full-fight aggregate,
+  not stronger. Safe/conservative, not overtuned.
+- `focused_mind` (common): saved 5 of 20 MP (25%) casting Ember Hex ×5 —
+  comparable order of magnitude to `aether_flow`'s +2 MP/round over a
+  similar-length fight (~10 MP/5 rounds).
+- `swift_aether` (rare): 11/20 queue slots vs. 10/20 baseline at equal
+  AGI — a modest ~10% turn-frequency bump, in line with other rares.
+- `reapers_bargain` (epic): 24% of max HP healed total across a 3-kill trash
+  pack — solid sustain, comparable in magnitude to `vulnerable_flesh`'s
+  always-on +20% damage-to-afflicted, not a runaway outlier.
+Equipment: re-confirmed each new robe's HP-for-MP/int tradeoff ratio against
+its same-tier plate (55-62%) sits close to the established pattern from
+Aether Robe/Emberweave Robe (50%) — slightly generous but not by much.
+**No changes made** — everything already lands within the existing power
+band.
+
+**3. JS bundle size — split Phaser into its own chunk.** Every build today
+repeated Vite's "chunks larger than 500kB" warning (~1.83MB/437KB gzip as
+one chunk). `vite.config.ts` now sets `build.rollupOptions.output.
+manualChunks: { phaser: ['phaser'] }`, separating the app code (348KB/98KB
+gzip) from Phaser itself (1.48MB/338KB gzip, unavoidable — it's the engine).
+Total download is unchanged (splitting doesn't shrink anything), but the
+app chunk now clears the size warning on its own, and repeat visits/updates
+only need to re-fetch the small app chunk since Phaser rarely changes.
+Bumped `chunkSizeWarningLimit` to 1600 so the build stops flagging Phaser's
+own chunk, which isn't an app-code regression to chase. Verified via
+`pnpm build` + `pnpm preview` + a real Playwright load against the built
+output (not just dev mode): zero failed network requests, zero console
+errors, Title screen renders correctly with the split chunks.
+
+`tsc --noEmit` and `pnpm build` clean throughout; no game logic touched by
+either the audit (read-only) or the bundle change (build config only).
+
+## 2026-07-26 (bugfix 5): The Actual Menu Was GameMenu's Field-Heal Screen, Not Battle
+
+Correction on bugfix 4: "jeg mente i menyen" (I meant in the menu) — the
+original complaint was about `GameMenuScene`'s **Magic tab** (the pause-menu
+field-heal flow used between fights), a completely separate screen and
+selection system from `BattleScene`'s combat menu. Asked directly whether to
+revert bugfix 4 given it solved the wrong thing; recommended keeping it (it
+demonstrably helps a much more common case — in-combat healing — and costs
+nothing to leave in) while going to fix the one actually meant.
+
+`GameMenuScene` doesn't use `BattleScene`'s index+wrap target list at all —
+it's a generic spatial-nearest-neighbor focus system (`moveSpatial`,
+`Selectable[]`) shared across every tab. Selecting a heal spell just left
+the cursor wherever it already was (usually still sitting on the spell
+button just picked), so reaching a specific ally portrait meant unpredictable
+spatial-nav presses with no smart default at all — the same underlying
+complaint as bugfix 3, in a different screen with different plumbing.
+
+Added `focusMostWoundedHealTarget()` (same "lowest HP ratio, mirrors enemy
+AI targeting" logic as `BattleScene.mostWoundedIndex`) and a `healTargetId`
+tag on `Selectable` (new field, since the same `portraitButton` helper
+builds both the party-switch portraits up top and the heal-target portraits
+on the right, and only the latter should be matched). **First placement was
+wrong and caught by live-testing, not code review**: called it from inside
+`renderMagic()` right after building the target portraits — but
+`renderContent()` (the caller) runs `syncSelectionToFocus()` *after*
+`renderMagic()` returns, which re-picks the selection nearest to the
+pre-click cursor position (`selectionAnchor`) and silently clobbered it back
+onto the spell button every time. Moved the call to fire after
+`renderContent()` completes, in the spell button's `action`/`onFocus`
+callbacks instead — confirmed via a live Playwright dump that
+`selectedHealTargetId` was `undefined` with the first placement and `'kael'`
+with the fix.
+
+Verified live end-to-end (Kael at 43/142, clearly most wounded): selecting
+Dawnmend now focuses Kael's portrait directly (screenshot confirms the
+teal-highlighted row), and confirming immediately casts it — "Mira casts
+Dawnmend. Kael +40 HP," 43 -> 83. `tsc --noEmit` and `pnpm build` clean.
+
+## 2026-07-26 (bugfix 4): Quick-Heal Shortcut — Skips the Magic Submenu Entirely
+
+Follow-up to bugfix 3 (the most-wounded-default fix): "det er ikke intuitiv
+og velge dawnmend også trykke ned to ganger for å velge kael" (not intuitive
+to select Dawnmend, plus pressing down twice to select Kael). First
+live-verified there wasn't a regression: with Kael genuinely the most
+wounded (20% HP), the target cursor already lands on him with zero presses
+— bugfix 3 works as designed. Asked which specific friction remained rather
+than guessing a second time; the answer was two of the offered options:
+switching to a non-default target still feels like too much cycling, *and*
+the spell-list step itself (open Magic, find Dawnmend) is friction before
+targeting even starts.
+
+Added a quick-heal shortcut mirroring the existing Limit Break accelerator
+(`tryLimitBreak`, bound to right-press from the top-level battle menu):
+`tryQuickHeal()`, bound to **left**, jumps straight from the top-level menu
+to targeting with the actor's cheapest single-ally heal spell already
+selected and the cursor already on whoever's most wounded (reuses
+`beginTargeting`'s `smartHeal` from bugfix 3) — skipping the Magic submenu
+entirely for the single most common action in the game. A normal confirm
+lands the cast; up/down/left/right still redirect normally if the smart
+pick isn't who you wanted, same as reaching it via Magic — this only cuts
+the "open Magic, find Dawnmend" steps, it doesn't remove the ability to
+choose a different target or spell. `left` was fully dead at the top-level
+menu before this (redundant with up/down, unlike `right`'s existing
+Limit-Break hook), so this doesn't take over anything. Only ever active for
+a character with an ally-target heal spell affordable and someone actually
+missing HP — Kael and Lyra have no heal spells, so it's a no-op for them,
+same as `right` already is when no Limit Break is ready.
+
+Discoverability: a one-time tip the first time the shortcut becomes
+available, gated by a save flag (`seen_quick_heal`, mirroring
+`seen_limit_break`'s pattern) — but rides the always-visible prompt line
+above the menu instead of a Limit-Break-style full intro popup, since a
+minor accelerator doesn't warrant that much ceremony. (First attempt used
+`pushLog()` for the tip and would have silently never shown it —
+`renderMenu()` hides the log panel the instant it draws; caught before
+shipping by checking the actual rendered prompt text live, not just that
+the code ran without throwing.)
+
+Verified live (Playwright, same damaged-Kael setup as bugfix 3's
+verification): the tip renders correctly on Mira's first qualifying turn,
+pressing Left immediately opens targeting with `pending: {kind:'spell',
+id:'cure'}` and the cursor already on Kael, confirming casts it for real
+(Kael 28 -> 68 HP). Screenshot confirms clean layout, no overlap with the
+menu below it. `tsc --noEmit` and `pnpm build` clean.
+
+## 2026-07-26 (gameplay 3): Closed Lyra's Armor Drought
+
+Ask: "lyra har veldig få våpen og armor" (Lyra has very few weapons and
+armor). Audited `equipment.ts` with a quick script counting `users` per
+slot instead of eyeballing it: Kael 10 weapons/11 armor/12 charms, Mira 8/13/
+13, **Lyra 7/3/13**. Weapon count was close enough (every character gets one
+weapon per chapter tier as baseline); armor was the real gap — Kael and Mira
+share every "plate" armor piece in the game (`['kael','mira']`), and Lyra's
+last armor upgrade was Chapter 3's Emberweave Robe. She had **nothing** for
+Chapters 2, 4, 5, 6, or the Rift — three chapters of pure stat stagnation on
+her most survival-relevant slot while the other two kept getting upgrades
+(and gear resists specifically matter for her, the squishiest party member
+by every prior survivability audit). Also found a smaller, matching gap:
+Chapter 2 gave Kael 2 bonus weapons (Toren's Blade, Serpent's Kiss) and Mira
+1 (Consecrated Censer) beyond their baseline pick, versus zero for Lyra.
+
+Added 5 items to `equipment.ts`, all `['lyra', 'mira']` on the armor pieces
+(matching the existing Aether Robe/Emberweave Robe convention — Mira's
+armor count goes up too as a side effect, which is fine, she's the hybrid
+class):
+- `tidewoven_robe` (Ch2 armor, mirrors Tidewarden Mail's chill resist)
+- `prism_veil` (Ch4 armor, mirrors Geode Plate's venom resist)
+- `stormveil_robe` (Ch5 armor, mirrors Stormguard Plate's chill resist)
+- `rimeveil_robe` (Ch6 armor, mirrors Frostbitten Plate's burn resist —
+  deliberately not chill again, so the 3 new robes cover 3 different resists)
+- `tidebound_tome` (Ch2 weapon, Lyra-only: a sustain pick — `int:4/maxMp:8`
+  + 1 MP/round — versus Stormcaller Rod's flat `int:5/maxMp:6`, a real
+  choice the same way Kael/Mira's Ch2 alternates already are)
+
+Wired into `run.ts`'s `equipmentPrice()` table (135/205/225/245/145g,
+matching each tier's existing peers) and `SanctuaryScene.ts`'s `SHOP_GEAR`
+(same unlock flags as each tier's existing entries: `ch1_complete` for the
+two Ch2 items, `ch4_complete`/`ch5_complete`/`ch6_complete` for the robes).
+No chest placement added — confirmed several existing items (Toren's Blade,
+Moonveil Charm, Fracture Band, etc.) are shop-only with no chest, so this
+matches an established pattern rather than inventing one.
+
+Verified: a counting script re-run afterward shows Lyra at 8 weapons/7 armor
+(was 7/3) with continuous progression through every chapter now, no more
+stalling at Ch3. Live (Playwright): all 5 new items bought and equipped on
+Lyra via the real `buyEquipment`/`equipItem` functions at their configured
+prices, resulting stats correct, zero console errors; the equip-list UI was
+also visually confirmed still rendering correctly (Kael's row, same code
+path the new items share — a `memberIndex`-poking attempt to force the
+screenshot onto Lyra specifically hit an unrelated pre-existing quirk in
+`renderEquip()` when called outside its normal `activateSelection` flow;
+not a game bug, didn't chase it further given the real buy/equip path
+already fully confirmed correctness). `tsc --noEmit` and `pnpm build` clean.
+
+## 2026-07-26 (bugfix 3): Heal Targeting Always Defaulted to Kael, Not Whoever Was Hurt
+
+Playtest report: "jeg vil forbedre hvordan vi bruker dawnmend. det går
+nesten ikke i menyen" (I want to improve how Dawnmend is used — it barely
+works in the menu). Traced the actual cast flow live (Playwright, a real
+`Battle` instance with the party pre-damaged at different HP ratios) rather
+than guessing: `BattleScene.beginTargeting()` always set `this.targetIndex =
+0`, i.e. the target cursor opened on Kael (first in `battle.party`)
+regardless of who actually needed healing — so casting Dawnmend meant
+nudging the cursor past whoever was fine every single time, and made it easy
+to fat-finger a heal onto a full-HP ally by mistake. A side investigation
+while reproducing this (an unexplained HP jump in an early, under-
+instrumented test run) turned out to be a red herring from the test
+harness's own timing, not a game bug — worth noting since it briefly looked
+like something else was wrong.
+
+Added `mostWoundedIndex()` (lowest HP *ratio*, not raw HP — mirrors the
+existing enemy-AI targeting logic) and threaded a `smartHeal` flag through
+`beginTargeting()`: heal-kind spells (Dawnmend, Dawnmend's item counterparts
+— any `kind: 'heal'` spell/item targeting an ally) now open the target list
+with the cursor already on whoever needs it most. Damage/buff spells and all
+enemy-targeting are unchanged — there's no equivalent "obvious pick" for
+those. Verified live: party at Kael 71/142 (50%), Lyra 77/77 (100%), Mira
+37/93 (40%) — opening Dawnmend's target list now lands directly on Mira
+(confirmed both via scene state and a screenshot showing her row
+pre-highlighted and her sprite already ringed), and confirming immediately
+healed her (37 -> 57) with zero extra navigation. `tsc --noEmit` clean.
+
+## 2026-07-26 (bugfix 2): Turn-Order Queue Couldn't Tell Two Identical Monsters Apart
+
+Playtest question: "order tabellen bør inneholde navn også? i tilfelle det
+er like monstre" (should the order table include names too, in case there
+are identical monsters). Went looking for where the CTB turn-order queue
+(`BattleScene.renderQueue`) renders each combatant and found it draws only a
+portrait/sprite icon, no text — so two Frostfangs (same sprite, same tint)
+are genuinely indistinguishable there.
+
+First pass added a new `dupTag()` helper and wired it into the HP-bar
+nameplate, the target-select list, and the queue — then live-testing (two
+Frostfangs in a real `Battle` instance) turned up that this was already half
+solved: `BattleScene.disambiguateEnemyNames()` already exists and already
+appends " A"/" B" onto `.name` itself once at battle start specifically for
+this reason (its own doc comment: "otherwise identical everywhere that just
+prints `.name`"), which is why the nameplate and target list already read
+"Frostfang A"/"Frostfang B" correctly — my new `dupTag()` was redundant
+there, and actively *wrong* on re-inspection: it re-derived duplicate-ness
+by comparing `.name` fields at render time, but by then `disambiguateEnemyNames`
+had already mutated those names to be unique, so the comparison always found
+"no duplicates" and silently produced empty tags. Confirmed via a debug
+`page.evaluate` dump of the live `Battle` instance before diagnosing this
+properly, rather than guessing from the screenshot.
+
+Reverted the redundant nameplate/target-list edits back to plain `.name`
+(disambiguateEnemyNames already covers them). Fixed the actual gap instead:
+`disambiguateEnemyNames()` now also records `id -> letter` into a new
+`dupTags` map at the same point it computes the suffix (before the mutation,
+so it's not re-derived from an already-changed name), and `renderQueue()`
+stamps that letter as a small corner badge on exactly the chips that need
+one. Verified live (Playwright, two-Frostfang encounter launched directly via
+`makeChapter6Encounter('frostfangs')`): screenshot confirms the queue's
+active chip and both upcoming Frostfang chips show "A"/"B" badges matching
+the nameplates/combat log ("Frostfang A hits Kael for 8") exactly, a zoomed
+crop confirms the badges are legible at their actual small (7-11px) size, no
+console errors. `tsc --noEmit` and `pnpm build` both clean.
+
+## 2026-07-26 (bugfix): Ambient Banter Toast Was Covering the Map
+
+Playtest report: "idle chat blokkerer for kartet" (ambient banter blocks the
+map). `ui/banterToast.ts`'s `showBanterToast()` drew its 268×48 box centered
+at `(GAME.width/2, GAME.height-60)` — bottom-center of the 640×360 HUD. That
+spot isn't reserved HUD space in either `DescentScene` or `SanctuaryScene`;
+it's real gameplay area, and the world camera keeps the player roughly
+screen-centered, so for the toast's whole 2.8-3.4s-per-line runtime it sat
+directly over the player and the floor around them. Non-blocking to input
+(by design, see the file's own doc comment) doesn't help if you can't see
+where you or the next tile are.
+
+Moved the dock point from bottom-center to top-center (`restY` from
+`GAME.height - 60` to `54`, entrance/exit slide direction flipped to match —
+drops down from above instead of rising from below). Checked both call
+sites' existing top-of-screen HUD first: `DescentHudScene` has title/area
+name top-left and gold/modifier/boons top-right, both clear of the toast's
+horizontal span; `SanctuaryScene` has no fixed top HUD at all. Top-of-room
+tiles are wall/ceiling on every map, never where the player or an
+encounter/chest sits, so the new spot reads as HUD instead of as something
+blocking the dungeon. Verified live (Playwright, save-injected save +
+straight-to-Descent dev shortcut, then force-triggering a toast directly via
+`pickBanter`/`showBanterToast` rather than waiting on the random walk-timer):
+screenshot confirms the toast now sits clear at the top with the player and
+open map fully visible underneath, no overlap with the existing top-corner
+HUD text, zero console errors. `tsc --noEmit` clean.
+
+## 2026-07-26: Three Gameplay Improvements — Ch6 Damage Ceiling, New Boons, Ward Lever
+
+Ask: "forbedre gameplay betraktelig" (improve gameplay considerably) — no
+specifics. Rather than guess, surveyed the actual state (battle.ts, boons.ts,
+DescentScene.ts/chapters.ts field mechanics) and proposed three concrete,
+grounded candidates; the user picked all three (same pattern as 2026-07-25).
+
+**1. Fixed the Chapter 6 damage ceiling the 2026-07-25 audit left open.**
+That session's own survivability audit found Frostbound Colossus and
+Frostmaw's basic attack peaking at 52.7-61.7% of a level-10-floor Lyra's max
+HP — above the 51-57% ceiling every other chapter's elite/boss holds to —
+and explicitly deferred the STR call to the user rather than nerfing
+unilaterally. Wrote a standalone script (esbuild-bundled, run via Node 26's
+native TS support — no vendored ts-node/tsx needed) exercising the real
+`Battle.executeTurn` path, 400 trials per enemy at both the L10 and L12
+floors from that audit, confirming the exact 61.7% figure. Trimmed both
+enemies' STR 33 -> 30 (`chapters.ts`); re-ran the same script: peak dropped
+to 54.3%/47.3% across the two floors, back inside the established band.
+Trash mobs were untouched (already within ceiling). `tsc --noEmit` clean.
+
+**2. Four new boons — untapped mechanical axes.** The boon pool (17 entries)
+hadn't grown since the 2026-07-16 synergy pass, and several existing systems
+had no boon hooking into them at all: CTB turn speed, MP cost, and
+"first hit on a target" all had zero boons touching them. Added:
+- `focused_mind` (common): all spells cost 1 less MP (`spellCostReduction` in
+  `boonTotals`, read in `battle.ts`'s spell-cost calc alongside the existing
+  modifier `spellCostDelta`).
+- `swift_aether` (rare): party CTB speed +12% (`speedMult`, folded into
+  `effectiveSpeed()` — the one place turn order is computed).
+- `vanguards_edge` (rare): +25% damage on a hit landing while the target is
+  still at full HP (checked in `computeHit()` *before* `applyDamage`, so it's
+  true for every target of an AoE opener, not just the first one hit —
+  rewards leading with Cleave/Hexstorm/Blizzard into a fresh pack).
+- `reapers_bargain` (epic, synergy tier): killing an enemy heals the living
+  party 8% max HP (`executionHeal`, hooked into `maybeKo()`'s existing
+  "on enemy death" block alongside Spreading Rot/deathBurst).
+No UI wiring needed — `BoonScene`/`RunSummaryScene`/`GameMenuScene` all render
+boons generically off `name`/`desc`/`rarity`. Verified with a standalone
+script driving real `Battle` instances (not hand-derived math): Vanguard's
+Edge measured +25.6% avg dmg on a full-HP target vs ~0% on a damaged one;
+Focused Mind cut fire's cost 4->3; Reaper's Bargain healed two damaged
+party members simultaneously off one kill; Swift Aether flipped turn order
+in the hero's favor at equal AGI (10 v 10). `tsc --noEmit` clean.
+
+**3. First new exploration mechanic since Chapter 5's Gust — Ward Lever /
+Sealed Ward.** Every chapter already has its own field mechanic (Thicket,
+Current, Embers, Prism Pad, Gust — see the tile-key comment atop
+`chapters.ts`), but Chapter 6 only reused Chapter 2's Current wholesale (a
+deliberate time-saver per the 2026-07-25 log) and none of the five are
+stateful — all are theme-agnostic auto-triggers with no memory. Added a
+genuinely new pair: `Y` Ward Lever and `=` Sealed Ward. Crossing a `Y` tile
+unseals every `=` tile in the same area for the rest of that visit (resets
+on re-entry, `DescentScene`'s `wardOpen`/`wardImages`/`leverImages`, all
+cleared in `create()`) — the first backtrack-to-unlock secret in the game,
+distinct from the auto-trigger tiles. `=` renders as a normal floor tile
+underneath (never an invisible wall) with a tinted barrier overlay on top,
+consistent with the "never an invisible trap" rule the other field tiles
+already follow; the lever's own marker dims (doesn't just vanish) once
+pulled, matching the healing spring's used/unused visual convention.
+Debuted in `AREA_11` (Frostbound Reach): lever at (30,16), gate at (30,12)
+guarding a small pocket at (31-33,12) with a bonus chest (`33,12`: 55g + 1
+Greater Elixir). Validated the map edit two ways before touching live code
+confidence: a flood-fill reachability script (same method the 2026-07-25
+Sanctuary-gate work used) confirmed every pre-existing encounter/chest/
+spring/portal is still reachable without the ward, the lever itself is
+reachable, and the bonus chest is unreachable until the lever is pulled and
+reachable after. Then live-verified end-to-end via a save-injected
+Playwright session (no vendored driver, same bar as prior UI work): walking
+into the sealed tile is blocked exactly like a wall, pulling the lever shows
+the floating text and dims the lever's own marker, walking through afterward
+opens the chest for the correct `+55 gold`/`Greater Elixir x1` (confirmed via
+both the floating loot text on screen and the real gold delta / `hasFlag`
+state), zero console errors. One real gotcha hit while scripting the
+Playwright driver (not a game bug): movement in this game is read as *held*
+key state each frame (`input.ts`'s `dir()`), unlike confirm/cancel which fire
+on the keydown edge — a bare `page.keyboard.press()` resolves before the
+next frame reliably samples it, so it silently produced zero movement until
+switched to explicit `keyboard.down()` / wait / `keyboard.up()`. Worth
+remembering for any future scripted input test of movement specifically.
+`tsc --noEmit` and `pnpm build` both clean.
 
 ## 2026-07-25: Chapter 6 (Frost Anchor) + Three Smaller Follow-ups
 

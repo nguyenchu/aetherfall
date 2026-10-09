@@ -122,6 +122,11 @@ export class BattleScene extends Phaser.Scene {
   private partyLimitBars = new Map<string, BarSet>();
   private partyStatusRows = new Map<string, PartyStatusRow>();
   private turnChips: Phaser.GameObjects.GameObject[] = [];
+  // Populated by disambiguateEnemyNames() alongside its .name mutation — id
+  // -> the letter suffix it got, so renderQueue() can stamp a small badge on
+  // icon-only chips without re-deriving anything from the (already-suffixed)
+  // name string.
+  private dupTags = new Map<string, string>();
   private log: string[] = [];
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
@@ -164,12 +169,19 @@ export class BattleScene extends Phaser.Scene {
 
   /** Two Shadow Wolves or three Corrupted Sprites in one fight are otherwise
    *  identical everywhere that just prints `.name` — the HP bars, the target
-   *  list, the combat log, and especially the turn-order queue (which has no
-   *  battlefield position to fall back on, unlike the sprites themselves).
-   *  Appends a letter suffix once at battle start so "which one's up next?"
-   *  has an answer everywhere for free. Leaves solo names (bosses, elites,
-   *  mixed single-of-each groups) untouched. */
+   *  list, and the combat log. Appends a letter suffix once at battle start
+   *  so "which one is this" has an answer everywhere for free. Leaves solo
+   *  names (bosses, elites, mixed single-of-each groups) untouched.
+   *
+   *  The turn-order queue (renderQueue) is the one place this doesn't reach
+   *  "for free": it draws each combatant's own portrait/sprite image, not
+   *  their name, so two same-type enemies still look pixel-identical there
+   *  even after their `.name` has been suffixed. Also records the letter
+   *  into `dupTags` (keyed by id, computed before the mutation so it isn't
+   *  re-derived from an already-suffixed name) so renderQueue can stamp a
+   *  small corner badge on exactly the chips that need one. */
   private disambiguateEnemyNames(enemies: Combatant[]) {
+    this.dupTags = new Map();
     const groups = new Map<string, Combatant[]>();
     for (const e of enemies) {
       const group = groups.get(e.name) ?? [];
@@ -178,7 +190,11 @@ export class BattleScene extends Phaser.Scene {
     }
     for (const group of groups.values()) {
       if (group.length < 2) continue;
-      group.forEach((e, i) => { e.name = `${e.name} ${String.fromCharCode(65 + i)}`; });
+      group.forEach((e, i) => {
+        const letter = String.fromCharCode(65 + i);
+        this.dupTags.set(e.id, letter);
+        e.name = `${e.name} ${letter}`;
+      });
     }
   }
 
@@ -444,6 +460,24 @@ export class BattleScene extends Phaser.Scene {
     r.setStrokeStyle(1, COLORS.wall);
   }
 
+  /** Index (within `list`) of whoever has the lowest HP *ratio* — a squishy
+   *  caster at 50% and a tank at 50% are equally "hurt" here, which is the
+   *  read a player actually wants when picking a heal target. Ties keep the
+   *  first (leftmost/topmost) match, same tie-break every other list in this
+   *  file already uses. */
+  private mostWoundedIndex(list: Combatant[]): number {
+    let bestIdx = 0;
+    let bestRatio = Infinity;
+    list.forEach((c, i) => {
+      const ratio = c.stats.hp / c.stats.maxHp;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        bestIdx = i;
+      }
+    });
+    return bestIdx;
+  }
+
   private buildEnemyHpBars() {
     for (const e of this.battle.enemies) {
       const img = this.sprites.get(e.id);
@@ -577,6 +611,19 @@ export class BattleScene extends Phaser.Scene {
         })).setOrigin(0.5).setDepth(31);
         this.turnChips.push(letter);
       }
+      // Same-type enemies (e.g. two Frostfangs) share both sprite and tint,
+      // so the chip alone can't tell them apart even though their `.name`
+      // already got a disambiguating letter (disambiguateEnemyNames) — that
+      // text never actually renders here, only the portrait. Stamp the same
+      // letter (looked up by id, not re-derived from the name) in the
+      // corner, only for the chips that actually need it.
+      const tag = this.dupTags.get(c.id);
+      if (tag) {
+        const badge = this.add.text(x + size / 2 - 1, y + size / 2 - 1, tag, sharpText({
+          fontFamily: FONT, fontSize: active ? '11px' : '7px', color: '#ffffff', strokeThickness: 3,
+        })).setOrigin(1, 1).setDepth(32);
+        this.turnChips.push(badge);
+      }
     });
   }
 
@@ -658,6 +705,21 @@ export class BattleScene extends Phaser.Scene {
         this.renderMenu(`${m.name} - choose action`);
         this.stepActiveHeroForward(m.id);
       });
+      return;
+    }
+    // Quiet, one-time tip the first time the quick-heal shortcut (see
+    // tryQuickHeal) is actually available — riding the always-visible prompt
+    // line instead of the log panel, since renderMenu() hides the log the
+    // instant it draws (a full Limit-Break-style intro would be overkill
+    // for a minor accelerator, not a new capability).
+    const canQuickHeal = m.spells.some((id) => {
+      const s = SPELLS[id];
+      return s && s.kind === 'heal' && s.target === 'ally' && m.stats.mp >= s.cost;
+    }) && this.battle.living('party').some((c) => c.stats.hp < c.stats.maxHp);
+    if (canQuickHeal && !hasFlag('seen_quick_heal')) {
+      setFlag('seen_quick_heal');
+      this.renderMenu('Tip: press ◀ to quick-heal whoever needs it most');
+      this.stepActiveHeroForward(m.id);
       return;
     }
     this.renderMenu(`${m.name} - choose action`);
@@ -837,7 +899,10 @@ export class BattleScene extends Phaser.Scene {
     // Shared input bus for keyboard and touch, unsubscribed on shutdown.
     this.unsubs.push(input.on('up', () => this.nav(-1)));
     this.unsubs.push(input.on('down', () => this.nav(1)));
-    this.unsubs.push(input.on('left', () => this.navTarget(-1)));
+    this.unsubs.push(input.on('left', () => {
+      if (this.tryQuickHeal()) return;
+      this.navTarget(-1);
+    }));
     this.unsubs.push(input.on('right', () => {
       if (this.tryLimitBreak()) return;
       this.navTarget(1);
@@ -874,6 +939,29 @@ export class BattleScene extends Phaser.Scene {
     if ((this.activeActor.limit ?? 0) < 100) return false;
     sfx.play('confirm');
     this.openLimit();
+    return true;
+  }
+
+  /** Left-press shortcut: same idea as tryLimitBreak's right-press, but for
+   *  the far more common "someone needs healing" case — skips the Magic
+   *  submenu entirely and drops straight into targeting with the actor's
+   *  cheapest single-ally heal spell already chosen, cursor on whoever's
+   *  most wounded (see beginTargeting's smartHeal). A normal confirm still
+   *  lands the cast; the player can still redirect with up/down/left/right
+   *  if the smart pick isn't who they wanted, same as reaching it via Magic
+   *  normally — this only removes the "open Magic, find Dawnmend" steps. */
+  private tryQuickHeal(): boolean {
+    if (this.ui !== 'menu') return false;
+    const m = this.activeActor;
+    const healId = m.spells.find((id) => {
+      const s = SPELLS[id];
+      return s && s.kind === 'heal' && s.target === 'ally' && m.stats.mp >= s.cost;
+    });
+    if (!healId) return false;
+    if (!this.battle.living('party').some((c) => c.stats.hp < c.stats.maxHp)) return false;
+    sfx.play('confirm');
+    this.pending = { kind: 'spell', id: healId };
+    this.beginTargeting('party', 'subtarget', false, true);
     return true;
   }
 
@@ -1014,24 +1102,30 @@ export class BattleScene extends Phaser.Scene {
         this.commit({ type: 'spell', spellId: sel.id, targetId: this.activeActor.id });
         return;
       }
-      this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget');
+      this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget', false, spell.kind === 'heal');
     } else if (this.pending?.kind === 'item') {
       this.pending.id = sel.id;
       const item = ITEMS[sel.id];
-      this.beginTargeting(item?.target === 'enemy' ? 'enemy' : 'party', 'subtarget', item?.kind === 'revive');
+      this.beginTargeting(item?.target === 'enemy' ? 'enemy' : 'party', 'subtarget', item?.kind === 'revive', item?.kind === 'heal');
     } else if (this.pending?.kind === 'limit') {
       this.commit({ type: 'limit', limitId: sel.id });
     }
   }
 
-  private beginTargeting(side: 'party' | 'enemy', state: 'target' | 'subtarget', downedOnly = false) {
+  /** `smartHeal`: for a heal-kind spell/item, default the cursor to whoever
+   *  actually needs it (lowest HP ratio) instead of always index 0 (Kael) —
+   *  otherwise using Dawnmend meant nudging the cursor past whoever's fine
+   *  every single time, and it's easy to fat-finger a heal onto a full-HP
+   *  ally by mistake. Damage/buff spells and enemy targeting are unaffected:
+   *  there's no equivalent "who obviously needs this" read for those. */
+  private beginTargeting(side: 'party' | 'enemy', state: 'target' | 'subtarget', downedOnly = false, smartHeal = false) {
     // Revive items target a fallen ally instead of a living one.
     this.targets = downedOnly ? this.battle.party.filter((c) => c.stats.hp <= 0) : this.battle.living(side);
     if (this.targets.length === 0) {
       this.openMenu();
       return;
     }
-    this.targetIndex = 0;
+    this.targetIndex = smartHeal ? this.mostWoundedIndex(this.targets) : 0;
     this.ui = state;
     this.renderTargetModal();
 
