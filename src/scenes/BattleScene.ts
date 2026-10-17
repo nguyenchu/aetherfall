@@ -1722,7 +1722,7 @@ export class BattleScene extends Phaser.Scene {
       // events right after and play their own animation as usual.
       this.playLimitBreak(ev.actorId);
     } else if (ev.kind === 'info' && ev.targetId && ev.amount) {
-      // Lifesteal, thorns, revive — small floating numbers without an attack animation.
+      // Lifesteal, revive — small floating numbers without an attack animation.
       this.floatNumber(ev.targetId, ev.amount, ev);
     }
   }

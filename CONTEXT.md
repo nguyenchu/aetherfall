@@ -2,6 +2,47 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-10-17.
 
+## 2026-10-17 (boons): Cut the Boon Pool From 30 to 16
+
+Ask: "30 blessing er kanskje litt mye" — confirmed it meant the 30 distinct
+boons (not the Merchant's 30g Crystal Blessing). Offered two options, cut
+to 16 or unlock gradually by chapter; the user picked the cut.
+
+**Kept (16):** common — Ember/Frost/Radiant Affinity, Keen Edge (one per
+hero's element lane), Aether Flow, Battle Greed; rare — Shattering Force,
+Momentum, Guardian's Wrath, Vampiric Edge, Kindling Soul, Winter's Grasp;
+epic — Perfect Break, Anchor's Promise, Vulnerable Flesh, Reaper's Bargain.
+They lean on the weakness/break/ailment/Defend loop the early fights are
+now tuned around.
+
+**Removed (14):** Scholar's Eye, Iron Bulwark, Cleansing Light, Focused
+Mind, Deadly Precision, Thorn Pact, Deep Pockets, Swift Aether, Vanguard's
+Edge, Spreading Rot, Broken Chill, Overwhelming Power, Smoldering Ruin,
+Last Stand. The criteria were overlaps (Deadly Precision vs. Momentum for
+crit, Iron Bulwark vs. Guardian's Wrath for Defend, Focused Mind vs. Aether
+Flow for MP) and flat number bumps that don't change how you play
+(Overwhelming Power, Scholar's Eye, Deep Pockets, Swift Aether). The
+2026-07-26 audit of Vanguard's Edge, Focused Mind and Swift Aether no
+longer applies.
+
+Code: the 14 entries, their `Boon`/`BoonTotals` fields and every engine
+read of them are gone (`battle.ts`: party speed mult, DoT mult, defend
+heal, spell-cost reduction, item boost, thorns, heal-cleanse, flat damage
+mult, vanguard, last stand + its constants, boon crit bonus, break-chill,
+spreading rot, XP mult). Gear `critBonus` and run modifiers
+(`dmgMult`/`xpMult`/`spellCostDelta`) are separate systems and untouched.
+Unknown boon ids were already ignored everywhere (`boonTotals` skips them,
+HUD/menu/summary null-check), and run boons aren't persisted across
+reloads, so no save migration was needed. `rollBoonChoices` already shows
+fewer cards when fewer than 3 are left and skips the pick at 0. A long run
+can now exhaust the pool (16 vs. 30). `milestone_boons` (6 in one run) is
+still reachable.
+
+Verified: `tsc --noEmit` + `pnpm build` clean; in the dev build,
+3000 real `rollBoonChoices` calls (normal + elite) produced exactly the 16
+kept ids; a live battle → boon pick showed three cards from the new pool,
+the pick landed in the HUD list, zero console errors.
+
 ## 2026-10-17 (fun): Playing Within 30 Seconds + Opening Fights That Need Weakness/Break
 
 Ask: "spillet er litt kjedelig, kan vi gjøre det gøy?" Played it cold first.

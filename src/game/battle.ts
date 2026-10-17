@@ -40,9 +40,6 @@ const BURN_FRAC = 0.06; // of max HP per tick, min 3
 const VENOM_FRAC = 0.05; // of max HP per tick, min 2
 // Synergy boons (boons.ts) — see computeHit/chipGuard/maybeKo/executeTurn.
 const GUARDIANS_WRATH_MULT = 1.3;
-const LAST_STAND_THRESHOLD = 0.3;
-const LAST_STAND_DMG_MULT = 1.4;
-const LAST_STAND_CRIT_BONUS = 0.15;
 const MOMENTUM_CRIT_PER_STACK = 0.1;
 const MOMENTUM_MAX_STACKS = 5;
 // Limit Break gauge (see types.ts Combatant.limit): fills from damage taken
@@ -261,7 +258,6 @@ export class Battle {
         if (status) mult *= status.mult;
       }
     }
-    if (c.side === 'party') mult *= this.bn.speedMult;
     return Math.max(1, c.stats.agi * mult);
   }
 
@@ -289,11 +285,10 @@ export class Battle {
     if (actor.stats.hp > 0 && actor.ailments) {
       for (const [ailment, turns] of Object.entries(actor.ailments) as [Ailment, number][]) {
         if (actor.stats.hp <= 0) break;
-        const dotMult = actor.side === 'enemy' ? this.bn.dotMult : 1;
         if (ailment === 'burn' || ailment === 'venom') {
           const frac = ailment === 'burn' ? BURN_FRAC : VENOM_FRAC;
           const min = ailment === 'burn' ? 3 : 2;
-          const dmg = Math.round(Math.max(min, actor.stats.maxHp * frac) * dotMult);
+          const dmg = Math.round(Math.max(min, actor.stats.maxHp * frac));
           this.applyDamage(actor, dmg);
           const text = ailment === 'burn'
             ? `${actor.name} burns for ${dmg}.`
@@ -332,11 +327,6 @@ export class Battle {
         actor.defending = true;
         actor.stats.mp = Math.min(actor.stats.maxMp, actor.stats.mp + DEFEND_MP_GAIN);
         let text = `${actor.name} braces (+${DEFEND_MP_GAIN} MP).`;
-        if (actor.side === 'party' && this.bn.defendHeal > 0 && actor.stats.hp < actor.stats.maxHp) {
-          const heal = Math.min(this.bn.defendHeal, actor.stats.maxHp - actor.stats.hp);
-          actor.stats.hp += heal;
-          text = `${actor.name} braces (+${DEFEND_MP_GAIN} MP, +${heal} HP).`;
-        }
         if (actor.side === 'party' && this.bn.hasGuardiansWrath) {
           actor.guardBuffed = true;
           text += ' Their next strike will hit harder.';
@@ -354,7 +344,7 @@ export class Battle {
         const spell = SPELLS[cmd.spellId];
         if (!spell) return;
         const mod = getRun().modifier;
-        const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) - this.bn.spellCostReduction : 0));
+        const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) : 0));
         if (actor.stats.mp < effectiveCost) return;
         actor.stats.mp -= effectiveCost;
         if (spell.kind === 'heal') {
@@ -404,8 +394,7 @@ export class Battle {
         }
         this.inventory[item.id]--;
         const target = this.aliveTargetOr(cmd.targetId, actor.side) ?? actor;
-        const boost = actor.side === 'party' ? 1 + this.bn.potionBoost : 1;
-        const power = Math.round(item.power * boost);
+        const power = item.power;
         if (item.kind === 'heal') {
           target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + power);
           events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${power} HP.`, actorId: actor.id, targetId: target.id, amount: -power });
@@ -579,15 +568,6 @@ export class Battle {
       this.applySpeedStatus(target, 'slow', actor.attackSpeedDebuff.mult, actor.attackSpeedDebuff.turns, events);
     }
     this.applyLifesteal(actor, hit.dmg, events);
-    // Thorn Pact: party reflects part of the damage taken.
-    if (target.side === 'party' && this.bn.thorns > 0 && actor.stats.hp > 0) {
-      const reflect = Math.round(hit.dmg * this.bn.thorns);
-      if (reflect > 0) {
-        this.applyDamage(actor, reflect);
-        events.push({ kind: 'info', text: `Thorns lash ${actor.name} for ${reflect}.`, targetId: actor.id, amount: reflect });
-        this.maybeKo(actor, events);
-      }
-    }
     this.applyReflect(actor, target, hit, events);
     this.maybeKo(target, events);
   }
@@ -677,11 +657,6 @@ export class Battle {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
       events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id, parallel: isAoe });
-      // Cleansing Light boon: healing also washes ailments away.
-      if (actor.side === 'party' && this.bn.healsCure && target.ailments && Object.keys(target.ailments).length > 0) {
-        target.ailments = undefined;
-        events.push({ kind: 'info', text: `${target.name} is cleansed of ailments.`, targetId: target.id, parallel: isAoe });
-      }
     }
   }
 
@@ -863,7 +838,7 @@ export class Battle {
     const weak = element !== 'none' && (target.weakness?.includes(element) ?? false);
     let crit = false;
     if (actor.side === 'party') {
-      dmg *= this.bn.dmgMult * (this.bn.elementMult[element] ?? 1);
+      dmg *= this.bn.elementMult[element] ?? 1;
       if (weak) dmg *= WEAK_MULT;
       if (target.broken) dmg *= BREAK_MULT + this.bn.breakDmgBonus + (actor.gear?.breakBonusDmg ?? 0);
       // Vulnerable Flesh: any ailment on the target (not just DoTs) opens it
@@ -872,19 +847,10 @@ export class Battle {
       if (this.bn.vulnerableBonus && target.ailments && Object.keys(target.ailments).length > 0) {
         dmg *= 1 + this.bn.vulnerableBonus;
       }
-      // Vanguard's Edge: rewards opening on a target nobody's touched yet —
-      // checked before applyDamage, so this is still true for every target
-      // of an AoE opener, not just the first one hit.
-      if (this.bn.vanguardBonus && target.stats.hp === target.stats.maxHp) {
-        dmg *= 1 + this.bn.vanguardBonus;
-      }
       // Guardian's Wrath: consumed by executeTurn() right after this action resolves.
       if (actor.guardBuffed) dmg *= GUARDIANS_WRATH_MULT;
-      const lastStand = this.bn.hasLastStand && actor.stats.hp / actor.stats.maxHp <= LAST_STAND_THRESHOLD;
-      if (lastStand) dmg *= LAST_STAND_DMG_MULT;
-      let critChance = CRIT_BASE + this.bn.critBonus + (actor.gear?.critBonus ?? 0)
+      const critChance = CRIT_BASE + (actor.gear?.critBonus ?? 0)
         + (this.bn.hasMomentum ? this.momentumStacks * MOMENTUM_CRIT_PER_STACK : 0);
-      if (lastStand) critChance += LAST_STAND_CRIT_BONUS;
       crit = Math.random() < critChance;
       if (crit) dmg *= CRIT_MULT;
     }
@@ -908,9 +874,6 @@ export class Battle {
       target.broken = true;
       target.intent = undefined;
       events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id, parallel });
-      if (this.bn.breakInflictsChill) {
-        this.applyAilment(target, { ailment: 'chill', chance: 1, rounds: 2 }, events, true, parallel);
-      }
     }
   }
 
@@ -1002,19 +965,6 @@ export class Battle {
         this.applyDamage(p, hit.dmg);
         events.push({ kind: 'spell', text: `${p.name} is caught in the blast (${hit.dmg}).`, targetId: p.id, amount: hit.dmg, element: b.element, weak: hit.weak, parallel: true });
         this.maybeKo(p, events, true);
-      }
-    }
-    // Spreading Rot: a Burning or Poisoned enemy's affliction leaps to
-    // another living enemy on death instead of just fizzling out.
-    if (t.side === 'enemy' && this.bn.spreadAilmentOnDeath && t.ailments) {
-      const spreadable = (Object.entries(t.ailments) as [Ailment, number][]).find(([a]) => a === 'burn' || a === 'venom');
-      if (spreadable) {
-        const [ailment, rounds] = spreadable;
-        const others = this.living('enemy').filter((e) => e.id !== t.id);
-        if (others.length > 0) {
-          const victim = others[Math.floor(Math.random() * others.length)];
-          this.applyAilment(victim, { ailment, chance: 1, rounds: Math.max(2, rounds) }, events, true, parallel);
-        }
       }
     }
     // Reaper's Bargain: securing a kill knits the whole living party back up.
@@ -1115,7 +1065,7 @@ export class Battle {
     if (this.living('enemy').length === 0) {
       const mod = getRun().modifier;
       this.goldWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.goldReward ?? 0), 0) * (mod.goldMult ?? 1) * this.bn.goldMult);
-      this.xpWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0) * (mod.xpMult ?? 1) * this.bn.xpMult);
+      this.xpWon = Math.round(this.enemies.reduce((sum, e) => sum + (e.xpReward ?? 0), 0) * (mod.xpMult ?? 1));
       events.push({ kind: 'info', text: `Victory! +${this.goldWon} gold, +${this.xpWon} XP.` });
       this.phase = 'won';
       this.clearPartyAilments();
