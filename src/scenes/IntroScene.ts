@@ -6,7 +6,8 @@ const CX = GAME.width / 2;
 const CY = GAME.height / 2;
 
 /**
- * Cinematic intro sequence before the title screen.
+ * Cinematic prologue, opened from the Title menu's "Watch the prologue"
+ * (it no longer auto-plays at boot — see BootScene).
  * Runs ~170 seconds. Any key or tap skips immediately to Title.
  *
  * The heroes come first, so the animation the story is really about is what you

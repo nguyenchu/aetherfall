@@ -43,7 +43,11 @@ export class BootScene extends Phaser.Scene {
     this.buildSanctuaryDecor();
     this.buildDescentDecor();
 
-    this.scene.start('Intro');
+    // Straight to Title: the ~170 s cinematic used to auto-play first, and
+    // first-time visitors who didn't know to press a key sat through all of
+    // it (the 2026-10-16 telemetry had zero visitors past Title). It's now
+    // opt-in from the Title menu ("Watch the prologue").
+    this.scene.start('Title');
   }
 
   private buildItemIcons() {

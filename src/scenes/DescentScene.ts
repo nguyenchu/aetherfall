@@ -10,7 +10,7 @@ import { track, chapterOfDepth } from '../game/analytics';
 import { paintPixelGrid } from '../art/sprites';
 import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 import { DescentHudScene } from './DescentHudScene';
-import { pickBanter, DESCENT_BANTER } from '../game/banter';
+import { pickBanter, DESCENT_BANTER, FIRST_FIGHT_BANTER } from '../game/banter';
 import { showBanterToast } from '../ui/banterToast';
 
 const GUST_DIR: Record<'up' | 'down' | 'left' | 'right', [number, number]> = {
@@ -39,6 +39,8 @@ const RANDOM_BATTLE_MIN_STEPS = 7;
 // spells even at a reasonable average rate, which reads as "broken" rather
 // than "unlucky". Force an encounter if one hasn't landed by this many steps.
 const RANDOM_BATTLE_MAX_STEPS = 26;
+// A new game's scripted first fight (see maybeTriggerRandomEncounter).
+const FIRST_FIGHT_STEPS = 4;
 // Ambient party banter (see game/banter.ts): occasional, never forced — a
 // dry spell just means a quieter walk, unlike the battle bad-luck floor above.
 const BANTER_MIN_STEPS = 18;
@@ -547,6 +549,13 @@ export class DescentScene extends Phaser.Scene {
   }
 
   private maybeTriggerBanter() {
+    // The heroes' "why we're here" lines, once, right after the first fight.
+    if (hasFlag('first_fight_done') && !hasFlag('heard_first_fight_banter')) {
+      setFlag('heard_first_fight_banter');
+      this.banterSteps = 0;
+      showBanterToast(this.hud, FIRST_FIGHT_BANTER);
+      return;
+    }
     this.banterSteps++;
     if (this.banterSteps < BANTER_MIN_STEPS) return;
     if (Math.random() >= BANTER_CHANCE) return;
@@ -675,6 +684,25 @@ export class DescentScene extends Phaser.Scene {
     // open floor, but still respects the same step-count floor/ceiling.
     if (tile !== '.' && tile !== 'P' && tile !== 'V') return;
     this.randomBattleSteps++;
+
+    // A new game's first fight comes after a few steps and is always the
+    // same teaching pair (chapters.ts 'first_fight': one fire-weak, one
+    // ice-weak), so the opening minute reaches the battle system instead of
+    // an empty walk. Not for saves that already cleared the chapter.
+    const firstArea = getArea(getRun().depth);
+    if (firstArea.id === 'forest_1' && !hasFlag('first_fight_done') && !hasFlag('ch1_complete')) {
+      if (this.randomBattleSteps < FIRST_FIGHT_STEPS) return;
+      setFlag('first_fight_done');
+      this.busy = true;
+      this.pendingEncounterKey = null;
+      this.randomBattleSteps = 0;
+      this.playBattleTransition(() => {
+        this.scene.pause();
+        this.scene.launch('Battle', { enemies: makeEncounterForArea(firstArea, 'first_fight', getSave().ngPlus) });
+      });
+      return;
+    }
+
     if (this.randomBattleSteps < RANDOM_BATTLE_MIN_STEPS) return;
 
     const depth = getRun().depth;

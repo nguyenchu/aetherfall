@@ -100,7 +100,12 @@ export class TitleScene extends Phaser.Scene {
     // Not .once(): a keypress landing inside the 400ms grace window below
     // would be consumed-but-rejected by the ready check and never retried,
     // leaving keyboard input dead until the player happened to click instead.
-    const tryShowMenu = () => this.showMenu();
+    // The feedback link's own tap must not also count as "begin" — with no
+    // save, that would now start a new game underneath the overlay.
+    const tryShowMenu = (_pointer?: Phaser.Input.Pointer, over?: Phaser.GameObjects.GameObject[]) => {
+      if (over?.includes(feedback)) return;
+      this.showMenu();
+    };
     this.input.on('pointerdown', tryShowMenu);
     this.input.keyboard?.on('keydown', tryShowMenu);
     this.unsubs.push(() => {
@@ -114,6 +119,13 @@ export class TitleScene extends Phaser.Scene {
   private showMenu() {
     if (!this.ready || this.mode !== 'prompt') return;
     this.mode = 'menu';
+    // No save means the menu would only ever hold "New Game" — skip the
+    // extra screen and press, and start playing on this first input.
+    if (!loadSaveSummary()) {
+      sfx.play('confirm');
+      this.begin(true);
+      return;
+    }
     this.tweens.killTweensOf(this.prompt!);
     this.prompt?.destroy();
     this.buildMenu();
@@ -141,6 +153,7 @@ export class TitleScene extends Phaser.Scene {
     if (summary) {
       entries.push({ label: `Continue  -  Lv ${summary.highestLevel}, Stratum ${summary.deepest}, ${summary.gold}g`, action: () => this.begin(false) });
       entries.push({ label: 'New Game', action: () => this.buildConfirm() });
+      entries.push({ label: 'Watch the prologue', action: () => this.watchPrologue() });
     } else {
       entries.push({ label: 'New Game', action: () => this.begin(true) });
     }
@@ -176,7 +189,9 @@ export class TitleScene extends Phaser.Scene {
       })).setOrigin(0.5));
     }
     entries.forEach((entry, i) => {
-      const text = this.add.text(GAME.width / 2, 278 + i * 20, entry.label, sharpText({
+      // 18px rows from 270 so a third entry ("Watch the prologue") still
+      // clears the controls hint at y=330.
+      const text = this.add.text(GAME.width / 2, 270 + i * 18, entry.label, sharpText({
         fontFamily: FONT, fontSize: entry.label.length > 26 ? '9px' : '11px', color: '#dfe4f5',
       })).setOrigin(0.5).setInteractive({ useHandCursor: true });
       text.on('pointerover', () => { this.index = i; sfx.play('cursor'); this.updateFocus(); });
@@ -200,6 +215,14 @@ export class TitleScene extends Phaser.Scene {
       option.text.setColor(focused ? '#6cf0c2' : '#dfe4f5');
       option.text.setText(`${focused ? '> ' : ''}${option.label}`);
     });
+  }
+
+  /** The cinematic no longer auto-plays at boot; it ends back on Title. */
+  private watchPrologue() {
+    this.unsubs.forEach((u) => u());
+    this.unsubs = [];
+    this.cameras.main.fadeOut(400, 7, 6, 14);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Intro'));
   }
 
   private begin(reset: boolean) {

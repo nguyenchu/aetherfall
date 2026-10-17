@@ -139,6 +139,17 @@ export const SANCTUARY_BANTER: BanterBeat[] = [
   ] },
 ];
 
+// Why the three of them are here — played once, on the first step after a
+// new game's first fight (DescentScene), instead of front-loading it into
+// the Sanctuary intro before the player has done anything. Kael's line sets
+// up the watch-sigil he finds at the anchor (dialogue.ts ch1_crystal).
+export const FIRST_FIGHT_BANTER: BanterLine[] = [
+  { ...KAEL, text: 'My old watch-line ran through this forest. Eight of us. I never heard word of the other seven.' },
+  { ...LYRA, text: 'I\'ve stood where an anchor already failed. I came here to make sure I never watch that happen twice.' },
+  { ...MIRA, text: 'The Wardens have kept this anchor since before Sanctuary had walls. I don\'t intend to be the one who loses it.' },
+  { ...KAEL, text: 'It\'s stood through worse. So will we.' },
+];
+
 // A rotating one-liner shown under the Merchant's shop header — small,
 // self-aware comic relief in a game that's otherwise fairly grim.
 export const MERCHANT_QUIPS: string[] = [

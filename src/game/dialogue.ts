@@ -35,19 +35,16 @@ export const SPEAKER_PORTRAIT: Record<string, string> = {
 const NARRATOR = 0x8a93b8;
 
 export const SCRIPTS: Record<string, Script> = {
-  // Chapter 1 opening — first arrival in Sanctuary.
+  // Chapter 1 opening — first arrival in Sanctuary. Kept to five lines so a
+  // new player is walking within seconds; the heroes' backstory lines that
+  // used to live here now play as banter after the first fight (see
+  // banter.ts FIRST_FIGHT_BANTER).
   intro: [
-    { text: 'Aether, the light that bears the world, has fallen.', color: NARRATOR },
-    { text: 'The forests around Sanctuary have gone dark. Something is consuming what little Aether remains.', color: NARRATOR },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Ashenveil Forest is close. If the corruption started anywhere, it started there.' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'My old watch-line ran through that gate. Eight of us. I never heard word of the other seven.', visual: 'heroes_meet' },
-    { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I\'ve stood where an anchor already failed. I came here to make sure I never watch that happen twice.', visual: 'heroes_meet' },
+    { text: 'Aether, the light that bears the world, has fallen. The forests around Sanctuary have gone dark.', color: NARRATOR },
+    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Ashenveil Forest is close. If the corruption started anywhere, it started there.', visual: 'heroes_meet' },
     { speaker: 'Lyra', portrait: 'portrait_lyra', color: 0x8a6cf0, text: 'I can feel Aether traces inside the forest. Something is drawing it out — deliberately.', visual: 'heroes_meet' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The Wardens have kept this anchor since before Sanctuary had walls. I don\'t intend to be the one who loses it.', visual: 'heroes_meet' },
-    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The old grove at the heart of the forest holds the crystal. If it still stands...', visual: 'heroes_meet' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'It\'s stood through worse. So will we.', visual: 'heroes_meet' },
-    { speaker: 'Kael', portrait: 'portrait_kael', color: 0x6cf0c2, text: 'Then we find it. And whoever is doing this.' },
-    { text: 'Speak with the people of Sanctuary. Then enter the forest through the eastern gate.', color: NARRATOR },
+    { speaker: 'Mira', portrait: 'portrait_mira', color: 0xf0d36c, text: 'The old grove at its heart holds the anchor. If it still stands, we can save it.', visual: 'heroes_meet' },
+    { text: 'The eastern gate is open — follow the marker. The people of Sanctuary will still be here when you return.', color: NARRATOR },
   ],
 
   npc_keeper: [

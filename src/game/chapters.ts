@@ -41,33 +41,39 @@ function armed(c: Combatant, weakness: Element[], maxGuard: number): Combatant {
   return { ...c, weakness, maxGuard, guard: maxGuard };
 }
 
+// Trash HP is sized so a plain Attack never one-shots, while a weakness hit
+// (Lyra's matching hex, ~35-37 dmg at level 1) nearly or fully does — and on
+// wolves breaks them for a +50% finisher. At the old 16-30 HP everything
+// died to one swing, so weakness/break never mattered in the opening fights.
+// Real-Battle sim, level-1 party from full: mashing Attack takes ~2x the
+// turns and ~2x the HP loss of playing weaknesses, and still wins.
 function shadowWolf(id: string): Combatant {
   return armed({
     id, name: 'Shadow Wolf', side: 'enemy',
     spriteKey: 'e_ghoul', color: 0x334466, size: 24,
     spells: [], goldReward: 12, xpReward: 10,
     attackInflict: { ailment: 'venom', chance: 0.2, rounds: 2 },
-    stats: s(30, 11, 10, 5, 1),
+    stats: s(44, 11, 10, 5, 1),
   }, ['fire'], 1);
 }
 
-function corruptedSprite(id: string): Combatant {
+function corruptedSprite(id: string, hp = 28): Combatant {
   return armed({
     id, name: 'Corrupted Sprite', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x7755aa, size: 18,
     spells: ['frost'], goldReward: 15, xpReward: 12,
-    stats: s(20, 5, 13, 3, 10, 14),
+    stats: s(hp, 5, 13, 3, 10, 14),
   }, ['fire'], 1);
 }
 
-function aetherWisp(id: string): Combatant {
+function aetherWisp(id: string, hp = 28): Combatant {
   return armed({
     id, name: 'Aether Wisp', side: 'enemy',
     spriteKey: 'e_sprite', color: 0xaaaaff, size: 16,
     spells: ['smite'], goldReward: 18, xpReward: 14,
     // Flits in and out like the grove's other shadows — permanently hasted.
     speedStatuses: { haste: { mult: 1.3, turns: 999 } },
-    stats: s(16, 4, 15, 2, 13, 18),
+    stats: s(hp, 4, 15, 2, 13, 18),
   }, ['ice'], 1);
 }
 
@@ -91,7 +97,7 @@ function forestShade(): Combatant {
   }, ['fire', 'holy'], 3);
 }
 
-type EncounterGroup = 'wolves' | 'wolf_sprite' | 'sprites' | 'wisps' | 'elite' | 'boss';
+type EncounterGroup = 'wolves' | 'wolf_sprite' | 'sprites' | 'wisps' | 'first_fight' | 'elite' | 'boss';
 
 export function makeChapter1Encounter(group: EncounterGroup): Combatant[] {
   switch (group) {
@@ -99,6 +105,11 @@ export function makeChapter1Encounter(group: EncounterGroup): Combatant[] {
     case 'wolf_sprite': return [shadowWolf('e0'), corruptedSprite('e1')];
     case 'sprites':     return [corruptedSprite('e0'), corruptedSprite('e1'), aetherWisp('e2')];
     case 'wisps':       return [aetherWisp('e0'), aetherWisp('e1')];
+    // A new game's very first fight (DescentScene): one fire-weak, one
+    // ice-weak, so Lyra's two opening hexes each have an obvious target —
+    // sturdy enough that the matching hex BREAKS rather than kills, so the
+    // break-then-finish half of the lesson actually shows up too.
+    case 'first_fight': return [corruptedSprite('e0', 44), aetherWisp('e1', 44)];
     case 'elite':       return [alphaWolf(), shadowWolf('e1')];
     case 'boss':        return [forestShade()];
   }

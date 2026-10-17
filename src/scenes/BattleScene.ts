@@ -707,6 +707,24 @@ export class BattleScene extends Phaser.Scene {
       });
       return;
     }
+    // Weakness/break onboarding, the same quiet prompt-line style as the
+    // quick-heal tip below: once on the first hero turn against anything
+    // with a weakness, then once on the first turn an enemy sits BROKEN —
+    // the two halves of the "hit the weakness, then punish the break" loop
+    // the early fights are now tuned around (chapters.ts Chapter 1 HP).
+    const foes = this.battle.living('enemy');
+    if (!hasFlag('seen_weak_tip') && foes.some((e) => (e.weakness?.length ?? 0) > 0)) {
+      setFlag('seen_weak_tip');
+      this.renderMenu('Tip: hit the weakness shown on an enemy to BREAK it');
+      this.stepActiveHeroForward(m.id);
+      return;
+    }
+    if (!hasFlag('seen_break_tip') && foes.some((e) => e.broken)) {
+      setFlag('seen_break_tip');
+      this.renderMenu('Tip: BROKEN foes lose a turn and take +50% damage');
+      this.stepActiveHeroForward(m.id);
+      return;
+    }
     // Quiet, one-time tip the first time the quick-heal shortcut (see
     // tryQuickHeal) is actually available — riding the always-visible prompt
     // line instead of the log panel, since renderMenu() hides the log the

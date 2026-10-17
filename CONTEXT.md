@@ -1,6 +1,85 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-10-16.
+> Paste this into a new session to continue the work. Last updated: 2026-10-17.
+
+## 2026-10-17 (fun): Playing Within 30 Seconds + Opening Fights That Need Weakness/Break
+
+Ask: "spillet er litt kjedelig, kan vi gjøre det gøy?" Played it cold first.
+Two problems stood out: ~25 inputs before the player controlled anything,
+and the first fight was won by mashing Attack (16-30 HP trash died to one
+swing, so weakness/break never came up). User picked: shorten the start to
+under a minute, and make the early fights reward weakness/break.
+
+**Fast start:**
+- `BootScene` → `Title` directly. The ~170 s `IntroScene` cinematic used to
+  auto-play first; a first-time visitor who didn't know to press a key sat
+  through all of it (likely why the 2026-10-16 telemetry had zero visitors
+  past Title). It's now opt-in: "Watch the prologue" on the Title menu
+  (shown only with a save; ends back on Title).
+- `TitleScene`: with no save, the first key/tap starts the new game — no
+  separate one-option "New Game" menu. With a save the menu is unchanged
+  (Continue / New Game / Watch the prologue; rows tightened to 18px so the
+  third row clears the controls hint). The Feedback link's own tap is
+  excluded so it can't start a game under the overlay.
+- `dialogue.ts` `intro`: 11 lines → 5. The heroes' backstory lines (Kael's
+  watch-line, Lyra's failed anchor, Mira's Wardens) moved to
+  `banter.ts FIRST_FIGHT_BANTER`, shown once as a banter toast on the first
+  step after the first fight (`DescentScene.maybeTriggerBanter`, flag
+  `heard_first_fight_banter`). Kael's line still sets up the watch-sigil at
+  the anchor (`ch1_crystal`).
+- `DescentScene`: a new game's first fight triggers after 4 steps in
+  `forest_1` (flag `first_fight_done`; skipped for saves with
+  `ch1_complete`), always the `first_fight` pair.
+
+Measured live (dev server, fresh save): one Title tap → 5 dialogue lines
+(9 presses) → ~8 s walk to the gate → 4 steps → battle. Roughly 20-25 s
+from Title to the first fight for a human reading at normal speed.
+
+**Fights that need weakness/break (`chapters.ts`, Chapter 1 trash only):**
+- HP: Shadow Wolf 30→44, Corrupted Sprite 20→28, Aether Wisp 16→28. A plain
+  Attack no longer one-shots anything; Lyra's matching hex (~35-37 at Lv1)
+  nearly or fully kills, and on wolves it breaks them for a +50% finisher.
+  Rewards unchanged.
+- `first_fight` group: Corrupted Sprite + Aether Wisp at 44 HP (fire-weak +
+  ice-weak, one target for each of Lyra's opening hexes), sturdy enough
+  that the matching hex BREAKS rather than kills, so the break-then-finish
+  half shows up too.
+- `BattleScene`: two one-time prompt-line tips in the quick-heal tip style —
+  "hit the weakness shown on an enemy to BREAK it" (first hero turn vs.
+  anything with a weakness, flag `seen_weak_tip`) and "BROKEN foes lose a
+  turn and take +50% damage" (first turn with a broken enemy,
+  `seen_break_tip`).
+
+Real-`Battle` sim (5000 fights per cell, level-1 party from full HP, no
+boons). "Mash" = everyone Attacks; "smart" = matching hex / Guardbreak on
+unbroken foes, Attack on broken ones, Mira heals under 40%. HP lost:
+
+| group | old mash | new mash | old smart | new smart |
+|---|---|---|---|---|
+| first_fight | — | 38% | — | 15% |
+| sprites | 43% | 56% | 22% | 24% |
+| wisps | 23% | 31% | 14% | 14% |
+| wolves | 20% | 25% | 10% | 10% |
+| wolf_sprite | 19% | 24% | 9% | 11% |
+| elite | 49% | 49% | 20% | 17% |
+
+Smart play costs about what it did before; mashing now costs ~2-2.5x as much
+HP and takes ~1.5-2x the turns. Win rates: 100% everywhere except mashing the
+3-enemy `sprites` group (97% → 94%). `first_fight` is 100% either way.
+
+Verified live in the browser: fresh save → one tap → dialogue → gate →
+first fight after 4 steps (both foes 44/44) → weakness tip → Ember Hex lands
+"Weak!" → Guardbreak BREAKs the Wisp → break tip → finisher → boon pick →
+backstory banter toast on the next step. Also: Title with a save shows the
+three-row menu, "Watch the prologue" plays the cinematic and skip returns to
+Title, and the Feedback link with no save opens the overlay without starting
+a game. Zero console errors. `tsc --noEmit` + `pnpm build` clean.
+
+Not changed / follow-ups: the BREAK event is logged and stamped before the
+hit that caused it (pre-existing order in `chipGuard` vs. the damage event).
+Battle feel (hit-stop, shake, enemy reactions, ~2.5 s of waiting per round)
+was option 3 and is still untouched. Only Chapter 1 trash was retuned; later
+chapters' trash can still be mashed if their HP has the same problem.
 
 ## 2026-10-16 (ops): First Telemetry Read — Live Site Was 3 Months Stale; Redeployed
 
