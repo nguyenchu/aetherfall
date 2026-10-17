@@ -58,6 +58,11 @@ const FROSTBIND_CHILL_TURNS = 2;
 // Mira's "Dawnbreaker Judgment" Limit Break: the offensive counterpart to
 // Aegis of Dawn — holy AoE instead of a full-party heal/revive/cleanse.
 const JUDGMENT_SCALE = 2.0;
+// Chapter signature mechanics (enemyMechanics.ts): a Cinder whose fuse runs
+// out blasts harder than one killed early; a turn-stealer can't push itself
+// to an instant second turn.
+const FUSE_BLAST_MULT = 1.5;
+const TURN_STEAL_CAP = 0.9;
 
 // --- CTB Queue (new engine core; see CONTEXT.md 2026-07-14 CTB plan) --------
 // Every combatant has a persistent `readiness` counter (0..READY_THRESHOLD).
@@ -99,11 +104,13 @@ const AILMENT_APPLY_TEXT: Record<Ailment, (name: string) => string> = {
   burn: (n) => `${n} is set ablaze!`,
   chill: (n) => `${n} is chilled to the bone!`,
   venom: (n) => `${n} is poisoned!`,
+  freeze: (n) => `${n} is encased in ice!`,
 };
 const AILMENT_EXPIRE_TEXT: Record<Ailment, (name: string) => string> = {
   burn: (n) => `The flames on ${n} gutter out.`,
   chill: (n) => `${n} shakes off the chill.`,
   venom: (n) => `The venom in ${n} fades.`,
+  freeze: (n) => `The ice around ${n} gives way.`,
 };
 
 export class Battle {
@@ -173,8 +180,17 @@ export class Battle {
     this.tickOwnStatuses(actor, events);
     if (actor.isBoss && actor.phaseTriggered) this.bossTick(actor);
     if (actor.enrageOnOwnTurn && actor.stats.hp > 0) this.enrageTick(actor);
+    actor.tempoStolen = false;
+    if (actor.fuse != null && actor.stats.hp > 0) this.fuseTick(actor, events);
+    if (actor.regenFrac && actor.stats.hp > 0) this.regenTick(actor, events);
+    this.resolveSplits(events);
 
     if (this.checkEnd(events) || actor.stats.hp <= 0) {
+      return { actor, events, needsCommand: false };
+    }
+
+    if (actor.ailments?.freeze) {
+      events.push({ kind: 'info', text: `${actor.name} is frozen solid — an ally's heal or cure will break the ice.`, targetId: actor.id });
       return { actor, events, needsCommand: false };
     }
 
@@ -207,6 +223,7 @@ export class Battle {
       actor.limit = Math.min(LIMIT_MAX, (actor.limit ?? 0) + LIMIT_ACT_GAIN);
     }
     this.execute(actor, cmd, events);
+    this.resolveSplits(events);
     // Guardian's Wrath: the buff persists through repeated defends, and is
     // spent by whatever non-defend action finally uses it.
     if (cmd.type !== 'defend' && actor.guardBuffed) actor.guardBuffed = false;
@@ -398,6 +415,7 @@ export class Battle {
         if (item.kind === 'heal') {
           target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + power);
           events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${power} HP.`, actorId: actor.id, targetId: target.id, amount: -power });
+          this.thaw(target, events);
         } else if (item.kind === 'mp') {
           target.stats.mp = Math.min(target.stats.maxMp, target.stats.mp + power);
           events.push({ kind: 'item', text: `${actor.name} uses ${item.name}; ${target.name} +${power} MP.`, actorId: actor.id, targetId: target.id });
@@ -569,7 +587,9 @@ export class Battle {
     if (actor.attackSpeedDebuff) {
       this.applySpeedStatus(target, 'slow', actor.attackSpeedDebuff.mult, actor.attackSpeedDebuff.turns, events);
     }
+    if (actor.turnSteal) this.stealTempo(actor, target, events);
     this.applyLifesteal(actor, hit.dmg, events);
+    this.afterHitMechanics(actor, target, element, events);
     this.applyReflect(actor, target, hit, events);
     this.maybeKo(target, events);
   }
@@ -590,8 +610,9 @@ export class Battle {
   /** Prism Sprite's reflect: a non-weakness hit bounces part of its damage
    * back at the attacker. Hitting the actual weakness bypasses it entirely,
    * rewarding correct play. */
-  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean }, events: BattleEvent[], parallel = false): void {
-    if (!target.reflectFrac || hit.weak || actor.stats.hp <= 0) return;
+  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean; warded: boolean }, events: BattleEvent[], parallel = false): void {
+    // An attuning crystal only throws back the element it's attuned to.
+    if (!target.reflectFrac || (target.attuning ? !hit.warded : hit.weak) || actor.stats.hp <= 0) return;
     const reflect = Math.round(hit.dmg * target.reflectFrac);
     if (reflect <= 0) return;
     this.applyDamage(actor, reflect);
@@ -617,6 +638,7 @@ export class Battle {
       this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.applyLifesteal(actor, hit.dmg, events);
+      this.afterHitMechanics(actor, target, 'physical', events);
       this.applyReflect(actor, target, hit, events);
       this.maybeKo(target, events);
       return;
@@ -644,6 +666,7 @@ export class Battle {
       this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, isAoe);
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
       if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
+      this.afterHitMechanics(actor, target, spell.element, events, isAoe);
       this.applyReflect(actor, target, hit, events, isAoe);
       this.maybeKo(target, events, isAoe);
     }
@@ -659,6 +682,7 @@ export class Battle {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
       events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id, parallel: isAoe });
+      this.thaw(target, events, isAoe);
     }
   }
 
@@ -834,10 +858,13 @@ export class Battle {
   }
 
   /** Central damage roll: variance, modifiers, boons, weakness, break, crit. */
-  private computeHit(actor: Combatant, target: Combatant, base: number, element: Element): { dmg: number; crit: boolean; weak: boolean } {
+  private computeHit(actor: Combatant, target: Combatant, base: number, element: Element): { dmg: number; crit: boolean; weak: boolean; warded: boolean } {
     let dmg = base * rnd(0.88, 1.12) * this.modMult(actor, target);
     if (actor.ailments?.chill) dmg *= CHILL_DMG_MULT; // chilled hands strike weakly
-    const weak = element !== 'none' && (target.weakness?.includes(element) ?? false);
+    // A warded element is never also a weakness (an attuning crystal can
+    // ward its own weak element after being hit with it).
+    const warded = !!target.wardElement && element !== 'none' && element === target.wardElement;
+    const weak = element !== 'none' && !warded && (target.weakness?.includes(element) ?? false);
     let crit = false;
     if (actor.side === 'party') {
       dmg *= this.bn.elementMult[element] ?? 1;
@@ -857,18 +884,20 @@ export class Battle {
       if (crit) dmg *= CRIT_MULT;
     }
     // Prism ward: this element barely scratches it — switch to another school.
-    if (target.wardElement && element !== 'none' && element === target.wardElement) dmg *= WARD_MULT;
+    if (warded) dmg *= WARD_MULT;
+    // Tideshell (Ch2): blunts everything but the element that shatters it.
+    if (target.shell && element !== target.shell.breaker) dmg *= target.shell.mult;
     if (target.defending) dmg *= element === 'physical' ? 0.5 : 0.75;
     // Warden's Bulwark: Kael's Limit Break shields the whole party for a
     // few turns (see executeLimitBreak/tickOwnStatuses).
     if (target.dmgTakenStatus) dmg *= target.dmgTakenStatus.mult;
-    return { dmg: Math.max(1, Math.round(dmg)), crit, weak };
+    return { dmg: Math.max(1, Math.round(dmg)), crit, weak, warded };
   }
 
   /** Removes guard pips on weakness hits and skill chips; triggers BREAK at 0. */
   private chipGuard(actor: Combatant, target: Combatant, weak: boolean, guardHit: number, events: BattleEvent[], parallel = false): void {
     if (actor.side !== 'party' || target.side !== 'enemy') return;
-    if (target.broken || (target.guard ?? 0) <= 0) return;
+    if (target.broken || (target.guard ?? 0) <= 0 || target.shell) return;
     const chip = (weak ? 1 + this.bn.guardChipBonus + (actor.gear?.guardChipBonus ?? 0) : 0) + guardHit;
     if (chip <= 0) return;
     target.guard = Math.max(0, (target.guard ?? 0) - chip);
@@ -911,6 +940,12 @@ export class Battle {
   private applyAilment(target: Combatant, inf: Inflict, events: BattleEvent[], sure = false, parallel = false): void {
     if (target.stats.hp <= 0) return;
     if (!sure && Math.random() >= inf.chance) return;
+    // Only one frozen combatant per side at a time, so Rime Prison can't
+    // chain-lock the whole party.
+    if (inf.ailment === 'freeze') {
+      const side = target.side === 'party' ? this.party : this.enemies;
+      if (side.some((c) => c.stats.hp > 0 && c.ailments?.freeze)) return;
+    }
     // Gear immunity: Tidewarden Mail shrugs off chill, Ashenguard Plate fire.
     if (target.gear?.resist.includes(inf.ailment)) {
       events.push({ kind: 'info', text: `${target.name}'s gear wards it off!`, targetId: target.id, parallel });
@@ -968,6 +1003,17 @@ export class Battle {
         events.push({ kind: 'spell', text: `${p.name} is caught in the blast (${hit.dmg}).`, targetId: p.id, amount: hit.dmg, element: b.element, weak: hit.weak, parallel: true });
         this.maybeKo(p, events, true);
       }
+      // Ch3 cinders: the blast also catches its own pack (and can chain
+      // into another cinder), so when you pop one matters.
+      if (b.hitsAllies) {
+        for (const e of this.living('enemy')) {
+          if (e === t) continue;
+          const hit = this.computeHit(t, e, b.power, b.element);
+          this.applyDamage(e, hit.dmg);
+          events.push({ kind: 'spell', text: `${e.name} is caught in the blast (${hit.dmg}).`, targetId: e.id, amount: hit.dmg, element: b.element, parallel: true });
+          this.maybeKo(e, events, true);
+        }
+      }
     }
     // Reaper's Bargain: securing a kill knits the whole living party back up.
     if (t.side === 'enemy' && this.bn.executionHeal > 0) {
@@ -979,6 +1025,83 @@ export class Battle {
       }
     }
     events.push({ kind: 'ko', text: `${t.name} falls.`, targetId: t.id, parallel });
+  }
+
+  // --- Chapter Signature Mechanics & Elite Affixes (enemyMechanics.ts) -------
+
+  /** Per-hit enemy reactions to a party hit: a Tideshell shatters on its
+   *  breaker element; an attuning crystal hardens against what just hit it. */
+  private afterHitMechanics(actor: Combatant, target: Combatant, element: Element, events: BattleEvent[], parallel = false): void {
+    if (actor.side !== 'party' || target.side !== 'enemy' || target.stats.hp <= 0) return;
+    if (target.shell && element === target.shell.breaker) {
+      target.shell = undefined;
+      events.push({ kind: 'info', text: `${target.name}'s tideshell freezes and shatters!`, targetId: target.id, parallel });
+    }
+    if (target.attuning && element !== 'none' && target.wardElement !== element) {
+      target.wardElement = element;
+      events.push({ kind: 'info', text: `${target.name} attunes to ${element} — it now resists it.`, targetId: target.id, parallel });
+    }
+  }
+
+  /** Ch3 fuse: counts down on the cinder's own turn; at zero it detonates
+   *  (its deathBurst, boosted) instead of acting. */
+  private fuseTick(actor: Combatant, events: BattleEvent[]): void {
+    actor.fuse = (actor.fuse ?? 0) - 1;
+    if (actor.fuse > 0 || !actor.deathBurst) return;
+    actor.deathBurst = { ...actor.deathBurst, power: Math.round(actor.deathBurst.power * FUSE_BLAST_MULT) };
+    events.push({ kind: 'info', text: `${actor.name}'s fuse burns out!`, actorId: actor.id });
+    actor.stats.hp = 0;
+    this.maybeKo(actor, events);
+  }
+
+  /** Ch5 tempo theft: moves readiness from the target to the attacker, so
+   *  the hero visibly slips back in the ORDER queue. Defending holds it, and
+   *  a hero can only be robbed once between their own turns. */
+  private stealTempo(actor: Combatant, target: Combatant, events: BattleEvent[]): void {
+    if (target.stats.hp <= 0 || !actor.turnSteal || target.tempoStolen) return;
+    if (target.defending) {
+      events.push({ kind: 'info', text: `${target.name} holds their footing — the gale can't steal their turn.`, targetId: target.id });
+      return;
+    }
+    target.tempoStolen = true;
+    const amount = Math.round(actor.turnSteal * READY_THRESHOLD);
+    target.readiness = (target.readiness ?? 0) - amount;
+    actor.readiness = Math.min(READY_THRESHOLD * TURN_STEAL_CAP, (actor.readiness ?? 0) + amount);
+    events.push({ kind: 'info', text: `${actor.name} steals ${target.name}'s tempo — ${target.name} slips back in the order!`, targetId: target.id });
+  }
+
+  /** Ch6 Rime Prison: an ally's heal (spell or item) breaks the ice. */
+  private thaw(target: Combatant, events: BattleEvent[], parallel = false): void {
+    if (!target.ailments?.freeze || target.stats.hp <= 0) return;
+    delete target.ailments.freeze;
+    events.push({ kind: 'info', text: `The ice around ${target.name} shatters — free to act!`, targetId: target.id, parallel });
+  }
+
+  /** Regenerating elite affix: knits back a slice of max HP on its own turn —
+   *  unless a burn or venom is eating at it, which is the counter. */
+  private regenTick(actor: Combatant, events: BattleEvent[]): void {
+    if (actor.stats.hp >= actor.stats.maxHp) return;
+    if (actor.ailments?.burn || actor.ailments?.venom) {
+      events.push({ kind: 'info', text: `${actor.name}'s wounds won't close while it festers.`, targetId: actor.id });
+      return;
+    }
+    const heal = Math.min(actor.stats.maxHp - actor.stats.hp, Math.round(actor.stats.maxHp * (actor.regenFrac ?? 0)));
+    actor.stats.hp += heal;
+    events.push({ kind: 'info', text: `${actor.name} regenerates ${heal} HP.`, targetId: actor.id, amount: -heal });
+  }
+
+  /** Splitting elite affix: the first time it's at or below half HP (and
+   *  still standing), a shard breaks away and joins the fight. */
+  private resolveSplits(events: BattleEvent[]): void {
+    for (const e of this.living('enemy')) {
+      if (!e.splitSpawn || e.stats.hp > e.stats.maxHp / 2) continue;
+      const shard = e.splitSpawn;
+      e.splitSpawn = undefined;
+      shard.readiness = 0;
+      this.enemies.push(shard);
+      this.refreshIntent(shard);
+      events.push({ kind: 'info', text: `${e.name} cracks — ${shard.name} breaks away!`, actorId: e.id, targetId: shard.id });
+    }
   }
 
   // --- AI -------------------------------------------------------------------
@@ -1029,7 +1152,12 @@ export class Battle {
     const target = Math.random() < 0.6 ? priority : pool[Math.floor(Math.random() * pool.length)];
 
     // Cast occasionally if MP allows; bosses cast more often.
-    const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost);
+    // Rime Prison: only while nobody is frozen yet, and favored when it's up.
+    const someoneFrozen = targets.some((t) => t.ailments?.freeze);
+    const castable = e.spells.filter((s) => SPELLS[s] && e.stats.mp >= SPELLS[s].cost
+      && !(someoneFrozen && SPELLS[s].inflict?.ailment === 'freeze'));
+    const freezeSpell = castable.find((s) => SPELLS[s].inflict?.ailment === 'freeze');
+    if (freezeSpell && Math.random() < 0.5) return { type: 'spell', spellId: freezeSpell, targetId: target.id };
     const castChance = e.isBoss ? 0.55 : 0.4;
     if (castable.length > 0 && Math.random() < castChance) {
       const spellId = castable[Math.floor(Math.random() * castable.length)];

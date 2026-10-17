@@ -100,8 +100,121 @@ errors; `tsc --noEmit` + `pnpm build` clean.
 Not done / open: boss strata are still the fixed maps; no shop room (the
 merchant event covers some of that); events are chapter-agnostic; balance
 of boss fights with fewer boons per chapter isn't re-audited yet. The
-unmerged battle-juice branch (`claude/laughing-mcnulty-5346cf`) also edits
-`BattleScene.ts`.
+battle-juice branch (`claude/laughing-mcnulty-5346cf`) was merged in
+afterwards (see the merge entry above).
+
+## 2026-10-17 (combat): One Signature Mechanic per Chapter 2-6 + Random Elite Affixes
+
+Ask (via the main session): "all chapters and the core gameplay feel too
+repetitive". The user picked four directions; this side session did the
+combat-variety one in parallel with the run-structure rework. Every
+chapter's trash was the same wolf/sprite/wisp shape and elites were bigger
+trash, so most fights were answered by "hit the weakness".
+
+**One signature per chapter**, each asking for a different answer (Ch1 stays
+the plain weakness/break tutorial). Data in `chapters.ts` (enemy defs and
+groups only), engine in `battle.ts` (one helper block,
+"Chapter Signature Mechanics & Elite Affixes", plus one-line hooks), text
+in the new pure module `src/game/enemyMechanics.ts`:
+- **Ch2 Tideshell** (`shell` on Drowned Soldier, Tidecaller, Keep Sentinel):
+  every element but ice does 50% and can't chip guard; the first ice hit
+  shatters the shell. Open with Rime Hex (or the chapter's Tidecleaver).
+- **Ch3 Fuse** (Living Cinder: `fuse: 3`, `deathBurst.hitsAllies`): the
+  death blast now hits its own pack too (and can chain into another
+  cinder), and on its 3rd own turn the fuse burns out in a 1.5x blast
+  (`FUSE_BLAST_MULT`). Burst power 30 -> 20 to pay for that. A timing call:
+  pop it while the party is healthy / next to a wounded packmate, Defend
+  through it, never let the fuse run out on a wounded hero.
+- **Ch4 Attune** (`attuning` on Crystal Wisp, Prism Sprite, Ward Prism,
+  Geode Warden): `wardElement` follows the last element that hit it; a
+  warded element is never also a weakness (`computeHit` now returns
+  `warded`), so the same school twice in a row does 30%, chips nothing, and
+  Prism Sprite reflects only that attuned element. Crystal trash went to 2
+  guard pips and more HP (wisp 60->110, sprite 70->120, ward prism 84->130):
+  at the old values one weakness hit broke them and the follow-up killed
+  them before attunement ever came up. Now a BREAK takes two schools.
+  First tried "attune on its own turn to whatever hurt it most" — the sim
+  showed it never triggered for the same reason, so it went back to per-hit.
+- **Ch5 Tempo** (Gale Harrier: `turnSteal: 0.3`, its flat 1.25x haste
+  removed): each strike moves 30% of a turn of readiness from the target to
+  the Harrier (capped at 0.9 of a turn so it can't take an instant second
+  turn). A Defending hero keeps their place, and a hero can only be robbed
+  once between their own turns (`tempoStolen`) — live play showed Mira
+  losing tempo three times in a row and never acting before that cap.
+- **Ch6 Rime Prison** (new enemy-only spell `rime_prison`, new ailment
+  `freeze`, Glacial Wisp; `frostfangs` group is now Frostfang + Glacial
+  Wisp): the frozen hero skips turns until an ally heals them (spell or
+  item, `thaw()`) or cures them (Purifying Draught / Aegis), max 2 skipped
+  turns, one frozen hero at a time. The AI favors it (50%) while nobody is
+  frozen and never casts it while someone is.
+
+**Elite affixes** (`rollEliteAffixes` in `makeEncounterForArea`, one line):
+every non-boss elite rolls one of Armored (+1 guard pip), Hasted (1.3x
+speed), Regenerating (10% max HP per own turn, stopped by Burn/Venom) or
+Splitting (at <=50% HP a "<name> Shard" with 30% HP / 70% STR joins the
+fight; `Battle.resolveSplits` pushes it into `enemies`). The affix is
+prefixed to the name and explained in the battle-start log line.
+Vampiric (enemy lifesteal) was the first draft of the third slot; the sim
+showed it did nothing (+0.3 turns even at 100% drain — elites land too
+few basic attacks), so Regenerating replaced it.
+
+**BattleScene** (kept contained for the battle-juice merge): a live badge
+under each enemy's HP bar (`SHELL`, `FUSE 2`, `RESISTS FIRE`,
+`STEALS TURNS`, `FREEZES`, affix labels), a one-time prompt-line tip per
+mechanic (flags `seen_mech_shell/fuse/attune/tempo/rime`, same style as the
+weakness tip), an ice block over a frozen hero, `freeze` in the ailment
+tables, and `spawnEnemyVisual` for the Splitting shard (top-left, reuses
+`buildEnemyHpBars`). All via `refreshMechanics()` at the end of
+`refreshStatus()`; no edits in playEvents/processEvent/animations. A trial
+`git merge-file` against `claude/laughing-mcnulty-5346cf`'s working tree:
+battle.ts merges clean; BattleScene.ts has one conflict that already exists
+between HEAD and that branch (the boon commit's `animateEvent` line), none
+from this work.
+
+Real-`Battle` sim (2000 fights per cell, level floor = elites+bosses only:
+Ch2 L4, Ch3 L6, Ch4 L8, Ch5 L9, Ch6 L10; default gear, no boons; "smart"
+policy, mechanic-aware where it matters). HP lost, before -> after:
+
+| ch | group | before | after |
+|---|---|---|---|
+| 2 | soldiers | 9.8% | 10.8% (17.6% if you ignore the shell) |
+| 2 | elite | 10.3% | 16.1% (23.3% ignoring the shell) |
+| 3 | golems / wraiths | 35.1 / 36.0% | 25.3 / 30.7% |
+| 3 | elite | 34.6% | 29.1% |
+| 4 | wisps / prisms | 4.8 / 24.9% | 9.0 / 18.9% |
+| 4 | elite | 11.9% | 16.0% |
+| 5 | harriers / squalls | 11.7 / 16.7% | 12.2 / 17.0% |
+| 6 | frostfangs | 13.5% | 6.0% (10.0% if nobody thaws) |
+| 6 | glacial_pack | 20.0% | 19.7% (24.6% if nobody thaws) |
+
+Win rate 99.6-100% everywhere. Elite affixes on top of that (low floor,
+vs. the same elite with no affix): Armored +0-2.2 pts HP lost, Hasted
++1.6-4.8, Regenerating +0-1.1, Splitting +1.2-4.7; none changes the worst
+single hit. Regenerating is the mildest (the smart policy kills elites in
+2-3 of their turns); raise `REGEN_FRAC` if it reads as flavor only. **Worst hit vs Lyra**
+stays in the ~51-57% band: every group's worst is <= 54.9% (Ch5 elite,
+unchanged), the fuse blast peaks at 50.7% of a L6 Lyra (400 forced
+detonations), Rime Prison at 32.2% of a L10 Lyra. Ch3 trash worst hit
+dropped from 50.7% to 41.8% with the smaller burst.
+
+Verified live in the dev build (Browser pane, jumping fights with
+`DescentScene.triggerEncounter`): Ch2 soldiers (tip + SHELL badges, Attack
+halved to 20, Guardbreak chips nothing, Rime Hex "tideshell freezes and
+shatters", then normal), Ch3 golems + hound/cinder (FUSE 3->2->1 badge,
+fuse burns out and hits the party and the Magma Golem for 36, Defend cut the
+blast 27 -> 17), Ch4 prisms (RESISTS PHYSICAL after Guardbreak, a repeat
+physical hit did 12 and was refracted, Guardbreak + Rime Hex BREAKs a
+sprite), Ch5 harriers (steal moves the hero back in ORDER, second hit on the
+same hero doesn't steal again), Ch6 frostfangs (Rime Prison, ice block +
+Frozen dot, Dawnmend frees Kael), Ch2 elite with Splitting (start log line,
+shard spawns with its own bar). `tsc --noEmit` + `pnpm build` clean.
+
+Not done / follow-ups: bosses untouched (their phase-2 twists already do
+this job); the intent text the header of `battle.ts` describes isn't drawn
+anywhere in BattleScene, so mechanics are shown via badges + log instead;
+group keys `hounds`/`frostfangs` kept for the map even though `frostfangs`
+is now Frostfang + Glacial Wisp. Merged into main afterwards (see the
+merge entry above).
 
 ## 2026-10-17 (boons): Cut the Boon Pool From 30 to 16
 

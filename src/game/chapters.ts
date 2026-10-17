@@ -29,6 +29,7 @@
 //                         secret, unlike the other tiles above (which are
 //                         theme-agnostic auto-triggers with no memory)
 
+import { rollEliteAffixes } from './enemyMechanics';
 import type { Combatant, Element, Stats } from './types';
 
 // ---------------------------------------------------------------------------
@@ -289,11 +290,18 @@ const AREA_2: AreaDef = {
 // Chapter 2 enemies — Sunken City (depth 3-4)
 // ---------------------------------------------------------------------------
 
+// Sunken signature — Tideshell: a skin of living water that halves every hit
+// and keeps guard from chipping until an Ice hit freezes and shatters it.
+// Open with Lyra's Rime Hex (or the Tidecleaver this chapter's chest holds),
+// then go for the weakness.
+const TIDESHELL = { breaker: 'ice', mult: 0.5 } as const;
+
 function drownedSoldier(id: string): Combatant {
   return armed({
     id, name: 'Drowned Soldier', side: 'enemy',
     spriteKey: 'e_warden', color: 0x2a4a6a, size: 26,
     spells: [], goldReward: 20, xpReward: 18,
+    shell: { ...TIDESHELL },
     stats: s(80, 17, 7, 13, 2),
   }, ['holy'], 2);
 }
@@ -324,6 +332,7 @@ function keepSentinel(): Combatant {
     id: 'elite0', name: 'Keep Sentinel', side: 'enemy',
     spriteKey: 'e_warden', color: 0x152e4a, size: 32,
     spells: ['frost'], goldReward: 72, xpReward: 70, isElite: true,
+    shell: { ...TIDESHELL },
     stats: s(150, 20, 8, 16, 8, 20),
   }, ['holy', 'fire'], 3);
 }
@@ -339,13 +348,14 @@ function tideWarden(): Combatant {
   }, ['fire', 'holy'], 3);
 }
 
-// Sunken signature: a healer that mends its allies — burst it down or focus
-// the threats first, or the fight never ends.
+// A healer that mends its allies — burst it down or focus the threats first,
+// or the fight never ends. Shelled too, so cracking it costs an ice hit.
 function tidecaller(id: string): Combatant {
   return armed({
     id, name: 'Tidecaller', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x3a9ab0, size: 20,
     spells: ['cure'], goldReward: 26, xpReward: 28,
+    shell: { ...TIDESHELL },
     stats: s(60, 6, 12, 6, 18, 44),
   }, ['holy'], 1);
 }
@@ -491,14 +501,18 @@ function ashbrand(): Combatant {
   }, ['ice'], 4);
 }
 
-// Ashen signature: fragile but detonates on death for fire AoE — mind the kill
-// order, and don't pop one next to a wounded hero.
+// Ashen signature — Fuse: fragile, but bursts on death for fire AoE that hits
+// the party AND its own pack, and on its third turn its fuse burns out in a
+// 1.5x blast (battle.ts FUSE_BLAST_MULT). So it's a timing call: pop it early while the party is healthy,
+// or next to a wounded packmate to finish that one too — just never let the
+// fuse run out on a wounded hero.
 function livingCinder(id: string): Combatant {
   return armed({
     id, name: 'Living Cinder', side: 'enemy',
     spriteKey: 'e_ember', color: 0xff5522, size: 18,
     spells: [], goldReward: 20, xpReward: 22,
-    deathBurst: { element: 'fire', power: 30 },
+    deathBurst: { element: 'fire', power: 20, hitsAllies: true },
+    fuse: 3,
     stats: s(38, 14, 15, 4, 2),
   }, ['ice'], 1);
 }
@@ -520,13 +534,22 @@ export function makeChapter3Encounter(group: Ch3EncounterGroup): Combatant[] {
 // Chapter 4 enemies — Crystal Depths (depth 7-8)
 // ---------------------------------------------------------------------------
 
+// Crystal signature — Attune: every crystal hardens against whichever element
+// hit it last (wardElement follows the hit), including its own weakness — so
+// the same school twice in a row is resisted and can't chip guard. With two
+// guard pips, BREAKing one takes two different schools (weakness, then
+// Guardbreak or another weakness). Guard 1->2 and HP raised (wisp 60->110,
+// sprite 70->120, ward prism 84->130): at the old values one weakness hit
+// broke them and the +50% follow-up killed them before attunement came up
+// (real-Battle sim: no difference between playing around it and ignoring it).
 function crystalWisp(id: string): Combatant {
   return armed({
     id, name: 'Crystal Wisp', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x8a5ad0, size: 18,
     spells: [], goldReward: 24, xpReward: 30,
-    stats: s(60, 16, 17, 6, 8),
-  }, ['fire'], 1);
+    attuning: true,
+    stats: s(110, 16, 17, 6, 8),
+  }, ['fire'], 2);
 }
 
 function caveStalker(id: string): Combatant {
@@ -544,10 +567,11 @@ function prismSprite(id: string): Combatant {
     id, name: 'Prism Sprite', side: 'enemy',
     spriteKey: 'e_sprite', color: 0xc78aff, size: 18,
     spells: ['smite', 'frost'], goldReward: 26, xpReward: 32,
-    // Refracts anything that isn't its weakness back at the attacker.
+    // Refracts the element it's currently attuned to back at the attacker.
+    attuning: true,
     reflectFrac: 0.4,
-    stats: s(70, 9, 16, 6, 22, 32),
-  }, ['ice'], 1);
+    stats: s(120, 9, 16, 6, 22, 32),
+  }, ['ice'], 2);
 }
 
 function geodeWarden(): Combatant {
@@ -555,6 +579,9 @@ function geodeWarden(): Combatant {
     id: 'elite0', name: 'Geode Warden', side: 'enemy',
     spriteKey: 'e_warden', color: 0x5a2a8a, size: 34,
     spells: ['frost'], goldReward: 90, xpReward: 130, isElite: true,
+    // The chapter's signature on the elite too: after each fire hex it
+    // hardens against fire, so its 4 pips come off Lyra and Kael in turn.
+    attuning: true,
     stats: s(310, 26, 9, 24, 10, 20),
   }, ['fire'], 4);
 }
@@ -570,17 +597,18 @@ function prismSovereign(): Combatant {
   }, ['fire', 'holy'], 4);
 }
 
-// Crystal signature: shrugs off ice almost entirely — switch to fire/holy/physical
-// (its weaknesses) to break through, or your frost hexes fizzle. Paired with
-// Prism Sprite (weak to ice) it punishes blanket frost AoE from both ends.
+// Starts attuned to ice — open with fire/holy/physical (its weaknesses), then
+// keep switching. Paired with Prism Sprite (weak to ice) it punishes blanket
+// AoE of any one element.
 function wardPrism(id: string): Combatant {
   return armed({
     id, name: 'Ward Prism', side: 'enemy',
     spriteKey: 'e_sprite', color: 0x6affd0, size: 20,
     spells: ['frost'], goldReward: 30, xpReward: 36,
     wardElement: 'ice',
-    stats: s(84, 10, 14, 8, 20, 28),
-  }, ['fire', 'holy'], 1);
+    attuning: true,
+    stats: s(130, 10, 14, 8, 20, 28),
+  }, ['fire', 'holy'], 2);
 }
 
 type Ch4EncounterGroup = 'wisps' | 'wisp_stalker' | 'stalkers' | 'prisms' | 'elite' | 'ch4_boss';
@@ -783,9 +811,11 @@ function galeHarrier(id: string): Combatant {
     spriteKey: 'e_sprite', color: 0x9fc8e0, size: 18,
     spells: [], goldReward: 29, xpReward: 36,
     attackInflict: { ailment: 'chill', chance: 0.25, rounds: 2 },
-    // Rides the crosswind — permanently hasted, so it acts far more often
-    // than its packmates and rewards being focused down first.
-    speedStatuses: { haste: { mult: 1.25, turns: 999 } },
+    // Tempest signature — Tempo: each strike steals 30% of a turn from its
+    // target and keeps it (the hero slides back in ORDER, the Harrier comes
+    // round sooner). A Defending hero holds their place. Replaces its old
+    // flat 1.25x haste, so its own pace is about the same unanswered.
+    turnSteal: 0.3,
     stats: s(78, 22, 20, 7, 2),
   }, ['ice'], 1);
 }
@@ -998,11 +1028,14 @@ function frostwardedSentinel(id: string): Combatant {
   }, ['holy'], 3);
 }
 
+// Frost signature — Rime Prison: freezes one hero solid (they skip their
+// turns) until an ally heals or cures them, or two turns pass. Keep Mira's
+// MP (or an Elixir) for the thaw, or kill the wisp first.
 function glacialWisp(id: string): Combatant {
   return armed({
     id, name: 'Glacial Wisp', side: 'enemy',
     spriteKey: 'e_sprite', color: 0xcdeefc, size: 18,
-    spells: ['frost', 'smite'], goldReward: 42, xpReward: 53,
+    spells: ['rime_prison', 'frost', 'smite'], goldReward: 42, xpReward: 53,
     stats: s(110, 10, 18, 7, 28, 40),
   }, ['fire'], 1);
 }
@@ -1036,7 +1069,7 @@ type Ch6EncounterGroup = 'frostfangs' | 'frostfang_crawler' | 'crawler_sentinel'
 
 export function makeChapter6Encounter(group: Ch6EncounterGroup): Combatant[] {
   switch (group) {
-    case 'frostfangs':       return [frostfang('e0'), frostfang('e1')];
+    case 'frostfangs':       return [frostfang('e0'), glacialWisp('e1')];
     case 'frostfang_crawler': return [frostfang('e0'), rimebackCrawler('e1')];
     case 'crawler_sentinel': return [rimebackCrawler('e0'), frostwardedSentinel('e1')];
     case 'glacial_pack':     return [frostfang('e0'), glacialWisp('e1'), frostfang('e2')];
@@ -1211,5 +1244,5 @@ export function makeEncounterForArea(area: AreaDef, group: string, ngPlus = 0): 
     : area.id.startsWith('tempest') ? makeChapter5Encounter(group as Ch5EncounterGroup)
     : area.id.startsWith('frost')   ? makeChapter6Encounter(group as Ch6EncounterGroup)
     : makeChapter1Encounter(group as EncounterGroup);
-  return scaleForNgPlus(enemies, ngPlus);
+  return rollEliteAffixes(scaleForNgPlus(enemies, ngPlus));
 }
