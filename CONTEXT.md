@@ -2,6 +2,32 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-10-17.
 
+## 2026-10-17 (merge): Battle Feel + Chapter Mechanics Merged Into Main
+
+Ask: "la oss forbedre gameplay". Two finished side-session branches weren't
+in main yet, so the user chose to bring them in first: battle feel
+(`claude/laughing-mcnulty-5346cf`, entry "fun 2") and per-chapter
+mechanics + elite affixes (`claude/confident-wescoff-373361`, entry
+"combat"). Committed each in its worktree, then merged both into main with
+`--no-ff`.
+
+Conflicts: `BattleScene.animateEvent`'s `info`-event number branch (main
+had only a comment tweak; the battle-feel branch removed the branch because
+`landHit` now floats those numbers, so its version was kept to avoid double
+numbers) and `CONTEXT.md` (all entries kept, newest first). `battle.ts`,
+`chapters.ts` and the rest auto-merged. Elite affixes are rolled in
+`makeEncounterForArea`, so they also apply to the generated Elite rooms.
+
+Verified after the merge: `tsc --noEmit` + `pnpm build` clean. A rebuilt
+real-`Battle` sim ran every chapter's trash and elite groups (Lv 1/4/7/9/
+11/13 parties, no gear or boons) with no crashes or stuck fights.
+Chapter 1 numbers are identical to before. "Smart" play wins 100%
+everywhere, while mashing Attack now loses to several elites (Ch2 6%, Ch4
+0%, Ch6 30%, Ch4 prisms 14%), which is the intended "needs a different
+answer". Live: a Ch2 Elite room spawned "Regenerating Keep Sentinel" with
+its SHELL mechanic tip and REGEN badge, hits landed with the new impact,
+zero console errors.
+
 ## 2026-10-17 (vitals): Show HP/MP Carry-Over, Small Heal Between Rooms
 
 Ask: "hvorfor har heltene forskjellige hp og mp i byen vs i dungeons?" It
