@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, isRiftActive, isRoomActive, setRoomArea, clearRoomArea, type AreaTheme } from '../game/chapters';
-import { generateRoom, isCombatRoom, goldRoomPurse, ROOM_INFO, type RoomKind } from '../game/rooms';
+import { generateRoom, isCombatRoom, goldRoomPurse, healBetweenRooms, ROOM_INFO, ROOM_HEAL_HP, ROOM_HEAL_MP, type RoomKind } from '../game/rooms';
 import { EVENTS } from '../game/events';
 import { rollBoonChoices } from '../game/boons';
 import { getRun, getSave, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
@@ -13,7 +13,7 @@ import { track, chapterOfDepth } from '../game/analytics';
 import { paintPixelGrid } from '../art/sprites';
 import { themeFloor, themeWall, tileVariant } from '../art/tiles';
 import { DescentHudScene } from './DescentHudScene';
-import { pickBanter, DESCENT_BANTER, FIRST_FIGHT_BANTER } from '../game/banter';
+import { pickBanter, DESCENT_BANTER, FIRST_FIGHT_BANTER, ATTRITION_TIP } from '../game/banter';
 import { showBanterToast } from '../ui/banterToast';
 
 const GUST_DIR: Record<'up' | 'down' | 'left' | 'right', [number, number]> = {
@@ -158,6 +158,17 @@ export class DescentScene extends Phaser.Scene {
     this.scene.launch('DescentHud', { areaName: area.name, accentColor: area.theme.accent });
     this.hud = this.scene.get('DescentHud') as DescentHudScene;
     this.bindInput();
+    // Show where the party stands on arrival (after the HUD scene has built).
+    this.time.delayedCall(350, () => {
+      this.hud.flashVitals(data?.room
+        ? `Catching your breath: +${Math.round(ROOM_HEAL_HP * 100)}% HP, +${Math.round(ROOM_HEAL_MP * 100)}% MP`
+        : undefined);
+      // Once ever, on the first room-to-room move: say why HP/MP don't refill.
+      if (data?.room && !hasFlag('heard_attrition_tip')) {
+        setFlag('heard_attrition_tip');
+        showBanterToast(this.hud, [ATTRITION_TIP]);
+      }
+    });
 
     music.play('explore', this.currentThemeId as AreaThemeId);
 
@@ -190,6 +201,7 @@ export class DescentScene extends Phaser.Scene {
       }
       this.hud.setGold(getRun().gold);
       this.hud.refreshBoonHud();
+      if (data?.fromBattle) this.hud.flashVitals();
     });
   }
 
@@ -702,6 +714,7 @@ export class DescentScene extends Phaser.Scene {
       });
     }
     this.floatText('The spring restores you (+50% HP/MP)', '#9ae8ff', 0);
+    this.hud.flashVitals();
   }
 
   private floatText(text: string, color: string, delayOffset: number) {
@@ -811,6 +824,7 @@ export class DescentScene extends Phaser.Scene {
     if (this.busy || !room) return;
     this.busy = true;
     sfx.play('confirm');
+    healBetweenRooms(getRun().party);
     this.buildRoom(room.index + 1, kind);
     saveProgress();
     this.cameras.main.fadeOut(220, 7, 6, 14);
@@ -870,6 +884,7 @@ export class DescentScene extends Phaser.Scene {
       this.moveLockedUntil = this.time.now + 300;
       this.hud.setGold(getRun().gold);
       this.hud.refreshBoonHud();
+      this.hud.flashVitals();
     };
     this.scene.launch('Event', {
       event,

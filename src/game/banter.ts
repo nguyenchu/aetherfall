@@ -150,6 +150,13 @@ export const FIRST_FIGHT_BANTER: BanterLine[] = [
   { ...KAEL, text: 'It\'s stood through worse. So will we.' },
 ];
 
+// Once, on the first move between generated rooms: HP/MP carry over between
+// fights in a descent and only town fully restores, which read as a bug.
+export const ATTRITION_TIP: BanterLine = {
+  ...MIRA,
+  text: 'Nothing out here mends us the way the Anchor does. Springs help — and catching our breath between rooms.',
+};
+
 // A rotating one-liner shown under the Merchant's shop header — small,
 // self-aware comic relief in a game that's otherwise fairly grim.
 export const MERCHANT_QUIPS: string[] = [

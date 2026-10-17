@@ -24,6 +24,7 @@ export class DescentHudScene extends Phaser.Scene {
   private goldText?: Phaser.GameObjects.Text;
   private boonTexts: Phaser.GameObjects.Text[] = [];
   private hintText?: Phaser.GameObjects.Text;
+  private vitals?: Phaser.GameObjects.Container;
 
   constructor() {
     super('DescentHud');
@@ -34,6 +35,7 @@ export class DescentHudScene extends Phaser.Scene {
     this.boonTexts = [];
     this.hintText = undefined;
     this.goldText = undefined;
+    this.vitals = undefined;
 
     this.buildHud(data.areaName, data.accentColor);
     this.refreshBoonHud();
@@ -70,6 +72,41 @@ export class DescentHudScene extends Phaser.Scene {
       this.boonTexts.push(this.add.text(GAME.width - 4, 32 + maxShown * 10, `+${boons.length - maxShown} more`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })).setOrigin(1, 0).setDepth(10));
     }
+  }
+
+  /**
+   * Party HP/MP for a few seconds under the area name, then fades out. HP and
+   * MP carry over between fights in a descent (only town fully restores), so
+   * the player needs to see them — but the always-on party panel was removed
+   * as clutter on 2026-07-16, so this only shows at moments that change or
+   * matter: entering a room, a spring, an event. `note` adds a line on top.
+   */
+  flashVitals(note?: string) {
+    this.vitals?.destroy();
+    const box = this.add.container(4, 32).setDepth(10).setAlpha(0);
+    this.vitals = box;
+    let y = 0;
+    if (note) {
+      box.add(this.add.text(0, y, note, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#6cf0c2', strokeThickness: 2 })));
+      y += 10;
+    }
+    for (const c of getRun().party) {
+      const s = c.stats;
+      const ratio = s.maxHp > 0 ? Math.max(0, s.hp) / s.maxHp : 0;
+      const hpColor = s.hp <= 0 ? 0x6a6f88 : ratio < 0.3 ? 0xff6a6a : ratio < 0.6 ? 0xf0d36c : 0x6cf0a0;
+      box.add(this.add.text(0, y, c.name, sharpText({ fontFamily: FONT, fontSize: '7px', color: '#dfe4f5', strokeThickness: 2 })));
+      box.add(this.add.rectangle(30, y + 4, 34, 3, 0x1a1f36, 1).setOrigin(0, 0.5));
+      box.add(this.add.rectangle(30, y + 4, 34 * ratio, 3, hpColor, 1).setOrigin(0, 0.5));
+      const label = s.hp <= 0 ? 'KO' : `${s.hp}/${s.maxHp}`;
+      box.add(this.add.text(67, y, `${label}  MP ${s.mp}/${s.maxMp}`, sharpText({
+        fontFamily: FONT, fontSize: '7px', color: s.hp <= 0 ? '#8a93b8' : '#c9cee8', strokeThickness: 2,
+      })));
+      y += 9;
+    }
+    this.tweens.add({
+      targets: box, alpha: 1, duration: 200,
+      onComplete: () => this.tweens.add({ targets: box, alpha: 0, delay: 3200, duration: 500 }),
+    });
   }
 
   setGold(gold: number) {

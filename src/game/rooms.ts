@@ -14,10 +14,26 @@
 import Phaser from 'phaser';
 import { baseArea, type AreaDef, type ChestContents } from './chapters';
 import { EVENT_IDS } from './events';
+import type { Combatant } from './types';
 
 export type RoomKind = 'fight' | 'boon' | 'elite' | 'treasure' | 'spring' | 'event';
 
 export const ROOMS_PER_CHAPTER = 5;
+
+// Walking through a door restores a little: HP/MP carry over between fights
+// (only town fully restores), and over five rooms in a row that attrition
+// was steep. Small enough that Rest rooms and springs still matter.
+export const ROOM_HEAL_HP = 0.15;
+export const ROOM_HEAL_MP = 0.2;
+
+/** Applies the between-room breather to living heroes (KO'd stay down). */
+export function healBetweenRooms(party: Combatant[]): void {
+  for (const c of party) {
+    if (c.stats.hp <= 0) continue;
+    c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.round(c.stats.maxHp * ROOM_HEAL_HP));
+    c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + Math.round(c.stats.maxMp * ROOM_HEAL_MP));
+  }
+}
 
 /** Run-scoped progress through the current chapter's rooms (RunState.room). */
 export interface RoomProgress {

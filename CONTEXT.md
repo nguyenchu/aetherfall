@@ -2,6 +2,37 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-10-17.
 
+## 2026-10-17 (vitals): Show HP/MP Carry-Over, Small Heal Between Rooms
+
+Ask: "hvorfor har heltene forskjellige hp og mp i byen vs i dungeons?" It
+wasn't a bug. Max HP/MP is the same everywhere (same `RunState.party`
+objects; blessings and gear apply consistently). Current HP/MP differs by
+design: town restores everything (`returnToTown → restoreParty`), while a
+descent doesn't refill between fights. On top of that, *Crystal Weakness*
+starts the descent at 70% HP, *Dark Drain* takes 1 HP per step, and Ashen
+embers take 4 HP. It read as a bug because nothing in the dungeon showed
+the party's state (the always-on party panel was removed as clutter on
+2026-07-16). The user asked to make it clearer and consider healing
+between rooms.
+
+- `DescentHudScene.flashVitals(note?)`: a compact party strip (name, HP
+  bar coloured green/yellow/red, HP, MP, KO) under the area name that fades
+  in and fades out ~3 s later. It isn't the old always-on panel. It shows on
+  arriving in a room or stratum, after every battle, after a spring and
+  after an event.
+- `rooms.ts healBetweenRooms`: walking through a door restores 15% max HP
+  and 20% max MP to living heroes (KO'd stay down), shown as the strip's
+  note "Catching your breath: +15% HP, +20% MP". It's small enough that Rest
+  rooms and springs still matter.
+- One-time Mira banter on the first room-to-room move (`ATTRITION_TIP`,
+  flag `heard_attrition_tip`): nothing out here mends like the Anchor;
+  springs and breathers between rooms help.
+
+Verified live: arrival strip with correct values; party set to 40% HP / 2
+MP → door → Kael 41→56/102 HP, 2→5/14 MP (+15%/+20%), strip with note and
+yellow bars, Mira's tip toast beside it without overlap; zero console
+errors; `tsc --noEmit` + `pnpm build` clean.
+
 ## 2026-10-17 (rooms): Chapter Entrances Become Generated Rooms With Door Choices
 
 Ask: "alle kapitlene og selve gameplayet er for repetitivt!" Diagnosis: all
