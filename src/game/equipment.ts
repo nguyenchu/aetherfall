@@ -737,7 +737,7 @@ export function gearFor(ids: Array<string | undefined>): {
   return { attackElement, attackInflict, critInflict, gear };
 }
 
-const AILMENT_VERB: Record<Ailment, string> = { burn: 'burn', chill: 'chill', venom: 'poison' };
+const AILMENT_VERB: Record<Ailment, string> = { burn: 'burn', chill: 'chill', venom: 'poison', freeze: 'freeze' };
 
 /** Human-readable effect lines for the equip UI and shop. */
 export function equipmentEffectText(item: Equipment): string[] {

@@ -9,7 +9,9 @@ export type Element = 'physical' | 'fire' | 'ice' | 'holy' | 'none';
 //   burn  - fire DoT (6% of max HP per tick)
 //   chill - initiative halved and -25% damage dealt
 //   venom - poison DoT (5% of max HP per tick)
-export type Ailment = 'burn' | 'chill' | 'venom';
+//   freeze - party only (Chapter 6's Rime Prison): skips the bearer's turns
+//            until an ally heals or cures them, or it runs out
+export type Ailment = 'burn' | 'chill' | 'venom' | 'freeze';
 
 /** Chance-based ailment application, used by spells and enemy attacks. */
 export interface Inflict {
@@ -122,7 +124,31 @@ export interface Combatant {
   // at the attacker (Crystal's Prism Sprite).
   reflectFrac?: number;
   // On death, deals area damage to the whole living party (e.g. Ashen cinders).
-  deathBurst?: { element: Element; power: number };
+  // hitsAllies: the blast also catches the bearer's own packmates.
+  deathBurst?: { element: Element; power: number; hitsAllies?: boolean };
+  // --- Chapter signature mechanics (see enemyMechanics.ts) ---
+  // Ch2 Tideshell: every element but `breaker` deals `mult` damage and can't
+  // chip guard; the first `breaker` hit shatters it for good.
+  shell?: { breaker: Element; mult: number };
+  // Ch3 fuse: counts down at the start of each of its own turns; at 0 it
+  // detonates (its deathBurst, boosted) instead of acting.
+  fuse?: number;
+  // Ch4 attuning: wardElement follows the last element that hit it, so the
+  // same school twice in a row is resisted (and reflected, with reflectFrac)
+  // and can't chip guard — breaking it takes two different schools.
+  attuning?: boolean;
+  // Ch5: each basic attack moves this fraction of a turn of readiness from
+  // the target to the attacker, unless the target is defending. tempoStolen
+  // marks a hero already robbed since their last turn (once per turn, so a
+  // pack can't lock one hero out of acting).
+  turnSteal?: number;
+  tempoStolen?: boolean;
+  // Elite affixes (enemyMechanics.ts): which one was rolled, the fraction of
+  // max HP healed on each own turn unless burning/poisoned (Regenerating),
+  // and the add that breaks away at half HP (Splitting).
+  affix?: string;
+  regenFrac?: number;
+  splitSpawn?: Combatant;
   // Shrugs off most damage of this element — forces switching attack element
   // (e.g. Crystal prisms). Distinct from `weakness` (which amplifies).
   wardElement?: Element;

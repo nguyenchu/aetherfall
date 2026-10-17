@@ -64,6 +64,14 @@ export const SPELLS: Record<string, Spell> = {
     id: 'squall_mend', name: 'Squall\'s Grace', cost: 7, kind: 'heal', power: 12,
     element: 'none', target: 'ally', desc: 'A gust knits a packmate\'s wounds.',
   },
+  // Enemy-only lockdown (Chapter 6's Glacial Wisp): a light hit that encases
+  // the target in ice — they lose their turns until an ally heals or cures
+  // them (battle.ts thaw()), or the ice gives out after two skipped turns.
+  rime_prison: {
+    id: 'rime_prison', name: 'Rime Prison', cost: 6, kind: 'damage', power: 10,
+    element: 'ice', target: 'enemy', desc: 'Encases a foe in ice.',
+    inflict: { ailment: 'freeze', chance: 1, rounds: 3 },
+  },
   // Kael — Aetherblade: fast physical pressure and guard breaking.
   bash: {
     id: 'bash', name: 'Guardbreak', cost: 3, kind: 'damage', power: 18,

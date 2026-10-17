@@ -4,6 +4,7 @@ import { Battle } from '../game/battle';
 import { rollBoonChoices } from '../game/boons';
 import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
 import { getArea, isRiftActive, TOTAL_CHAPTERS } from '../game/chapters';
+import { eliteIntro, mechanicBadge, MECHANIC_TIPS } from '../game/enemyMechanics';
 import { applyWipePenalty, ascend, completeQuest, getRun, getSave, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
@@ -65,11 +66,11 @@ const SPELL_KIND_COLOR: Partial<Record<'damage' | 'heal' | 'buff', string>> = { 
 const ELEMENT_BADGE_SLOT = 40;
 const AILMENT_BADGE_SLOT = 32;
 
-const AILMENT_ORDER: Ailment[] = ['burn', 'chill', 'venom'];
-const AILMENT_LABEL: Record<Ailment, string> = { burn: 'Burn', chill: 'Chill', venom: 'Venom' };
-const AILMENT_COLOR: Record<Ailment, string> = { burn: '#ff8a5a', chill: '#6cb8ff', venom: '#8aff6c' };
-const AILMENT_TINT: Record<Ailment, number> = { burn: 0xff8a5a, chill: 0x6cb8ff, venom: 0x8aff6c };
-const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILLED!', venom: 'POISONED!' };
+const AILMENT_ORDER: Ailment[] = ['burn', 'chill', 'venom', 'freeze'];
+const AILMENT_LABEL: Record<Ailment, string> = { burn: 'Burn', chill: 'Chill', venom: 'Venom', freeze: 'Frozen' };
+const AILMENT_COLOR: Record<Ailment, string> = { burn: '#ff8a5a', chill: '#6cb8ff', venom: '#8aff6c', freeze: '#bfeaff' };
+const AILMENT_TINT: Record<Ailment, number> = { burn: 0xff8a5a, chill: 0x6cb8ff, venom: 0x8aff6c, freeze: 0xbfeaff };
+const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILLED!', venom: 'POISONED!', freeze: 'FROZEN!' };
 
 // Bosses get their own display scale (see placeSide) — noticeably larger
 // than any elite/trash mob, on top of their already-bigger hand-drawn
@@ -128,6 +129,10 @@ export class BattleScene extends Phaser.Scene {
   // name string.
   private dupTags = new Map<string, string>();
   private log: string[] = [];
+  // Chapter mechanics / elite affixes (enemyMechanics.ts): the live label
+  // under each enemy's HP bar, and the ice block over a frozen hero.
+  private mechBadges = new Map<string, Phaser.GameObjects.Text>();
+  private iceBlocks = new Map<string, Phaser.GameObjects.Rectangle>();
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
 
@@ -163,6 +168,8 @@ export class BattleScene extends Phaser.Scene {
     this.menuText = [];
     this.menuBacks = [];
     this.log = [];
+    this.mechBadges.clear();
+    this.iceBlocks.clear();
     this.unsubs = [];
     this.touchCleanups = [];
   }
@@ -238,7 +245,7 @@ export class BattleScene extends Phaser.Scene {
         this.advance();
       });
     } else {
-      this.pushLog(this.isElite ? 'An elite guardian blocks the way!' : 'Enemies appear!');
+      this.pushLog(this.isElite ? eliteIntro(this.battle.enemies) : 'Enemies appear!');
       this.battle.start();
       this.advance();
     }
@@ -481,7 +488,7 @@ export class BattleScene extends Phaser.Scene {
   private buildEnemyHpBars() {
     for (const e of this.battle.enemies) {
       const img = this.sprites.get(e.id);
-      if (!img) continue;
+      if (!img || this.enemyHpBars.has(e.id)) continue;
       const width = e.isBoss ? 86 : 62;
       const bg = this.add.rectangle(0, 0, width, 5, 0x07060e, 0.88).setDepth(7).setStrokeStyle(1, 0x0c0e16);
       const fill = this.add.rectangle(0, 0, width - 2, 3, e.isBoss ? 0xff5a6a : 0x6cf0a0, 0.96).setOrigin(0, 0.5).setDepth(8);
@@ -722,6 +729,15 @@ export class BattleScene extends Phaser.Scene {
     if (!hasFlag('seen_break_tip') && foes.some((e) => e.broken)) {
       setFlag('seen_break_tip');
       this.renderMenu('Tip: BROKEN foes lose a turn and take +50% damage');
+      this.stepActiveHeroForward(m.id);
+      return;
+    }
+    // Each chapter's signature mechanic, explained the first time it's on
+    // the field (the badge under the enemy's HP bar stays up after).
+    const mechTip = MECHANIC_TIPS.find((t) => !hasFlag(t.flag) && foes.some(t.has));
+    if (mechTip) {
+      setFlag(mechTip.flag);
+      this.renderMenu(mechTip.text);
       this.stepActiveHeroForward(m.id);
       return;
     }
@@ -2282,6 +2298,7 @@ export class BattleScene extends Phaser.Scene {
     }
     this.refreshPartyBars();
     this.refreshEnemyBars();
+    this.refreshMechanics();
   }
 
   private refreshEnemyBars() {
@@ -2359,6 +2376,66 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  // --- Chapter Mechanics & Elite Affixes (enemyMechanics.ts) ----------------
+
+  /** Badges under enemy HP bars, ice blocks over frozen heroes, and visuals
+   *  for any enemy that joined mid-fight (a Splitting elite's shard). Runs on
+   *  every refreshStatus(), so it tracks fuse counts and attunement live. */
+  private refreshMechanics() {
+    for (const e of this.battle.enemies) {
+      if (!this.sprites.has(e.id)) this.spawnEnemyVisual(e);
+      const img = this.sprites.get(e.id);
+      const bar = this.enemyHpBars.get(e.id);
+      if (!img || !bar) continue;
+      const badge = e.stats.hp > 0 ? mechanicBadge(e) : null;
+      let text = this.mechBadges.get(e.id);
+      if (!badge) {
+        text?.setVisible(false);
+        continue;
+      }
+      if (!text) {
+        text = this.add.text(0, 0, '', sharpText({ fontFamily: FONT, fontSize: '7px', strokeThickness: 3 })).setOrigin(0.5, 0).setDepth(9);
+        this.mechBadges.set(e.id, text);
+      }
+      const pipsBelow = (e.maxGuard ?? 0) > 0 ? 11 : 4;
+      text.setText(badge.text).setColor(badge.color).setVisible(true).setPosition(img.x, bar.bg.y + pipsBelow);
+    }
+    for (const c of this.battle.party) {
+      const img = this.sprites.get(c.id);
+      if (!img) continue;
+      const frozen = c.stats.hp > 0 && (c.ailments?.freeze ?? 0) > 0;
+      let block = this.iceBlocks.get(c.id);
+      if (frozen && !block) {
+        block = this.add.rectangle(img.x, img.y, img.displayWidth + 6, img.displayHeight + 6, 0xbfeaff, 0.38)
+          .setStrokeStyle(2, 0xe8f8ff, 0.9).setDepth(6);
+        this.iceBlocks.set(c.id, block);
+      } else if (!frozen && block) {
+        block.destroy();
+        this.iceBlocks.delete(c.id);
+      }
+      block?.setPosition(img.x, img.y);
+    }
+  }
+
+  /** A Splitting elite's shard: placed up and behind the enemy line (clear
+   *  of the elite's own bar and badges), slid in like the opening entrance,
+   *  with the same HP bar/pips/badges as everyone. */
+  private spawnEnemyVisual(c: Combatant) {
+    const x = 84;
+    const y = 46;
+    const img = this.add.image(x - 30, y, c.spriteKey).setScale(1.8).setDepth(5).setAlpha(0).setTint(lighten(c.color, 70));
+    this.sprites.set(c.id, img);
+    this.spriteHome.set(c.id, { x, y });
+    this.hpDisplay.set(c.id, c.stats.hp);
+    this.mpDisplay.set(c.id, c.stats.mp);
+    this.buildEnemyHpBars();
+    this.tweens.add({
+      targets: img, x, alpha: 1, duration: 420, ease: 'Back.easeOut',
+      onUpdate: () => this.layoutEnemyBar(c.id),
+      onComplete: () => this.startIdleMotion(img, c, this.battle.enemies.length),
+    });
   }
 
   private pushLog(line: string) {
