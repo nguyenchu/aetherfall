@@ -1,6 +1,58 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-07-26.
+> Paste this into a new session to continue the work. Last updated: 2026-10-16.
+
+## 2026-10-16 (ops): First Telemetry Read — Live Site Was 3 Months Stale; Redeployed
+
+Ask: "hva anbefaler du at vi jobber på?" — picked reading the validation
+telemetry, since the roadmap has said "read the reports as data accrues"
+since 2026-07-13 and nobody had.
+
+**Telemetry, 2026-07-31 → 2026-10-05 (all data that exists):** 11 events, 10
+sessions, 9 unique `cid`s — and **every single event is `session_start`**.
+Zero `new_game`/`continue`, so no visitor in 2.5 months got past the Title
+screen. No feedback submitted. Can't tell crawlers from real bouncers (no
+UA/IP logged, by design), but the pattern leans bot: odd hours (02:41,
+03:19), one-off `cid`s, and one `session_start` logged twice within a
+second. Either way there is no gameplay data yet to validate anything with.
+
+Retention isn't the problem: the event log matches the default
+`/var/log/nginx/*.log` logrotate rule (`daily`, `rotate 14`), but
+`notifempty` means it only rotates on days with traffic, so 7 rotations
+cover everything since 2026-07-31. Nothing was lost.
+
+**The bigger finding: the live site was the 2026-07-13 build**
+(`index-C9u5-JHY.js`, Last-Modified 13 Jul, single un-split chunk) — 69
+commits behind main. Ascension/NG+, Chapters 5-6, the story rewrite, boon
+synergies, the Sanctuary rework and every balance/bugfix since never shipped.
+Whatever the few visitors saw was the four-chapter July build.
+
+**Redeployed main (03bda5a):** `pnpm build` (`tsc --noEmit` clean) →
+backed up the old web root to `~/aetherfall.bak-20261016-214200` on the box
+→ `rsync -a --delete dist/ nguyen@aetherfall.nguyenchu.com:/var/www/aetherfall/`.
+Live now serves `index-B8PNJTsv.js` + `phaser-0YPJO2g1.js` (the chunk split
+is in production for the first time). Verified in a real browser with
+`?analytics=off` (so the check doesn't pollute the data): Intro → Title
+render, input works, zero console errors.
+
+Note: one stray `e=probe` line (`v=0`) landed in
+`aetherfall_events.log` on 2026-10-16 from a `curl` reachability check of
+`/e` — not a real player; ignore it when reading reports.
+
+Ops notes for next time (new dev Mac):
+- Node isn't system-installed: Node 24 LTS lives in `~/.local/node`
+  (on `PATH` via `~/.zprofile`), pnpm via `corepack enable` (pnpm 12).
+- The Mac's SSH key is `nguyen@mac-2026-10-16` in the server's
+  `authorized_keys`; the server's ED25519 host key is
+  `SHA256:VkGZ/fFFbV/MsXFd0PAs2YtADPV4aLupY8RSMUZ17m0`.
+- The server still allows SSH password auth and is being probed by bots
+  (root/ubuntu/etc.) — worth `PasswordAuthentication no` once key access is
+  confirmed from every machine that needs it.
+
+Next: let the current build gather real data before drawing conclusions. If
+it's still all `session_start`, the Title "press any key" step is the first
+suspect — a cheap `first_input` event would separate humans who bounced from
+crawlers that never interact.
 
 ## 2026-07-26 (housekeeping): Balance Audit + Bundle Splitting; Mira-Select Bug Still Open
 
