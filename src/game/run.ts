@@ -4,7 +4,8 @@
 
 import { track } from './analytics';
 import { boonTotals, type BoonTotals } from './boons';
-import { clearRiftArea, type ChestContents } from './chapters';
+import { clearRiftArea, clearRoomArea, type ChestContents } from './chapters';
+import type { RoomProgress } from './rooms';
 import { ITEMS, SPELLS, makeParty } from './content';
 import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
 import { rollModifier, type RunModifier } from './modifiers';
@@ -23,6 +24,9 @@ export interface RunState {
   boons: string[];
   /** Healing springs used this run ('depth_col,row'); reset in town. */
   springsUsed: string[];
+  /** Progress through the current chapter entrance's generated rooms
+   *  (rooms.ts); null outside them (Sanctuary, boss strata, the Rift). */
+  room: RoomProgress | null;
 }
 
 const HP_PER_BLESSING = 8;
@@ -44,7 +48,7 @@ function buildRun(): RunState {
   }
   return {
     party, gold: save.gold, inventory: { ...save.items }, depth: 1,
-    modifier: rollModifier(), boons: [], springsUsed: [],
+    modifier: rollModifier(), boons: [], springsUsed: [], room: null,
   };
 }
 
@@ -568,6 +572,8 @@ export function restoreParty(): void {
 /** Back to Sanctuary: full healing, reset depth/boons, roll new modifier. */
 export function returnToTown(): void {
   clearRiftArea(); // any active Rift run ends the moment we're safely home
+  clearRoomArea();
+  state.room = null;
   restoreParty();
   state.depth = 1;
   state.modifier = rollModifier();

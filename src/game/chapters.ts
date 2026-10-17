@@ -1,5 +1,8 @@
 // Chapter definitions: fixed maps, encounters, and story triggers.
-// Each area is a hand-crafted ASCII map — no procedural generation.
+// Each area is a hand-crafted ASCII map. Since 2026-10-17 only the boss
+// strata (even depths) are played as these maps: each chapter's entrance
+// stratum is a run of generated rooms (rooms.ts), which reads the entrance
+// area here for its theme, trash/elite groups and signature chest.
 //
 // Tile key:
 //   #  tree / wall        .  walkable path (trash fights trigger randomly here)
@@ -150,6 +153,11 @@ export interface AreaDef {
   teleports?: Record<string, string>;
   /** Gust tiles ('G'): 'col,row' -> fixed shove direction */
   gusts?: Record<string, 'up' | 'down' | 'left' | 'right'>;
+  /** Generated rooms only (rooms.ts): door tiles ('1'-'3') -> the room kind
+   *  behind that door, shown as a label so the player picks their reward. */
+  doors?: Record<string, string>;
+  /** Generated rooms only: the event behind the room's '?' tile (events.ts). */
+  eventId?: string;
   map: string[];
 }
 
@@ -1148,8 +1156,23 @@ export function setRiftArea(area: AreaDef): void { activeRift = area; }
 export function clearRiftArea(): void { activeRift = null; }
 export function isRiftActive(): boolean { return activeRift !== null; }
 
+// A chapter's entrance stratum is played as a run of generated rooms (see
+// rooms.ts); the room currently being played overrides that stratum's fixed
+// map the same way the Rift does.
+let activeRoom: AreaDef | null = null;
+export function setRoomArea(area: AreaDef): void { activeRoom = area; }
+export function clearRoomArea(): void { activeRoom = null; }
+export function isRoomActive(): boolean { return activeRoom !== null; }
+
 export function getArea(depth: number): AreaDef {
-  return activeRift ?? ALL_AREAS[Math.min(depth - 1, ALL_AREAS.length - 1)];
+  return activeRift ?? activeRoom ?? baseArea(depth);
+}
+
+/** The fixed, hand-made area for a depth, ignoring any active Rift/room —
+ *  rooms.ts reads its entrance stratum for the chapter's theme, enemy groups
+ *  and signature chest. */
+export function baseArea(depth: number): AreaDef {
+  return ALL_AREAS[Math.min(depth - 1, ALL_AREAS.length - 1)];
 }
 
 // Ascension (New Game+) tuning: each tier scales enemy power and rewards up,

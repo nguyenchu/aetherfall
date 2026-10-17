@@ -2,6 +2,76 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-10-17.
 
+## 2026-10-17 (rooms): Chapter Entrances Become Generated Rooms With Door Choices
+
+Ask: "alle kapitlene og selve gameplayet er for repetitivt!" Diagnosis: all
+six chapters used the same recipe (a hand-made entrance map with random
+fights + elite + chest, then a hand-made boss map), every run of a chapter
+was the identical map, and the rhythm was always walk → random fight →
+walk → boss. The premise promised generated layouts inside each stratum,
+but only the Rift had them. Offered four directions; the user chose all
+four. Three of them (Hades-style room choices, generated maps, events)
+are built here as one system. The fourth, per-chapter combat mechanics and
+elite affixes, was proposed as a separate parallel session.
+
+**New run structure** (`src/game/rooms.ts`, `DescentScene`): a chapter's
+entrance stratum (odd depth, not the Rift) is now `ROOMS_PER_CHAPTER` = 5
+generated rooms, then the unchanged hand-made boss stratum. Each room is a
+fresh 24×15 map in the chapter's theme with its field mechanic (Sunken/
+Frost currents, Ashen embers, Crystal prism-pad pairs, Tempest gusts,
+Forest thicket as decoration) and holds one thing:
+- **◆ Blessing**: a visible fight that ends in a boon pick.
+- **$ Gold**: a fight plus a purse (`20 + 10×chapter`).
+- **!! Elite**: the chapter's elite group, then a rare/epic-weighted boon.
+- **▣ Treasure**: a guarded chest holding the chapter's signature weapon
+  (from the old entrance chest) until owned, then gold and a restorative.
+- **✚ Rest**: a healing spring.
+- **? Unknown**: an event (`src/game/events.ts` + `EventScene`).
+Room 1 is always a fight; a brand-new game's room 1 is the `first_fight`
+pair four tiles from the spawn. Rooms 1-4 end in 2-3 labelled doors
+(weighted roll; never all non-combat, elite not out of room 1); room 5's
+single door leads to the boss stratum. Combat rooms keep their doors
+sealed until the fight is won.
+
+**Behaviour changes:**
+- No random encounters in rooms; every fight is a visible tile ('E' trash,
+  'X' elite). The Rift still uses random encounters.
+- Boons come only from Blessing/Elite rooms and the altar event
+  (`Battle` gets `boon: false` from other room fights; the Rift and other
+  callers still get a boon per win). Door-roll sim: a boon-seeking route
+  averages 3.3 boons and 5 fights per chapter; the fewest possible fights
+  averages 2.5; a Rest door is offered in 73% of runs.
+- '<' now always ends the run (it used to step from a boss stratum back to
+  its entrance map, which no longer exists as a fixed map).
+- Room tiles (fights/chests/events) are remembered per room in
+  `RunState.room`, not as permanent save flags. Fixed boss maps still use
+  save flags.
+- The old entrance maps in `chapters.ts` aren't drawn any more; the room
+  generator reads them for theme, trash/elite groups and the signature
+  chest (`baseArea()`; `getArea()` = Rift ?? active room ?? base).
+
+**Events** (5, chapter-agnostic): Forsaken Altar (−25% HP → elite-weighted
+boon), Wandering Merchant (2 Elixirs 25g / Tonic 18g), Bound Chest (+gold,
+−20% HP), Aether Pool (full HP *or* full MP + 50 Limit), Sprite Gambler
+(30g double-or-nothing). Unaffordable options show greyed out.
+
+Verified live (dev server, fresh save): room 1 with the teaching pair and
+three sealed doors → won → no boon (Gold room), +30 purse, doors unseal →
+"? Unknown" → Wandering Merchant cards → bought Elixirs (63 → 38 gold) →
+Blessing room → boon pick → Treasure (guarded, granted Emberfang) → Elite
+(Alpha Shade Wolf, boon pick) → Rest (spring) → boss door → Twisting Hollow
+→ '<' → RunSummary → Sanctuary → new descent starts a fresh room 1. A
+generator stress test produced 6480 rooms (6 chapters × 6 kinds × rooms
+1/3/5 × 60) with zero failures: correct content tile, the chapter's own
+field tiles and trash groups, and a boss door on every room 5. Zero console
+errors; `tsc --noEmit` + `pnpm build` clean.
+
+Not done / open: boss strata are still the fixed maps; no shop room (the
+merchant event covers some of that); events are chapter-agnostic; balance
+of boss fights with fewer boons per chapter isn't re-audited yet. The
+unmerged battle-juice branch (`claude/laughing-mcnulty-5346cf`) also edits
+`BattleScene.ts`.
+
 ## 2026-10-17 (boons): Cut the Boon Pool From 30 to 16
 
 Ask: "30 blessing er kanskje litt mye" — confirmed it meant the 30 distinct

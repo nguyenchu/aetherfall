@@ -93,6 +93,7 @@ export class BattleScene extends Phaser.Scene {
   private battle!: Battle;
   private ui: UIState = 'menu';
   private isElite = false;
+  private grantsBoon = true;
 
   // Input
   private activeActor!: Combatant; // whoever's turn it is in the CTB queue
@@ -205,8 +206,11 @@ export class BattleScene extends Phaser.Scene {
     this.resetState();
 
     const run = getRun();
-    const data = this.scene.settings.data as { enemies: Combatant[]; elite?: boolean };
+    const data = this.scene.settings.data as { enemies: Combatant[]; elite?: boolean; boon?: boolean };
     this.isElite = data.elite === true || data.enemies.some((e) => e.isElite);
+    // Room runs (rooms.ts) only offer a boon from Blessing and Elite rooms;
+    // everything else (the Rift, legacy callers) keeps a boon per win.
+    this.grantsBoon = data.boon !== false;
     this.disambiguateEnemyNames(data.enemies);
     this.battle = new Battle(run.party, data.enemies, run.inventory);
 
@@ -1580,7 +1584,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Choose a boon before returning to the descent — the roguelite core loop.
     this.time.delayedCall(900, () => {
-      const choices = rollBoonChoices(run.boons, this.isElite);
+      const choices = this.grantsBoon ? rollBoonChoices(run.boons, this.isElite) : [];
       const finish = () => {
         this.scene.resume('Descent', { won: true, fromBattle: true });
         this.scene.stop();
