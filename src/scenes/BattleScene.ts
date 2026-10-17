@@ -75,6 +75,27 @@ const AILMENT_STAMP: Record<Ailment, string> = { burn: 'BURNING!', chill: 'CHILL
 // than any elite/trash mob, on top of their already-bigger hand-drawn
 // sprite grid (see spriteData.ts).
 const BOSS_SCALE = 3.4;
+const UNIT_SCALE = 2.4;
+
+// Event playback pacing (see playEvents/eventHold). Each damaging event waits
+// for its own impact (+ hit-stop) and then a short settle before the next
+// one, instead of one flat beat for everything. Hold confirm = x0.35.
+const ATTACK_IMPACT_MS = 80; // attackAnim's lunge reaching the target
+const SETTLE_MS = 210;       // after an impact lands, before the next event
+const MIN_HOLD_MS = 320;
+const TAIL_MS = 150;         // after an action's last event, before the next turn
+const FAST_FORWARD = 0.35;
+// The confirm press that commits an action is still down when its first
+// event plays — a tap, not a hold. Fast-forward only counts once confirm has
+// been held past this, so the player's own hit isn't always played at x0.35.
+const HOLD_GRACE_MS = 220;
+// Travel times of the thrown/dropped spell animations — impactDelay mirrors them.
+const PROJECTILE_MS = 200;
+const FIREBALL_MS = 200;
+const ICE_SHARD_MS = 180;
+const ICICLE_MS = 220;
+const HOLY_BEAM_MS = 130;
+const REQUIEM_IMPACT_MS = 110;
 
 function lighten(color: number, amt: number): number {
   const r = Math.min(255, ((color >> 16) & 0xff) + amt);
@@ -130,6 +151,22 @@ export class BattleScene extends Phaser.Scene {
   private log: string[] = [];
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
+  // Hit feel (see hitStop/landHit). `impactLandsAt` is the scene time the
+  // latest scheduled impact (+ its hit-stop) finishes — a BREAK stamp or
+  // death in the same parallel batch waits for it rather than beating the
+  // projectile to the target.
+  private committedAt = 0; // a player command, for HOLD_GRACE_MS
+  private dying = new Set<string>(); // enemies whose death animation has started
+  private hitStopUntil = 0;
+  private hitStopToken = 0;
+  private impactLandsAt = 0;
+  private auras = new Map<string, Phaser.GameObjects.GameObject[]>(); // elite ring / boss halo, cleared on death
+  private knockbacks = new Map<string, { tween: Phaser.Tweens.Tween; baseX: number }>();
+  // Guard pips / BREAK label as last *shown*: battle state is already final
+  // when playback starts, so without this the pips empty and the BREAK label
+  // lights up before the hit that caused them lands. Snapshotted per action
+  // in runAction, advanced per hit/break event, cleared by syncDisplay.
+  private guardShown = new Map<string, { guard: number; broken: boolean }>();
 
   constructor() {
     super('Battle');
@@ -165,6 +202,13 @@ export class BattleScene extends Phaser.Scene {
     this.log = [];
     this.unsubs = [];
     this.touchCleanups = [];
+    this.hitStopUntil = 0;
+    this.impactLandsAt = 0;
+    this.knockbacks.clear();
+    this.guardShown.clear();
+    this.auras.clear();
+    this.dying.clear();
+    this.committedAt = 0;
   }
 
   /** Two Shadow Wolves or three Corrupted Sprites in one fight are otherwise
@@ -382,7 +426,7 @@ export class BattleScene extends Phaser.Scene {
     const fromOffset = x < GAME.width / 2 ? -46 : 46;
     list.forEach((c, i) => {
       const homeY = startY + i * spacing;
-      const img = this.add.image(x + fromOffset, homeY, c.spriteKey).setScale(c.isBoss ? BOSS_SCALE : 2.4).setDepth(5).setAlpha(0);
+      const img = this.add.image(x + fromOffset, homeY, c.spriteKey).setScale(c.isBoss ? BOSS_SCALE : UNIT_SCALE).setDepth(5).setAlpha(0);
       // Non-boss enemies share a handful of sprite keys across the whole
       // bestiary (e_warden, e_sprite, etc.) — each monster's own `color`
       // (chapters.ts) recolors that shared shape via tint so, say, a Pyre
@@ -410,6 +454,12 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  private addAura(id: string, obj: Phaser.GameObjects.GameObject) {
+    const list = this.auras.get(id) ?? [];
+    list.push(obj);
+    this.auras.set(id, list);
+  }
+
   /** Elite ring / boss halo + idle bob — started only once a combatant's
    *  entrance slide-in has finished, so nothing floats or pulses mid-slide. */
   private startIdleMotion(img: Phaser.GameObjects.Image, c: Combatant, i: number) {
@@ -417,6 +467,7 @@ export class BattleScene extends Phaser.Scene {
       const ring = this.add.ellipse(img.x, img.y + img.displayHeight / 2 + 3, img.displayWidth + 18, 12)
         .setStrokeStyle(2, 0xffa03c, 0.8).setDepth(4);
       this.tweens.add({ targets: ring, alpha: { from: 0.85, to: 0.3 }, duration: 700, yoyo: true, repeat: -1 });
+      this.addAura(c.id, ring);
     }
     // Bosses get a standing radiant halo (not just the one-time reveal
     // flash) — two soft rings in the boss's own color, breathing slowly, so
@@ -425,6 +476,7 @@ export class BattleScene extends Phaser.Scene {
       const glowColor = lighten(c.color, 120);
       for (let ring = 0; ring < 2; ring++) {
         const halo = this.add.circle(img.x, img.y, img.displayWidth / 2 + 6 + ring * 10, glowColor, 0.14 - ring * 0.04).setDepth(4);
+        this.addAura(c.id, halo);
         this.tweens.add({
           targets: halo,
           alpha: { from: 0.14 - ring * 0.04, to: 0.04 },
@@ -1273,6 +1325,7 @@ export class BattleScene extends Phaser.Scene {
 
   private commit(cmd: Command) {
     this.pending = null;
+    this.committedAt = this.time.now;
     this.runAction(cmd);
   }
 
@@ -1298,6 +1351,7 @@ export class BattleScene extends Phaser.Scene {
       this.hpDisplay.set(c.id, c.stats.hp);
       this.mpDisplay.set(c.id, c.stats.mp);
     }
+    for (const e of this.battle.enemies) this.guardShown.set(e.id, { guard: e.guard ?? 0, broken: e.broken === true });
     const events = this.battle.executeTurn(actor, cmd);
     this.playEvents(events, 0, () => {
       if (this.syncAndCheckEnd()) return;
@@ -1306,8 +1360,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private playEvents(events: BattleEvent[], i: number, onDone: () => void) {
+    const fast = this.fastForward();
     if (i >= events.length) {
-      this.time.delayedCall(250, onDone);
+      // A turn that produced nothing (most turn starts) moves straight on;
+      // only an action that actually played something gets a short tail.
+      this.time.delayedCall(events.length === 0 ? 0 : Math.round(TAIL_MS * (fast ? FAST_FORWARD : 1)), onDone);
       return;
     }
     const ev = events[i];
@@ -1317,20 +1374,43 @@ export class BattleScene extends Phaser.Scene {
     // between each, so "everyone gets hit at once" actually reads that way.
     if (ev.parallel) {
       let j = i;
+      let hold = 0;
       while (j < events.length && events[j].parallel) j++;
-      for (let k = i; k < j; k++) this.processEvent(events[k]);
+      for (let k = i; k < j; k++) {
+        this.processEvent(events[k]);
+        hold = Math.max(hold, this.eventHold(events[k]));
+      }
       this.refreshStatus();
-      const base = 460;
-      const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
-      this.time.delayedCall(delay, () => this.playEvents(events, j, onDone));
+      this.time.delayedCall(Math.round(hold * (fast ? FAST_FORWARD : 1)), () => this.playEvents(events, j, onDone));
       return;
     }
     this.processEvent(ev);
     this.refreshStatus();
-    // Hold confirm to fast-forward the round.
-    const base = ev.kind === 'phase' ? 950 : ev.kind === 'break' ? 700 : ev.kind === 'ailment' ? 560 : 460;
-    const delay = input.isDown('confirm') ? Math.round(base * 0.35) : base;
-    this.time.delayedCall(delay, () => this.playEvents(events, i + 1, onDone));
+    this.time.delayedCall(Math.round(this.eventHold(ev) * (fast ? FAST_FORWARD : 1)), () => this.playEvents(events, i + 1, onDone));
+  }
+
+  /** Hold confirm to fast-forward the round (see HOLD_GRACE_MS). */
+  private fastForward(): boolean {
+    return input.isDown('confirm') && this.time.now - this.committedAt > HOLD_GRACE_MS;
+  }
+
+  /** How long an event holds the floor before the next one plays. Hits wait
+   *  for their own impact and hit-stop, then a short settle; text-only
+   *  beats are short; BREAK and boss phase changes keep a real pause. */
+  private eventHold(ev: BattleEvent): number {
+    switch (ev.kind) {
+      case 'phase': return 950;
+      case 'break': return 600;
+      case 'limit': return 460;
+      case 'ailment': return 400;
+      case 'ko': return 420;
+      case 'attack':
+      case 'spell':
+      case 'item':
+        return Math.max(MIN_HOLD_MS, BattleScene.impactDelay(ev) + this.hitStopMs(ev) + SETTLE_MS);
+      case 'info': return ev.amount ? MIN_HOLD_MS : 400;
+      default: return MIN_HOLD_MS;
+    }
   }
 
   /** Logs, animates, and applies the display state for a single event —
@@ -1339,12 +1419,13 @@ export class BattleScene extends Phaser.Scene {
   private processEvent(ev: BattleEvent) {
     this.pushLog(ev.text);
     this.animateEvent(ev);
-    if (ev.kind === 'attack') sfx.play('hit');
-    else if (ev.kind === 'spell') sfx.play('magic');
+    if (ev.kind === 'spell') sfx.play('magic');
     else if (ev.kind === 'item') sfx.play('chest');
-    else if (ev.kind === 'break') this.playBreak(ev.targetId);
     else if (ev.kind === 'phase') this.playPhaseTransition(ev.actorId);
-    else if (ev.kind === 'ailment') this.playAilment(ev.targetId, ev.ailment);
+    // A BREAK stamp, ailment tag or death in the same parallel batch as its
+    // hit waits for that hit to land (see afterImpacts).
+    else if (ev.kind === 'break') { const id = ev.targetId; this.afterImpacts(() => this.playBreak(id)); }
+    else if (ev.kind === 'ailment') { const id = ev.targetId, a = ev.ailment; this.afterImpacts(() => this.playAilment(id, a)); }
 
     if (ev.amount != null && ev.targetId) {
       const cur = this.hpDisplay.get(ev.targetId) ?? 0;
@@ -1352,14 +1433,20 @@ export class BattleScene extends Phaser.Scene {
       const max = target?.stats.maxHp ?? cur;
       const next = Phaser.Math.Clamp(cur - ev.amount, 0, max);
       this.hpDisplay.set(ev.targetId, next);
-      this.flash(ev.targetId, ev.amount > 0 ? 0xff5a6a : 0x6cf0a0);
+      // Flash, number, knockback and hit-stop land when the animation
+      // reaches the target (a thrown hex's travel time), not at cast.
+      const impact = BattleScene.impactDelay(ev);
+      const stop = this.hitStopMs(ev);
+      this.impactLandsAt = Math.max(this.impactLandsAt, this.time.now + impact + stop);
+      if (impact > 0) this.onTweenClock(impact, () => this.landHit(ev, stop));
+      else this.landHit(ev, stop);
     }
     if (ev.kind === 'spell' && ev.actorId) {
       // Rough MP sync for the caster.
       const a = this.battle.byId(ev.actorId);
       if (a) this.mpDisplay.set(a.id, a.stats.mp);
     }
-    if (ev.kind === 'ko' && ev.targetId) this.fadeKo(ev.targetId);
+    if (ev.kind === 'ko' && ev.targetId) { const id = ev.targetId; this.afterImpacts(() => this.playKo(id)); }
     // Revives (Phoenix Down, or the Anchor's Promise boon) bring hp back above
     // zero on a sprite fadeKo left dimmed and dropped — undo that visually.
     if (ev.targetId) {
@@ -1367,6 +1454,217 @@ export class BattleScene extends Phaser.Scene {
       const img = this.sprites.get(ev.targetId);
       if (revived && img && revived.stats.hp > 0 && img.alpha < 1) this.reviveSprite(ev.targetId);
     }
+  }
+
+  // --- Hit Feel -------------------------------------------------------------
+
+  /** ms from an event playing until its animation reaches the target —
+   *  mirrors each animation's own travel time (spellAnim's routing). */
+  private static impactDelay(ev: BattleEvent): number {
+    if (!ev.amount || ev.amount <= 0) return 0;
+    if (ev.kind === 'attack') return ATTACK_IMPACT_MS;
+    if (ev.kind !== 'spell' || !ev.actorId) return 0;
+    switch (ev.spellId) {
+      case 'bash': return ATTACK_IMPACT_MS;
+      case 'requiem': return REQUIEM_IMPACT_MS;
+      case 'fire': return FIREBALL_MS;
+      case 'frost': return ICE_SHARD_MS;
+      case 'blizzard': return ICICLE_MS;
+      case 'smite': return HOLY_BEAM_MS;
+      case 'cleave':
+      case 'firewave':
+      case 'cataclysm':
+        return 0;
+      default: return ev.element === 'physical' ? ATTACK_IMPACT_MS : PROJECTILE_MS;
+    }
+  }
+
+  /** 0..1.4: how hard a hit should feel — the share of the target's max HP
+   *  it took (square-rooted so chip damage on a boss still registers), plus
+   *  a bump for weakness hits and a bigger one for crits. */
+  private hitWeight(ev: BattleEvent): number {
+    const t = ev.targetId ? this.battle.byId(ev.targetId) : undefined;
+    if (!t || !ev.amount || ev.amount <= 0) return 0;
+    let w = Math.min(1, Math.sqrt(ev.amount / t.stats.maxHp) * 1.3);
+    if (ev.weak) w += 0.25;
+    if (ev.crit) w += 0.4;
+    return Math.min(1.4, w);
+  }
+
+  /** Hit-stop length for a direct hit (attacks and damaging spells only —
+   *  DoT ticks, thorns and the like just flash). */
+  private hitStopMs(ev: BattleEvent): number {
+    if (ev.kind !== 'attack' && ev.kind !== 'spell') return 0;
+    const w = this.hitWeight(ev);
+    return w < 0.2 ? 0 : Math.round(25 + 75 * w);
+  }
+
+  /** A delay measured on the tween clock rather than the scene clock, so an
+   *  impact stays in step with the lunge/projectile tween it is timed to
+   *  (the two drift apart on slow frames) and holds during a hit-stop. */
+  private onTweenClock(ms: number, fn: () => void) {
+    this.tweens.addCounter({ from: 0, to: 1, duration: ms, onComplete: fn });
+  }
+
+  /** Runs `fn` once every impact scheduled so far has landed. */
+  private afterImpacts(fn: () => void) {
+    const wait = this.impactLandsAt - this.time.now;
+    if (wait > 0) this.time.delayedCall(wait, fn);
+    else fn();
+  }
+
+  /** The moment a hit (or heal) reaches its target. */
+  private landHit(ev: BattleEvent, stop: number) {
+    const id = ev.targetId;
+    const amount = ev.amount ?? 0;
+    if (!id) return;
+    this.floatNumber(id, amount, ev);
+    if (amount <= 0) {
+      this.flash(id, 0x6cf0a0);
+      return;
+    }
+    if (ev.kind === 'attack') sfx.play('hit');
+    if (this.fastForward()) stop = Math.round(stop * 0.5);
+    const w = this.hitWeight(ev);
+    // White while the frame holds, then a beat of red.
+    this.flash(id, 0xffffff, stop + 40);
+    this.time.delayedCall(stop + 40, () => this.flash(id, 0xff5a6a, 100));
+    this.knockback(id, ev.kind === 'dot' || ev.kind === 'info' ? w * 0.5 : w);
+    const shown = this.guardShown.get(id);
+    const t = this.battle.byId(id);
+    if (shown && t) {
+      shown.guard = t.guard ?? 0;
+      this.refreshEnemyBars();
+    }
+    if (stop > 0) {
+      this.hitStop(stop);
+      this.time.delayedCall(stop, () => this.shake(90 + 140 * w, 0.0015 + 0.008 * w));
+    } else if (ev.kind === 'attack' || ev.kind === 'spell') {
+      this.shake(70, 0.0015 + 0.008 * w);
+    }
+  }
+
+  /** Freezes every tween (sprites, lunges, particles, numbers) for `ms` —
+   *  the scene clock keeps running, so event playback is unaffected. An
+   *  overlapping longer stop extends it; a shorter one is absorbed. */
+  private hitStop(ms: number) {
+    const until = this.time.now + ms;
+    if (until <= this.hitStopUntil) return;
+    this.hitStopUntil = until;
+    const token = ++this.hitStopToken;
+    this.tweens.timeScale = 0;
+    this.time.delayedCall(ms, () => {
+      if (token === this.hitStopToken) this.tweens.timeScale = 1;
+    });
+  }
+
+  /** Camera shake that never cuts a stronger one already running short. */
+  private shake(duration: number, intensity: number) {
+    const cam = this.cameras.main;
+    if (cam.shakeEffect.isRunning && cam.shakeEffect.intensity.x > intensity) return;
+    cam.shake(duration, intensity, true);
+  }
+
+  /** Snaps the target away from the hit and squashes it, then eases back. */
+  private knockback(id: string, w: number) {
+    const img = this.sprites.get(id);
+    const c = this.battle.byId(id);
+    if (!img || !c || w <= 0) return;
+    this.knockbacks.get(id)?.tween.stop();
+    // Settle on the home line, not wherever the sprite is: a hit landing
+    // mid-lunge (thorns, reflect) would otherwise park it off formation.
+    const baseX = this.spriteHome.get(id)?.x ?? img.x;
+    const scale = c.isBoss ? BOSS_SCALE : UNIT_SCALE;
+    const px = c.isBoss ? 2 + 4 * w : 3 + 8 * w;
+    img.x = baseX + (c.side === 'enemy' ? -px : px);
+    img.setScale(scale * (1 + 0.12 * w), scale * (1 - 0.1 * w));
+    const tween = this.tweens.add({
+      targets: img, x: baseX, scaleX: scale, scaleY: scale, duration: 170 + 60 * w, ease: 'Quad.easeOut',
+      onComplete: () => this.knockbacks.delete(id),
+    });
+    this.knockbacks.set(id, { tween, baseX });
+  }
+
+  /** killTweensOf for a combatant sprite that first settles any knockback in
+   *  flight — otherwise a lunge or step-forward cutting it short (easy when
+   *  fast-forwarding) leaves the sprite squashed and off its line. */
+  private killSpriteTweens(id: string) {
+    const img = this.sprites.get(id);
+    if (!img) return;
+    const kb = this.knockbacks.get(id);
+    if (kb) {
+      kb.tween.stop();
+      img.x = kb.baseX;
+      const c = this.battle.byId(id);
+      img.setScale(c?.isBoss ? BOSS_SCALE : UNIT_SCALE);
+      this.knockbacks.delete(id);
+    }
+    this.tweens.killTweensOf(img);
+  }
+
+  /** Puts a sprite back to its resting color: non-boss enemies keep the
+   *  per-monster recolor tint placeSide gave them (a bare clearTint() used
+   *  to strip it after their first hit). A fallen enemy keeps whatever its
+   *  death animation set. */
+  private restoreTint(id: string) {
+    const img = this.sprites.get(id);
+    const c = this.battle.byId(id);
+    if (!img || !img.active || !c) return;
+    if (c.side === 'enemy') {
+      if (c.stats.hp <= 0) return;
+      if (!c.isBoss) { img.setTint(c.color); return; }
+    }
+    img.clearTint();
+  }
+
+  private playKo(id: string) {
+    if (this.battle.byId(id)?.side === 'enemy') this.playEnemyDeath(id);
+    else this.fadeKo(id);
+  }
+
+  /** Enemy death: a white flash, the body bursting into pieces of its own
+   *  color, and the sprite collapsing away — gone, not a dim ghost. */
+  private playEnemyDeath(id: string) {
+    const img = this.sprites.get(id);
+    const c = this.battle.byId(id);
+    if (!img || !c) return;
+    this.killSpriteTweens(id);
+    this.dying.add(id);
+    const scale = c.isBoss ? BOSS_SCALE : UNIT_SCALE;
+    const home = this.spriteHome.get(id);
+    const homeY = home?.y ?? img.y;
+    img.setScale(scale).setTintFill(0xffffff);
+    sfx.play('hit');
+    this.shake(c.isBoss ? 420 : 170, c.isBoss ? 0.014 : 0.006);
+    const pieces = c.isBoss ? 22 : 12;
+    const w = img.displayWidth;
+    const h = img.displayHeight;
+    for (let i = 0; i < pieces; i++) {
+      const size = Phaser.Math.Between(2, c.isBoss ? 6 : 4);
+      const p = this.add.rectangle(
+        img.x + Phaser.Math.FloatBetween(-w / 3, w / 3), img.y + Phaser.Math.FloatBetween(-h / 3, h / 3),
+        size, size, i % 3 === 0 ? 0xffffff : c.color, 0.95,
+      ).setDepth(33);
+      const angle = Phaser.Math.FloatBetween(-Math.PI, 0) + Phaser.Math.FloatBetween(-0.4, 0.4); // mostly upward
+      const dist = Phaser.Math.Between(14, c.isBoss ? 56 : 34);
+      this.tweens.add({
+        targets: p, x: p.x + Math.cos(angle) * dist, y: p.y + Math.sin(angle) * dist * 0.7 + 14,
+        alpha: 0, angle: Phaser.Math.Between(-180, 180), duration: Phaser.Math.Between(420, 620), ease: 'Quad.easeOut',
+        onComplete: () => p.destroy(),
+      });
+    }
+    this.tweens.add({
+      targets: img, scaleX: scale * 1.3, scaleY: scale * 0.12, y: homeY + h * 0.35, alpha: 0,
+      duration: c.isBoss ? 520 : 280, delay: 90, ease: 'Quad.easeIn',
+      // Reset size/position (still invisible) so the HP bar, which lays out
+      // off the sprite, stays put with its "Fallen" label.
+      onComplete: () => img.setScale(scale).setY(homeY),
+    });
+    for (const aura of this.auras.get(id) ?? []) {
+      this.tweens.killTweensOf(aura);
+      this.tweens.add({ targets: aura, alpha: 0, duration: 300, onComplete: () => aura.destroy() });
+    }
+    this.auras.delete(id);
   }
 
   /**
@@ -1626,12 +1924,11 @@ export class BattleScene extends Phaser.Scene {
 
   // --- Display Helpers ------------------------------------------------------
 
-  private flash(id: string, color: number) {
+  private flash(id: string, color: number, hold = 140) {
     const img = this.sprites.get(id);
-    if (!img) return;
+    if (!img || !img.active || this.dying.has(id)) return;
     img.setTintFill(color);
-    this.time.delayedCall(140, () => img.clearTint());
-    this.tweens.add({ targets: img, x: img.x + (this.battle.byId(id)?.side === 'enemy' ? 4 : -4), duration: 60, yoyo: true });
+    this.time.delayedCall(hold, () => this.restoreTint(id));
   }
 
   private stepActiveHeroForward(id: string) {
@@ -1639,7 +1936,7 @@ export class BattleScene extends Phaser.Scene {
     const img = this.sprites.get(id);
     const home = this.spriteHome.get(id);
     if (!img || !home) return;
-    this.tweens.killTweensOf(img);
+    this.killSpriteTweens(id);
     this.tweens.add({
       targets: img,
       x: home.x - 20,
@@ -1661,7 +1958,7 @@ export class BattleScene extends Phaser.Scene {
       const img = this.sprites.get(c.id);
       const home = this.spriteHome.get(c.id);
       if (!img || !home) continue;
-      this.tweens.killTweensOf(img);
+      this.killSpriteTweens(c.id);
       // alpha:1 heals a living member whose entrance fade-in was cut short when
       // this ran during the staggered slide-in (otherwise it stays invisible).
       this.tweens.add({
@@ -1678,7 +1975,7 @@ export class BattleScene extends Phaser.Scene {
     const home = this.spriteHome.get(id);
     if (!img || !home || !img.active) return;
     img.setAlpha(1); // a settled, living hero is always fully visible
-    this.tweens.killTweensOf(img);
+    this.killSpriteTweens(id);
     this.tweens.add({
       targets: img, y: { from: home.y - 2, to: home.y + 2 },
       duration: 2000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
@@ -1695,35 +1992,25 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** The action's own animation (lunge, projectile, beam...). Its landing
+   *  — number, flash, knockback, hit-stop — is landHit's, timed to the
+   *  travel time impactDelay reports. */
   private animateEvent(ev: BattleEvent) {
     if (ev.kind === 'attack' && ev.actorId && ev.targetId) {
       // Elemental weapons color the slash (fire sword slashes orange, ...).
       this.attackAnim(ev.actorId, ev.targetId, ev.element);
-      if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'spell' && ev.actorId && ev.targetId) {
       const isHeal = (ev.amount ?? 0) < 0;
-      if (isHeal) {
-        this.healAnim(ev.targetId, 0x6cf0a0, ev.spellId === 'cureall' || ev.spellId === 'aegis');
-        this.floatNumber(ev.targetId, ev.amount ?? 0, ev);
-      } else {
-        this.spellAnim(ev.spellId, ev.actorId, ev.targetId, ev.element);
-        if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
-      }
+      if (isHeal) this.healAnim(ev.targetId, 0x6cf0a0, ev.spellId === 'cureall' || ev.spellId === 'aegis');
+      else this.spellAnim(ev.spellId, ev.actorId, ev.targetId, ev.element);
     } else if (ev.kind === 'item' && ev.targetId) {
       this.healAnim(ev.targetId, 0xf0d36c);
-      if (ev.amount) this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'defend' && ev.actorId) {
       this.guardAnim(ev.actorId);
-    } else if (ev.kind === 'dot' && ev.targetId && ev.amount) {
-      // Burn/venom end-of-round ticks.
-      this.floatNumber(ev.targetId, ev.amount, ev);
     } else if (ev.kind === 'limit') {
       // Announcement only — the move's own damage/heal follow as normal
       // events right after and play their own animation as usual.
       this.playLimitBreak(ev.actorId);
-    } else if (ev.kind === 'info' && ev.targetId && ev.amount) {
-      // Lifesteal, thorns, revive — small floating numbers without an attack animation.
-      this.floatNumber(ev.targetId, ev.amount, ev);
     }
   }
 
@@ -1745,10 +2032,11 @@ export class BattleScene extends Phaser.Scene {
       ease: 'Sine.easeOut', onComplete: () => txt.destroy(),
     });
     if (crit || weak) {
-      const tag = this.add.text(img.x, img.y - 34, crit ? 'CRITICAL!' : 'WEAK', sharpText({
-        fontFamily: FONT, fontSize: '9px', color: crit ? '#ffd34d' : '#ffa03c', strokeThickness: 3,
-      })).setOrigin(0.5, 1).setDepth(40);
-      this.tweens.add({ targets: tag, y: tag.y - 14, alpha: 0, duration: 800, ease: 'Sine.easeOut', onComplete: () => tag.destroy() });
+      const tag = this.add.text(img.x, img.y - 34, crit ? 'CRITICAL!' : 'WEAK!', sharpText({
+        fontFamily: FONT, fontSize: '11px', color: crit ? '#ffd34d' : '#ffa03c', strokeThickness: 3,
+      })).setOrigin(0.5, 1).setDepth(40).setScale(1.5);
+      this.tweens.add({ targets: tag, scale: 1, duration: 140, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: tag, y: tag.y - 14, alpha: 0, delay: 250, duration: 700, ease: 'Sine.easeOut', onComplete: () => tag.destroy() });
     }
   }
 
@@ -1765,7 +2053,7 @@ export class BattleScene extends Phaser.Scene {
     const sy = actor.y;
     const restX = home?.x ?? sx;
     const restY = home?.y ?? sy;
-    this.tweens.killTweensOf(actor);
+    this.killSpriteTweens(actorId);
     const dx = Phaser.Math.Clamp((target.x - sx) * 0.22, -26, 26);
     const dy = Phaser.Math.Clamp((target.y - sy) * 0.12, -10, 10);
     this.tweens.add({
@@ -1784,8 +2072,7 @@ export class BattleScene extends Phaser.Scene {
     const slashColor = element && element !== 'physical' && element !== 'none'
       ? BattleScene.spellColor(element)
       : 0xeef2ff;
-    this.slashAt(target.x, target.y, slashColor);
-    this.cameras.main.shake(70, 0.003);
+    this.onTweenClock(ATTACK_IMPACT_MS, () => this.slashAt(target.x, target.y, slashColor));
   }
 
   private projectileAnim(actorId: string, targetId: string, color: number) {
@@ -1798,7 +2085,7 @@ export class BattleScene extends Phaser.Scene {
       targets: [orb, trail],
       x: target.x,
       y: target.y,
-      duration: 240,
+      duration: PROJECTILE_MS,
       ease: 'Sine.easeIn',
       onComplete: () => {
         this.burstAt(target.x, target.y, color);
@@ -1830,14 +2117,15 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Guardbreak: a heavier lunge-strike than plain Attack — an expanding
-   *  shockwave ring and an extra shake land on top of the impact. */
+   *  shockwave ring lands on top of the impact. */
   private guardbreakAnim(actorId: string, targetId: string) {
     this.attackAnim(actorId, targetId, 'physical');
     const target = this.sprites.get(targetId);
     if (!target) return;
-    const ring = this.add.circle(target.x, target.y, 4, 0xdfe4f5, 0).setStrokeStyle(3, 0xdfe4f5, 0.85).setDepth(33);
-    this.tweens.add({ targets: ring, scale: 5, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
-    this.time.delayedCall(70, () => this.cameras.main.shake(110, 0.007));
+    this.onTweenClock(ATTACK_IMPACT_MS, () => {
+      const ring = this.add.circle(target.x, target.y, 4, 0xdfe4f5, 0).setStrokeStyle(3, 0xdfe4f5, 0.85).setDepth(33);
+      this.tweens.add({ targets: ring, scale: 5, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    });
   }
 
   /** Arc Sweep: a wide crossing double-slash per enemy hit, reading as one
@@ -1850,7 +2138,7 @@ export class BattleScene extends Phaser.Scene {
     const home = this.spriteHome.get(actorId);
     const sx = actor.x, sy = actor.y;
     const restX = home?.x ?? sx, restY = home?.y ?? sy;
-    this.tweens.killTweensOf(actor);
+    this.killSpriteTweens(actorId);
     const dx = Phaser.Math.Clamp((target.x - sx) * 0.16, -18, 18);
     const dy = Phaser.Math.Clamp((target.y - sy) * 0.1, -8, 8);
     this.tweens.add({
@@ -1865,7 +2153,6 @@ export class BattleScene extends Phaser.Scene {
       targets: [a, b], alpha: 0, scaleX: 1.4, duration: 200, ease: 'Quad.easeOut',
       onComplete: () => { a.destroy(); b.destroy(); },
     });
-    this.cameras.main.shake(60, 0.003);
   }
 
   /** Ember Hex: a flickering fireball thrown at the target, bursting into
@@ -1878,7 +2165,7 @@ export class BattleScene extends Phaser.Scene {
     const core = this.add.circle(actor.x, actor.y - 8, 2.5, 0xfff0aa, 0.95).setDepth(31);
     const flicker = this.tweens.add({ targets: [orb, core], scale: { from: 0.85, to: 1.15 }, duration: 90, yoyo: true, repeat: -1 });
     this.tweens.add({
-      targets: [orb, core], x: target.x, y: target.y, duration: 260, ease: 'Sine.easeIn',
+      targets: [orb, core], x: target.x, y: target.y, duration: FIREBALL_MS, ease: 'Sine.easeIn',
       onComplete: () => {
         flicker.remove();
         orb.destroy();
@@ -1889,7 +2176,6 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private fireBurstAt(x: number, y: number) {
-    this.cameras.main.shake(90, 0.005);
     for (let i = 0; i < 8; i++) {
       const angle = (Math.PI * 2 * i) / 8 + Phaser.Math.FloatBetween(-0.2, 0.2);
       const p = this.add.circle(x, y, Phaser.Math.FloatBetween(1.5, 3), i % 2 === 0 ? 0xff8a3c : 0xffd34d, 0.9).setDepth(32);
@@ -1915,7 +2201,6 @@ export class BattleScene extends Phaser.Scene {
         duration: Phaser.Math.Between(300, 460), delay: i * 30, ease: 'Sine.easeOut', onComplete: () => flame.destroy(),
       });
     }
-    this.cameras.main.shake(80, 0.004);
   }
 
   /** Rime Hex: an angular ice shard thrown flat at the target, shattering
@@ -1927,18 +2212,15 @@ export class BattleScene extends Phaser.Scene {
     const shard = this.add.rectangle(actor.x, actor.y - 8, 11, 3, 0xaad4ff, 0.95).setDepth(30);
     shard.setAngle(Phaser.Math.RadToDeg(Phaser.Math.Angle.Between(actor.x, actor.y, target.x, target.y)));
     this.tweens.add({
-      targets: shard, x: target.x, y: target.y, duration: 220, ease: 'Sine.easeIn',
+      targets: shard, x: target.x, y: target.y, duration: ICE_SHARD_MS, ease: 'Sine.easeIn',
       onComplete: () => {
         shard.destroy();
         this.frostBurstAt(target.x, target.y);
-        target.setTintFill(0xaad4ff);
-        this.time.delayedCall(140, () => target.active && target.clearTint());
       },
     });
   }
 
   private frostBurstAt(x: number, y: number) {
-    this.cameras.main.shake(70, 0.003);
     for (let i = 0; i < 6; i++) {
       const angle = (Math.PI * 2 * i) / 6;
       const shard = this.add.rectangle(x, y, 5, 2, 0xaad4ff, 0.9).setAngle(Phaser.Math.RadToDeg(angle)).setDepth(32);
@@ -1958,7 +2240,7 @@ export class BattleScene extends Phaser.Scene {
       const startX = target.x + Phaser.Math.Between(-14, 14);
       const icicle = this.add.rectangle(startX, target.y - 60, 4, 14, 0xaad4ff, 0.95).setDepth(30);
       this.tweens.add({
-        targets: icicle, y: target.y, duration: 280, delay: i * 60, ease: 'Quad.easeIn',
+        targets: icicle, y: target.y, duration: ICICLE_MS, delay: i * 60, ease: 'Quad.easeIn',
         onComplete: () => { this.frostBurstAt(icicle.x, target.y); icicle.destroy(); },
       });
     }
@@ -1971,11 +2253,10 @@ export class BattleScene extends Phaser.Scene {
     if (!target) return;
     const beam = this.add.rectangle(target.x, target.y - 48, 10, 0, 0xffe866, 0.85).setOrigin(0.5, 0).setDepth(30);
     this.tweens.add({
-      targets: beam, height: 64, duration: 160, ease: 'Quad.easeOut',
+      targets: beam, height: 64, duration: HOLY_BEAM_MS, ease: 'Quad.easeOut',
       onComplete: () => {
         this.tweens.add({ targets: beam, alpha: 0, duration: 220, ease: 'Sine.easeOut', onComplete: () => beam.destroy() });
         this.burstAt(target.x, target.y, 0xffe866);
-        this.cameras.main.shake(80, 0.004);
       },
     });
   }
@@ -2009,7 +2290,7 @@ export class BattleScene extends Phaser.Scene {
     const home = this.spriteHome.get(actorId);
     const sx = actor.x, sy = actor.y;
     const restX = home?.x ?? sx, restY = home?.y ?? sy;
-    this.tweens.killTweensOf(actor);
+    this.killSpriteTweens(actorId);
     const dx = Phaser.Math.Clamp((target.x - sx) * 0.3, -34, 34);
     const dy = Phaser.Math.Clamp((target.y - sy) * 0.16, -14, 14);
     this.tweens.add({
@@ -2018,13 +2299,14 @@ export class BattleScene extends Phaser.Scene {
         this.tweens.add({ targets: actor, x: restX, y: restY, duration: 180, ease: 'Sine.easeIn', onComplete: () => this.restartIdle(actorId) });
       },
     });
-    for (let i = 0; i < 3; i++) {
-      const slash = this.add.rectangle(target.x, target.y, 44, 4, i % 2 === 0 ? 0xfff0aa : 0xeef2ff, 0.9).setAngle(-30 + i * 30).setDepth(33);
-      this.tweens.add({ targets: slash, alpha: 0, scaleX: 1.6, duration: 260, delay: i * 60, ease: 'Quad.easeOut', onComplete: () => slash.destroy() });
-    }
-    const ring = this.add.circle(target.x, target.y, 6, 0xfff0aa, 0).setStrokeStyle(4, 0xfff0aa, 0.9).setDepth(33);
-    this.tweens.add({ targets: ring, scale: 8, alpha: 0, duration: 380, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
-    this.cameras.main.shake(220, 0.012);
+    this.onTweenClock(REQUIEM_IMPACT_MS, () => {
+      for (let i = 0; i < 3; i++) {
+        const slash = this.add.rectangle(target.x, target.y, 44, 4, i % 2 === 0 ? 0xfff0aa : 0xeef2ff, 0.9).setAngle(-30 + i * 30).setDepth(33);
+        this.tweens.add({ targets: slash, alpha: 0, scaleX: 1.6, duration: 260, delay: i * 60, ease: 'Quad.easeOut', onComplete: () => slash.destroy() });
+      }
+      const ring = this.add.circle(target.x, target.y, 6, 0xfff0aa, 0).setStrokeStyle(4, 0xfff0aa, 0.9).setDepth(33);
+      this.tweens.add({ targets: ring, scale: 8, alpha: 0, duration: 380, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    });
   }
 
   /** Cataclysm (Lyra's Limit Break): fire and ice bursts together on each
@@ -2042,7 +2324,6 @@ export class BattleScene extends Phaser.Scene {
         onComplete: () => icicle.destroy(),
       });
     }
-    this.cameras.main.shake(120, 0.007);
   }
 
   /** Cure/Dawnmend gets modest rings; Sunward's party-wide heal gets bigger,
@@ -2106,7 +2387,6 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private burstAt(x: number, y: number, color: number) {
-    this.cameras.main.shake(90, 0.005);
     for (let i = 0; i < 6; i++) {
       const p = this.add.circle(x, y, 2, color, 0.9).setDepth(32);
       const angle = (Math.PI * 2 * i) / 6;
@@ -2129,7 +2409,7 @@ export class BattleScene extends Phaser.Scene {
     if (!img) return;
     sfx.play('magic');
     img.setTintFill(AILMENT_TINT[ailment]);
-    this.time.delayedCall(180, () => img.active && img.clearTint());
+    this.time.delayedCall(180, () => this.restoreTint(targetId));
     const tag = this.add.text(img.x, img.y - 26, AILMENT_STAMP[ailment], sharpText({
       fontFamily: FONT, fontSize: '10px', color: AILMENT_COLOR[ailment], strokeThickness: 4,
     })).setOrigin(0.5, 1).setDepth(42).setScale(1.4);
@@ -2140,16 +2420,20 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
-  /** BREAK: big stamp on the enemy, white flash, heavy shake. */
+  /** BREAK: big stamp on the enemy, white flash, a hit-stop and the
+   *  heaviest non-boss shake. */
   private playBreak(targetId?: string) {
     if (!targetId) return;
     const img = this.sprites.get(targetId);
     if (!img) return;
+    this.guardShown.delete(targetId); // pips/BREAK label now show the live (broken) state
     sfx.play('hit');
     sfx.play('levelup');
-    this.cameras.main.shake(220, 0.012);
+    const stop = this.fastForward() ? 60 : 120;
+    this.hitStop(stop);
+    this.time.delayedCall(stop, () => this.shake(260, 0.014));
     img.setTintFill(0xffffff);
-    this.time.delayedCall(200, () => img.active && img.clearTint());
+    this.time.delayedCall(stop + 120, () => this.restoreTint(targetId));
     const stamp = this.add.text(img.x, img.y - 6, 'BREAK!', sharpText({
       fontFamily: FONT, fontSize: '18px', color: '#ffd34d', strokeThickness: 5,
     })).setOrigin(0.5).setDepth(45).setScale(2).setAngle(-8);
@@ -2221,6 +2505,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private syncDisplay() {
+    this.guardShown.clear();
     for (const c of this.battle.all()) {
       this.hpDisplay.set(c.id, c.stats.hp);
       this.mpDisplay.set(c.id, c.stats.mp);
@@ -2235,9 +2520,20 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private layoutEnemyBar(id: string) {
-    const img = this.sprites.get(id);
+    const sprite = this.sprites.get(id);
     const bar = this.enemyHpBars.get(id);
-    if (!img || !bar) return;
+    const c = this.battle.byId(id);
+    if (!sprite || !bar || !c) return;
+    // Follow the sprite (entrance slide, idle bob), but not a knockback's
+    // snap/squash or the death collapse — those anchor on the home spot and
+    // the unsquashed height so the bar doesn't jump.
+    const home = this.spriteHome.get(id);
+    const anchored = home && (this.knockbacks.has(id) || c.stats.hp <= 0);
+    const img = {
+      x: anchored ? home.x : sprite.x,
+      y: anchored ? home.y : sprite.y,
+      displayHeight: sprite.height * (c.isBoss ? BOSS_SCALE : UNIT_SCALE),
+    };
 
     const y = img.y - img.displayHeight / 2 - 10;
     const left = img.x - bar.bg.width / 2 + 1;
@@ -2299,6 +2595,7 @@ export class BattleScene extends Phaser.Scene {
       const ex = this.enemyExtras.get(e.id);
       if (!ex) continue;
       const dead = hp <= 0;
+      const shown = this.guardShown.get(e.id) ?? { guard: e.guard ?? 0, broken: e.broken === true };
       // Badge slots were built from the weakness list at battle start, but a
       // boss can mutate its own weakness mid-fight (Forest Shade's Umbral
       // Flicker) — re-read it live each refresh instead of trusting the
@@ -2314,12 +2611,12 @@ export class BattleScene extends Phaser.Scene {
       }
       ex.pips.forEach((p, i) => {
         p.setVisible(!dead && (e.maxGuard ?? 0) > 0);
-        const remaining = e.guard ?? 0;
+        const remaining = shown.guard;
         p.setFillStyle(i < remaining ? 0x6cd8f0 : 0x1a2433, i < remaining ? 0.95 : 0.8);
       });
       if (dead) {
         ex.breakLabel.setVisible(false);
-      } else if (e.broken) {
+      } else if (shown.broken) {
         if (!ex.breakLabel.visible) {
           ex.breakLabel.setVisible(true).setAlpha(1);
           this.tweens.add({ targets: ex.breakLabel, alpha: { from: 1, to: 0.45 }, duration: 420, yoyo: true, repeat: -1 });

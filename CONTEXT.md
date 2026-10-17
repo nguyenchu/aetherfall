@@ -2,6 +2,91 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-10-17.
 
+## 2026-10-17 (fun 2): Battle Feel — Hit-Stop, Knockback, Real Deaths, Less Waiting
+
+Option 3 from the "spillet er litt kjedelig" pass (see the entry below). In
+live play enemies were static icons that barely reacted, the log carried
+most of the information, big hits felt the same as chip damage (every
+animation had its own flat ~0.003 shake), and each round had ~2.5 s of
+passive waiting. All in `BattleScene.ts` except the event-order fix.
+
+**Hits land when the animation arrives** (`processEvent` → `landHit`).
+`impactDelay` mirrors each animation's travel time (attack lunge 80 ms,
+fireball 200, ice shard 180, icicles 220, holy beam 130, generic projectile
+200; the throws were shortened from 220-280 ms). The number, flash,
+knockback and hit-stop fire then, scheduled on the *tween* clock
+(`onTweenClock`), because the scene clock and the tween clock drift apart on
+slow frames. With the scene clock, the fireball was still ~20% short of the
+target when the hit registered. HP bars still drop at event time, as before.
+
+**Weight** (`hitWeight`, 0..1.4): sqrt(damage / target max HP) × 1.3, +0.25
+on a weakness hit, +0.4 on a crit. Square-rooted so chip damage on a boss
+still registers. From it:
+- hit-stop 25-130 ms (none under weight 0.2; attacks/damaging spells only):
+  `tweens.timeScale = 0`, so the whole scene freezes while the scene clock
+  (event playback) keeps running. Halved when fast-forwarding.
+- camera shake after the stop, 0.0015-0.013 intensity, `shake()` helper
+  never cuts a stronger running shake short. The per-animation flat shakes
+  are gone (limit-break / phase / boss-reveal shakes kept).
+- knockback: sprite snaps 3-14 px away from the hit (bosses 2-8) with a
+  squash, eases back to its home line. White tint during the stop, then red.
+- BREAK: 120 ms hit-stop + 0.014 shake on top of the existing stamp.
+
+**Enemy death** (`playEnemyDeath`): white flash, 12 pieces of the enemy's
+own color burst out (22 for bosses), body collapses and is gone. It used to
+dim to a 0.18-alpha ghost that kept bobbing. The elite ring / boss halo fade
+with it (`auras`). The HP bar stays with its "Fallen" label
+(`layoutEnemyBar` now anchors on the home spot during knockback/death so
+bars don't jump). Party KOs keep the old slump.
+
+**Event order fix (`battle.ts`, logic otherwise untouched):** `strike` and
+both `castDamage` paths pushed `chipGuard`'s BREAK event *before* the damage
+event that caused it; Requiem did the same inline. Moved after the damage
+push. Nothing between reads guard/broken, so state and balance are
+identical. On the display side, `guardShown` snapshots pips/broken per
+action, so the pip empties when the hit lands and the BREAK label waits for
+its stamp. In a parallel (AoE) batch, BREAK, ailment tags and deaths wait
+for the batch's impacts (`afterImpacts`).
+
+**Pacing** (`eventHold`; fast-forward ×0.35 unchanged):
+- turn starts with no events (most of them) no longer wait 250 ms; the tail
+  after an action is 150 ms (was 250).
+- hits hold impact + hit-stop + 210 ms settle (min 320; was a flat 460),
+  ailment 400 (560), BREAK 600 (700), KO 420, text-only info 400, the rest
+  320. Phase 950 and limit 460 unchanged.
+- Pre-existing quirk found while reading the fast-forward: the keydown that
+  commits a command is still down when its first event is scheduled, so
+  *every* tapped command played its first event (the player's own hit) at
+  ×0.35. `fastForward()` now ignores confirm for 220 ms after a player
+  `commit` (`HOLD_GRACE_MS`); a real hold still fast-forwards, and holding
+  through enemy turns is unaffected.
+
+Measured (headless Chromium, same auto-battle: everyone Attacks the
+weakest foe in `first_fight`, 5 fights × 2 runs per build, HEAD vs. this):
+playback between player inputs 1.6-1.9 s → 1.1-1.25 s, per event
+~0.8 s → ~0.5 s. With 3 heroes and 2 foes that's ~1.5 s saved per round.
+
+Also fixed in passing: `flash`/BREAK/ailment/ice-shard tints ended in
+`clearTint()`, which stripped the per-monster recolor tint `placeSide` gives
+non-boss enemies after their first hit (two recolored monsters sharing a
+sprite then looked identical). `restoreTint` puts it back.
+
+Verified live (dev server, Playwright + SwiftShader per the verify skill,
+game loop frozen at the frame for each screenshot): Ember Hex weakness hit
+on a fresh Corrupted Sprite (fireball arriving, white squashed sprite,
+"WEAK!" + number, log line before the BROKEN line), the BREAK frame (stamp,
+shake visible, log now `…takes 43. Weak!` → `…is BROKEN`), a kill (white
+collapse + shards), a Hexstorm AoE that breaks + kills one foe and hits the
+other in one batch (BREAK/death play after the impact), the keyboard
+Attack path once, victory → boon pick. Zero console errors. `tsc --noEmit` +
+`pnpm build` clean.
+
+Not changed / follow-ups: the log panel is still the only place for some
+info (resists, ailment ticks, enemy intent text). HP bars drop at event
+time, not at impact (they'd need deferred `hpDisplay` writes, which fight
+`syncDisplay` under fast-forward). The pacing numbers are tuned by feel in
+headless play and not yet by a human on a real device.
+
 ## 2026-10-17 (fun): Playing Within 30 Seconds + Opening Fights That Need Weakness/Break
 
 Ask: "spillet er litt kjedelig, kan vi gjøre det gøy?" Played it cold first.
