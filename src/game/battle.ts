@@ -445,16 +445,16 @@ export class Battle {
         events.push({ kind: 'limit', text: `Kael unleashes AETHERBLADE REQUIEM!`, actorId: actor.id });
         const hit = this.limitDamage(target, actor.stats.str * 4.2, 'physical');
         this.applyDamage(target, hit.dmg);
+        events.push({
+          kind: 'spell', text: `${target.name} takes ${hit.dmg}!${hit.weak ? ' Weak!' : ''}`,
+          actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'physical', spellId: 'requiem', weak: hit.weak,
+        });
         if (target.side === 'enemy' && !target.broken && (target.guard ?? 0) > 0) {
           target.guard = 0;
           target.broken = true;
           target.intent = undefined;
           events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id });
         }
-        events.push({
-          kind: 'spell', text: `${target.name} takes ${hit.dmg}!${hit.weak ? ' Weak!' : ''}`,
-          actorId: actor.id, targetId: target.id, amount: hit.dmg, element: 'physical', spellId: 'requiem', weak: hit.weak,
-        });
         this.maybeKo(target, events);
         return;
       }
@@ -542,7 +542,6 @@ export class Battle {
     const base = actor.stats.str * 1.6 - target.stats.vit * 0.6;
     const hit = this.computeHit(actor, target, base, element);
     this.applyDamage(target, hit.dmg);
-    this.chipGuard(actor, target, hit.weak, spell?.guardHit ?? 0, events);
     this.maybeGainMomentum(actor, hit.weak);
     const tags = hitTags(hit);
     events.push({
@@ -550,6 +549,9 @@ export class Battle {
       text: `${actor.name} hits ${target.name} for ${hit.dmg}.${tags}`,
       actorId: actor.id, targetId: target.id, amount: hit.dmg, element, crit: hit.crit, weak: hit.weak,
     });
+    // After the damage event, so the log and BREAK stamp follow the hit
+    // that caused them (nothing above reads guard/broken).
+    this.chipGuard(actor, target, hit.weak, spell?.guardHit ?? 0, events);
     // Venomous bites, chilling blades: attacks can carry an ailment
     // (enemy nature or a party weapon like the Tidecleaver). Ashbrand's
     // "Scorched Ground": a defending target gets no benefit of the doubt —
@@ -606,13 +608,13 @@ export class Battle {
       const base = spell.power + actor.stats.str * 1.2 - target.stats.vit * 0.5;
       const hit = this.computeHit(actor, target, base, 'physical');
       this.applyDamage(target, hit.dmg);
-      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
       this.maybeGainMomentum(actor, hit.weak);
       events.push({
         kind: 'spell',
         text: `${actor.name} uses ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
       });
+      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.applyLifesteal(actor, hit.dmg, events);
       this.applyReflect(actor, target, hit, events);
@@ -633,13 +635,13 @@ export class Battle {
         : spell.power + actor.stats.int * 0.8 - target.stats.int * 0.2;
       const hit = this.computeHit(actor, target, basePower, spell.element);
       this.applyDamage(target, hit.dmg);
-      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, isAoe);
       this.maybeGainMomentum(actor, hit.weak);
       events.push({
         kind: 'spell',
         text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
         actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak, parallel: isAoe,
       });
+      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, isAoe);
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
       if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
       this.applyReflect(actor, target, hit, events, isAoe);
