@@ -71,14 +71,14 @@ const DOOR_WEIGHTS: Record<RoomKind, number> = {
 };
 
 /** Kinds offered by the doors out of room `index` (none: boss door instead). */
-export function rollDoors(index: number): RoomKind[] {
+export function rollDoors(index: number, rng: () => number = Math.random): RoomKind[] {
   if (index >= ROOMS_PER_CHAPTER) return [];
-  const count = Math.random() < 0.5 ? 2 : 3;
+  const count = rng() < 0.5 ? 2 : 3;
   const pool = (Object.keys(DOOR_WEIGHTS) as RoomKind[]).filter((k) => !(k === 'elite' && index < 1));
   const picks: RoomKind[] = [];
   while (picks.length < count && pool.length > 0) {
     const total = pool.reduce((sum, k) => sum + DOOR_WEIGHTS[k], 0);
-    let roll = Math.random() * total;
+    let roll = rng() * total;
     let idx = 0;
     for (let i = 0; i < pool.length; i++) {
       roll -= DOOR_WEIGHTS[pool[i]];
@@ -106,13 +106,15 @@ export interface RoomOptions {
   firstFight: boolean;
   /** Already-owned equipment ids, so treasure doesn't hand out a duplicate. */
   ownedEquipment: string[];
+  /** Door/loot/current rolls; defaults to Math.random. Layout uses Phaser's RNG. */
+  rng?: () => number;
 }
 
 /** Builds one room of a chapter's entrance run. */
 export function generateRoom(opts: RoomOptions): AreaDef {
   const base = baseArea(opts.depth);
   const chapter = Math.ceil(opts.depth / 2);
-  const doorKinds = rollDoors(opts.index);
+  const doorKinds = rollDoors(opts.index, opts.rng);
 
   for (let attempt = 0; attempt < 40; attempt++) {
     const area = tryBuild(opts, base, chapter, doorKinds, attempt > 30);
@@ -183,7 +185,7 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
     const spot = pickSpot(16, DOOR_COL - 2);
     if (!spot) return null;
     grid[spot.y][spot.x] = 'T';
-    chests[`${spot.x},${spot.y}`] = treasureFor(base, chapter, opts.ownedEquipment);
+    chests[`${spot.x},${spot.y}`] = treasureFor(base, chapter, opts.ownedEquipment, opts.rng);
   }
   if (opts.kind === 'spring') {
     const spot = pickSpot(9, 14);
@@ -201,7 +203,7 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
   // spawn/doors: same tiles and DescentScene behaviour as the hand-made maps.
   const teleports: Record<string, string> = {};
   const gusts: Record<string, 'up' | 'down' | 'left' | 'right'> = {};
-  if (!bare) addFieldTiles(grid, base.theme.id, teleports, gusts, reserved);
+  if (!bare) addFieldTiles(grid, base.theme.id, teleports, gusts, reserved, opts.rng);
 
   if (!connected(grid)) return null;
 
@@ -222,16 +224,17 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
 
 /** The chapter's signature weapon (from its hand-made entrance chest) until
  *  owned, then gold plus a restorative. */
-function treasureFor(base: AreaDef, chapter: number, owned: string[]): ChestContents {
+function treasureFor(base: AreaDef, chapter: number, owned: string[], rng: () => number = Math.random): ChestContents {
   const signature = Object.values(base.chests).find((c) => c.equipment && !owned.includes(c.equipment));
   if (signature) return { gold: 25 + chapter * 10, equipment: signature.equipment };
-  return { gold: 45 + chapter * 15, items: { [Math.random() < 0.5 ? 'potion' : 'tonic']: 1 } };
+  return { gold: 45 + chapter * 15, items: { [rng() < 0.5 ? 'potion' : 'tonic']: 1 } };
 }
 
 function addFieldTiles(
   grid: string[][], themeId: string,
   teleports: Record<string, string>, gusts: Record<string, 'up' | 'down' | 'left' | 'right'>,
   reserved: (x: number) => boolean,
+  rng: () => number = Math.random,
 ): void {
   const open = (): { x: number; y: number } | null => {
     for (let tries = 0; tries < 60; tries++) {
@@ -253,7 +256,7 @@ function addFieldTiles(
       for (let i = 0; i < 3; i++) {
         const p = open();
         if (!p) continue;
-        const horizontal = Math.random() < 0.5;
+        const horizontal = rng() < 0.5;
         for (let k = 0; k < Phaser.Math.Between(2, 4); k++) {
           const x = p.x + (horizontal ? k : 0);
           const y = p.y + (horizontal ? 0 : k);
