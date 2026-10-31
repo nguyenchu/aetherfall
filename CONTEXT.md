@@ -3030,6 +3030,10 @@ talk, use a chapter portal to descend.
   as data accrues. Later, the planned Postgres backend could replace log-file
   ingestion for richer querying.
 - **Monetization:** still todo per the Roadmap — AdMob rewarded ads + IAP.
-- **JS bundle size:** Vite flags the production bundle at ~1.7MB
-  (minified, ~400KB gzipped) as larger than its default chunk-size warning —
-  works fine, but code-splitting would improve load time.
+- **JS bundle size:** done (2026-10-30). Phaser was already in its own
+  chunk; production now builds it from source via `src/vendor/phaser-lite.js`
+  (no physics/tilemaps/sound/unused game objects, webpack flags inlined in
+  `vite.config.ts`). Phaser chunk 1,482KB/340KB gzip → 1,028KB/243KB; app
+  chunk unchanged at ~372KB/107KB. Dev still uses the stock Phaser bundle, so
+  verify new Phaser features with `pnpm build && pnpm preview`. Next lever if
+  ever needed: drop `CANVAS_RENDERER` (WebGL-only).
