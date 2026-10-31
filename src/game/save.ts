@@ -30,6 +30,7 @@ export interface SaveSummary {
 }
 
 const KEY = 'aetherfall.save.v1';
+const BACKUP_KEY = `${KEY}.backup`;
 
 function defaults(): SaveData {
   return {
@@ -48,12 +49,25 @@ function defaults(): SaveData {
 }
 
 export function loadSave(): SaveData {
+  let raw: string | null = null;
   try {
-    const raw = localStorage.getItem(KEY);
+    raw = localStorage.getItem(KEY);
     if (!raw) return defaults();
     return normalize({ ...defaults(), ...(JSON.parse(raw) as Partial<SaveData>) });
-  } catch {
+  } catch (err) {
+    if (raw) backupCorruptSave(raw, err);
     return defaults();
+  }
+}
+
+// The next writeSave() would overwrite an unreadable save, so stash the raw
+// text first; it may still be recoverable by hand.
+function backupCorruptSave(raw: string, err: unknown): void {
+  try {
+    localStorage.setItem(BACKUP_KEY, raw);
+    console.warn(`Save data could not be read; raw copy kept under "${BACKUP_KEY}".`, err);
+  } catch {
+    /* ignore */
   }
 }
 
