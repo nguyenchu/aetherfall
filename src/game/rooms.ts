@@ -2,21 +2,21 @@
 // stratum used to be one fixed hand-made map with random encounters, the same
 // on every run. Now it's ROOMS_PER_CHAPTER generated rooms: each room is a
 // small fresh map in the chapter's theme with its field mechanic, holds one
-// thing (a visible fight, a chest, a spring or an event), and ends in 2-3
+// thing (a visible fight, a chest, a spring, an event, or a merchant shop), and ends in 2-3
 // doors that show what the *next* room gives — so the player picks their
 // reward and their route. The last room's single door leads to the chapter's
 // unchanged hand-made boss stratum.
 //
 // generateRoom() emits a plain AreaDef (like rift.ts), so DescentScene draws
 // it with the same tile code; the room-specific bits are the door tiles
-// ('1'-'3' → AreaDef.doors), 'E' (a visible trash fight) and '?' (an event).
+// ('1'-'3' → AreaDef.doors), 'E' (a visible trash fight), '?' (an event), and 'M' (merchant shop).
 
 import Phaser from 'phaser';
 import { baseArea, type AreaDef, type ChestContents } from './chapters';
-import { EVENT_IDS } from './events';
+import { getEventForChapter } from './events';
 import type { Combatant } from './types';
 
-export type RoomKind = 'fight' | 'boon' | 'elite' | 'treasure' | 'spring' | 'event';
+export type RoomKind = 'fight' | 'boon' | 'elite' | 'treasure' | 'spring' | 'event' | 'shop';
 
 export const ROOMS_PER_CHAPTER = 5;
 
@@ -52,6 +52,7 @@ export const ROOM_INFO: Record<RoomKind, { label: string; color: string; tint: n
   treasure: { label: '▣ Treasure', color: '#ffd27a', tint: 0xc08a30 },
   spring:   { label: '✚ Rest',     color: '#9ae8ff', tint: 0x2a8ab8 },
   event:    { label: '? Unknown',  color: '#6cf0c2', tint: 0x3aa888 },
+  shop:     { label: '◈ Merchant', color: '#ffe066', tint: 0xe6b800 },
 };
 
 /** Combat rooms hold a visible fight that has to be won before the doors open. */
@@ -67,14 +68,19 @@ export function goldRoomPurse(chapter: number): number {
 // Door odds. Blessings are the most common pull (boons now only come from
 // these rooms and elites), elites only after the opening room.
 const DOOR_WEIGHTS: Record<RoomKind, number> = {
-  boon: 3, fight: 2, elite: 1.2, treasure: 1, spring: 1, event: 1.6,
+  boon: 3, fight: 2, elite: 1.2, treasure: 1, shop: 1.1, spring: 1, event: 1.6,
 };
 
 /** Kinds offered by the doors out of room `index` (none: boss door instead). */
-export function rollDoors(index: number, rng: () => number = Math.random): RoomKind[] {
+export function rollDoors(index: number, rng: () => number = Math.random, currentKind?: RoomKind): RoomKind[] {
   if (index >= ROOMS_PER_CHAPTER) return [];
   const count = rng() < 0.5 ? 2 : 3;
-  const pool = (Object.keys(DOOR_WEIGHTS) as RoomKind[]).filter((k) => !(k === 'elite' && index < 1));
+  const pool = (Object.keys(DOOR_WEIGHTS) as RoomKind[]).filter((k) => {
+    if (k === 'elite' && index < 1) return false;
+    // Shop appears only as rooms 2 to 4 (doors out of 1, 2, 3), and never twice in a row
+    if (k === 'shop' && (index < 1 || index >= 4 || currentKind === 'shop')) return false;
+    return true;
+  });
   const picks: RoomKind[] = [];
   while (picks.length < count && pool.length > 0) {
     const total = pool.reduce((sum, k) => sum + DOOR_WEIGHTS[k], 0);
@@ -114,7 +120,7 @@ export interface RoomOptions {
 export function generateRoom(opts: RoomOptions): AreaDef {
   const base = baseArea(opts.depth);
   const chapter = Math.ceil(opts.depth / 2);
-  const doorKinds = rollDoors(opts.index, opts.rng);
+  const doorKinds = rollDoors(opts.index, opts.rng, opts.kind);
 
   for (let attempt = 0; attempt < 40; attempt++) {
     const area = tryBuild(opts, base, chapter, doorKinds, attempt > 30);
@@ -196,7 +202,12 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
     const spot = pickSpot(9, 14);
     if (!spot) return null;
     grid[spot.y][spot.x] = '?';
-    eventId = Phaser.Utils.Array.GetRandom(EVENT_IDS);
+    eventId = getEventForChapter(chapter, opts.rng);
+  }
+  if (opts.kind === 'shop') {
+    const spot = pickSpot(9, 14);
+    if (!spot) return null;
+    grid[spot.y][spot.x] = 'M';
   }
 
   // The chapter's field mechanic, sprinkled on open floor away from the

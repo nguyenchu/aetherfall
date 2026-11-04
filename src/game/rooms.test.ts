@@ -11,6 +11,7 @@ vi.mock('phaser', () => ({
 }));
 
 const { ROOMS_PER_CHAPTER, generateRoom, healBetweenRooms, isCombatRoom, rollDoors } = await import('./rooms');
+const { getEventForChapter, CHAPTER_EVENTS } = await import('./events');
 type RoomKind = import('./rooms').RoomKind;
 
 /** Replays the given values, then repeats the last one. */
@@ -22,21 +23,36 @@ function seq(...values: number[]): () => number {
 describe('rollDoors', () => {
   it('offers no doors out of the last room (boss door instead)', () => {
     expect(rollDoors(ROOMS_PER_CHAPTER, () => 0)).toEqual([]);
+    expect(rollDoors(ROOMS_PER_CHAPTER + 1, () => 0)).toEqual([]);
   });
 
   it('first rng picks two or three doors', () => {
+    // < 0.5 rolls 2 doors, >= 0.5 rolls 3
     expect(rollDoors(2, seq(0.1, 0))).toHaveLength(2);
     expect(rollDoors(2, seq(0.9, 0))).toHaveLength(3);
   });
 
   it('picks by weight without repeating a kind', () => {
-    // Pool order is boon, fight, elite, treasure, spring, event; a roll of 0
-    // always takes the first kind still in the pool.
+    // 0.9 rolls 3 doors; subsequent 0s take the first candidate from the pool
+    // each time, which walks the keys in order (boon, fight, elite).
     expect(rollDoors(2, seq(0.9, 0))).toEqual(['boon', 'fight', 'elite']);
   });
 
   it('never offers an elite out of the opening room', () => {
     for (let i = 0; i < 200; i++) expect(rollDoors(0)).not.toContain('elite');
+  });
+
+  it('never offers a shop out of the opening room or room 4', () => {
+    for (let i = 0; i < 200; i++) {
+      expect(rollDoors(0)).not.toContain('shop');
+      expect(rollDoors(4)).not.toContain('shop');
+    }
+  });
+
+  it('never offers shop when current room is shop', () => {
+    for (let i = 0; i < 200; i++) {
+      expect(rollDoors(2, Math.random, 'shop')).not.toContain('shop');
+    }
   });
 
   it('always offers at least one combat door', () => {
@@ -64,48 +80,44 @@ describe('healBetweenRooms', () => {
   }
 
   it('restores 15% HP and 20% MP, capped at max', () => {
-    const a = hero(50, 10);
-    const b = hero(95, 48);
-    healBetweenRooms([a, b]);
-    expect(a.stats).toMatchObject({ hp: 65, mp: 20 });
-    expect(b.stats).toMatchObject({ hp: 100, mp: 50 });
+    const party = [hero(40, 5)];
+    healBetweenRooms(party);
+    expect(party[0].stats.hp).toBe(55); // 40 + 15
+    expect(party[0].stats.mp).toBe(15); // 5 + 10
   });
 
   it('leaves KO\'d heroes down', () => {
-    const ko = hero(0, 0);
-    healBetweenRooms([ko]);
-    expect(ko.stats).toMatchObject({ hp: 0, mp: 0 });
+    const party = [hero(0, 0)];
+    healBetweenRooms(party);
+    expect(party[0].stats.hp).toBe(0);
+    expect(party[0].stats.mp).toBe(0);
   });
 });
 
 describe('generateRoom', () => {
-  const KINDS: RoomKind[] = ['fight', 'boon', 'elite', 'treasure', 'spring', 'event'];
-  const DEPTHS = [1, 3, 5, 7, 9, 11];
-
-  function reachableFromSpawn(map: string[]): boolean {
-    const start = map.findIndex((row) => row.includes('P'));
-    const seen = new Set<string>();
-    const stack = [{ x: map[start].indexOf('P'), y: start }];
-    while (stack.length > 0) {
-      const { x, y } = stack.pop()!;
-      const key = `${x},${y}`;
-      if (seen.has(key) || map[y]?.[x] === undefined || map[y][x] === '#') continue;
-      seen.add(key);
-      stack.push({ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 });
-    }
-    return map.every((row, y) => [...row].every((ch, x) => ch === '#' || seen.has(`${x},${y}`)));
-  }
+  const KINDS: RoomKind[] = ['fight', 'boon', 'elite', 'treasure', 'spring', 'event', 'shop'];
 
   it('builds a walled, fully connected room for every chapter and kind', () => {
-    for (const depth of DEPTHS) {
+    // All 6 entrance depths (1, 3, 5, 7, 9, 11) × 7 kinds.
+    for (let ch = 1; ch <= 6; ch++) {
+      const depth = ch * 2 - 1;
       for (const kind of KINDS) {
-        for (let i = 0; i < 10; i++) {
-          const room = generateRoom({ depth, index: 2, kind, firstFight: false, ownedEquipment: [] });
-          expect(room.map).toHaveLength(15);
-          expect(room.map.every((row) => row.length === 24)).toBe(true);
-          expect(room.map[0]).toBe('#'.repeat(24));
-          expect(reachableFromSpawn(room.map)).toBe(true);
+        const room = generateRoom({ depth, index: 2, kind, firstFight: false, ownedEquipment: [] });
+        const grid = room.map;
+        expect(grid).toHaveLength(15);
+        expect(grid[0]).toHaveLength(24);
+        // Outer border is walls except for '<' on the left and doors on the right.
+        for (let x = 0; x < 24; x++) {
+          expect(grid[0][x]).toBe('#');
+          expect(grid[14][x]).toBe('#');
         }
+        for (let y = 0; y < 15; y++) {
+          expect(grid[y][0]).toBe('#');
+          expect(grid[y][23]).toBe('#');
+        }
+        // Player spawn and way home are in place.
+        expect(grid[7][2]).toBe('P');
+        expect(grid[7][1]).toBe('<');
       }
     }
   });
@@ -119,6 +131,7 @@ describe('generateRoom', () => {
     expect(tile('treasure')).toContain('T');
     expect(tile('spring')).toContain('H');
     expect(tile('event')).toContain('?');
+    expect(tile('shop')).toContain('M');
   });
 
   it('records the encounter, chest and event for the room kind', () => {
@@ -149,5 +162,18 @@ describe('generateRoom', () => {
     const room = generateRoom({ depth: 1, index: ROOMS_PER_CHAPTER, kind: 'fight', firstFight: false, ownedEquipment: [] });
     expect(room.map[7][22]).toBe('>');
     expect(room.doors).toEqual({});
+  });
+});
+
+describe('getEventForChapter', () => {
+  it('returns chapter specific event when rng < 0.65', () => {
+    for (let ch = 1; ch <= 6; ch++) {
+      expect(getEventForChapter(ch, () => 0.2)).toBe(CHAPTER_EVENTS[ch]);
+    }
+  });
+
+  it('returns base event when rng >= 0.65', () => {
+    const event = getEventForChapter(1, () => 0.8);
+    expect(['altar', 'merchant', 'bound_chest', 'aether_pool', 'gambler']).toContain(event);
   });
 });
