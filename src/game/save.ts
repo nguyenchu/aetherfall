@@ -53,7 +53,9 @@ export function loadSave(): SaveData {
   try {
     raw = localStorage.getItem(KEY);
     if (!raw) return defaults();
-    return normalize({ ...defaults(), ...(JSON.parse(raw) as Partial<SaveData>) });
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) throw new Error('Save data is not an object');
+    return normalize(parsed);
   } catch (err) {
     if (raw) backupCorruptSave(raw, err);
     return defaults();
@@ -90,15 +92,75 @@ export function loadSaveSummary(): SaveSummary | null {
   };
 }
 
-function normalize(data: SaveData): SaveData {
-  data.items = { potion: data.potions ?? 0, ...(data.items ?? {}) };
+// Stored data may be old, hand-edited or damaged, so every field is checked
+// and anything of the wrong type falls back to its default instead of
+// reaching code that assumes the type (such as data.levels.kael).
+function normalize(stored: Record<string, unknown>): SaveData {
+  const base = defaults();
+  const data: SaveData = {
+    ...(stored as Partial<SaveData>),
+    gold: count(stored.gold, base.gold),
+    potions: count(stored.potions, base.potions),
+    items: numberRecord(stored.items, 0),
+    hpBlessings: count(stored.hpBlessings, base.hpBlessings),
+    deepest: count(stored.deepest, base.deepest, 1),
+    levels: numberRecord(stored.levels, 1),
+    flags: strings(stored.flags),
+    equipmentOwned: strings(stored.equipmentOwned),
+    equipped: equippedRecord(stored.equipped),
+    quests: questRecord(stored.quests),
+    ngPlus: count(stored.ngPlus, base.ngPlus),
+  };
+  // Saves from before items existed only have potions; keep that count.
+  data.items = { potion: data.potions, ...(isRecord(stored.items) ? data.items : base.items) };
   if ((data.items.potion ?? 0) === 3 && data.potions !== 3) data.items.potion = data.potions;
   data.potions = data.items.potion ?? 0;
-  data.equipmentOwned = Array.from(new Set([...(data.equipmentOwned ?? []), ...STARTING_EQUIPMENT]));
-  data.equipped = { ...structuredClone(DEFAULT_EQUIPPED), ...(data.equipped ?? {}) };
-  data.quests = { ...initialQuests(), ...(data.quests ?? {}) };
-  data.ngPlus = data.ngPlus ?? 0;
+  data.equipmentOwned = Array.from(new Set([...data.equipmentOwned, ...STARTING_EQUIPMENT]));
+  data.equipped = { ...structuredClone(DEFAULT_EQUIPPED), ...data.equipped };
+  data.quests = { ...initialQuests(), ...data.quests };
   return data;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function count(value: unknown, fallback: number, min = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min ? value : fallback;
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function numberRecord(value: unknown, min: number): Record<string, number> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((e): e is [string, number] => count(e[1], NaN, min) === e[1]),
+  );
+}
+
+const SLOTS: readonly EquipSlot[] = ['weapon', 'armor', 'charm'];
+
+function equippedRecord(value: unknown): SaveData['equipped'] {
+  if (!isRecord(value)) return {};
+  const result: SaveData['equipped'] = {};
+  for (const [member, slots] of Object.entries(value)) {
+    if (!isRecord(slots)) continue;
+    const kept: Partial<Record<EquipSlot, string>> = {};
+    for (const slot of SLOTS) {
+      if (typeof slots[slot] === 'string') kept[slot] = slots[slot];
+    }
+    result[member] = kept;
+  }
+  return result;
+}
+
+function questRecord(value: unknown): Record<string, QuestStatus> {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((e): e is [string, QuestStatus] => e[1] === 'active' || e[1] === 'complete'),
+  );
 }
 
 export function writeSave(data: SaveData): void {
