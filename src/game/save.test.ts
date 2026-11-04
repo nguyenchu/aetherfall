@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadSave, loadSaveSummary } from './save';
+import { loadSave, loadSaveSummary, writeSave } from './save';
 
 const KEY = 'aetherfall.save.v1';
 const BACKUP_KEY = `${KEY}.backup`;
@@ -117,5 +117,29 @@ describe('loadSave with fields of the wrong type', () => {
     expect(save).toMatchObject({ gold: 120, potions: 5, deepest: 4, flags: ['a'] });
     expect(save.items.potion).toBe(5);
     expect(loadSaveSummary()?.partyLevels).toBe('Kael L3  Lyra L1  Mira L2');
+  });
+});
+
+describe('writeSave', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reports success when the save is stored', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const save = loadSave();
+
+    expect(writeSave(save)).toBe(true);
+    expect(JSON.parse(storage.data.get(KEY)!).gold).toBe(save.gold);
+  });
+
+  it('reports failure instead of throwing when storage refuses', () => {
+    vi.stubGlobal('localStorage', {
+      ...memoryStorage(),
+      setItem: () => {
+        throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      },
+    });
+
+    expect(writeSave(loadSave())).toBe(false);
   });
 });
