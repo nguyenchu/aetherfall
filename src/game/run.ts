@@ -12,6 +12,7 @@ import { rollModifier, type RunModifier } from './modifiers';
 import { restoreLevel } from './progression';
 import { QUESTS, questRewardText, type QuestDef } from './quests';
 import { loadSave, writeSave, wipeSave, type SaveData } from './save';
+import { reportSaveResult } from './saveStatus';
 import type { Combatant, Stats } from './types';
 
 export interface RunState {
@@ -60,14 +61,16 @@ export function getSave(): SaveData {
   return save;
 }
 
-/** Writes runtime progress back to the localStorage save. */
-export function saveProgress(): void {
+/** Writes runtime progress back to the localStorage save; false if it failed. */
+export function saveProgress(): boolean {
   save.gold = state.gold;
   save.items = { ...state.inventory };
   save.potions = state.inventory.potion ?? 0;
   for (const c of state.party) save.levels[c.id] = c.level ?? 1;
   if (state.depth > save.deepest) save.deepest = state.depth;
-  writeSave(save);
+  const saved = writeSave(save);
+  reportSaveResult(saved);
+  return saved;
 }
 
 // --- Boons (run-scoped blessings) --------------------------------------------
@@ -138,7 +141,7 @@ export function hasFlag(flag: string): boolean {
 export function setFlag(flag: string): void {
   if (!save.flags.includes(flag)) {
     save.flags.push(flag);
-    writeSave(save);
+    reportSaveResult(writeSave(save));
   }
 }
 

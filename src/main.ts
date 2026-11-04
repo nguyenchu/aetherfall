@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { GAME, COLORS, setRenderScale } from './config';
 import { bindKeyboard, isTouchDevice } from './game/input';
 import { initAnalytics, track } from './game/analytics';
+import { onSaveFailure } from './game/saveStatus';
+import { showSaveNotice } from './ui/saveNotice';
 import { BootScene } from './scenes/BootScene';
 import { SanctuaryScene } from './scenes/SanctuaryScene';
 import { DescentScene } from './scenes/DescentScene';
@@ -21,6 +23,8 @@ import { ChapterClearScene } from './scenes/ChapterClearScene';
 setRenderScale(2);
 
 bindKeyboard();
+
+onSaveFailure(showSaveNotice);
 
 initAnalytics();
 track('session_start', { mob: isTouchDevice() });

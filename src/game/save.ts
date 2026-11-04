@@ -163,11 +163,14 @@ function questRecord(value: unknown): Record<string, QuestStatus> {
   );
 }
 
-export function writeSave(data: SaveData): void {
+/** Returns false when the save could not be written, so the caller can tell the player. */
+export function writeSave(data: SaveData): boolean {
   try {
     localStorage.setItem(KEY, JSON.stringify(data));
+    return true;
   } catch {
-    // localStorage unavailable, such as private mode; continue without saving.
+    // localStorage unavailable or full (private mode, quota); the game goes on without saving.
+    return false;
   }
 }
 
