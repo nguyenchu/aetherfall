@@ -679,7 +679,7 @@ export const music = new MusicEngine();
 // Sound effects — short one-shot bursts, no files needed.
 // ---------------------------------------------------------------------------
 
-export type SfxName = 'cursor' | 'confirm' | 'cancel' | 'hit' | 'magic' | 'levelup' | 'chest';
+export type SfxName = 'cursor' | 'confirm' | 'cancel' | 'hit' | 'magic' | 'levelup' | 'chest' | 'break' | 'crit' | 'heal' | 'shop' | 'door';
 
 interface SfxDef { notes: StingNote[] }
 
@@ -691,6 +691,11 @@ const SFX: Record<SfxName, SfxDef> = {
   magic:   { notes: [{ midi: 84, t: 0, dur: 0.06, wave: 'triangle', vol: 0.1 }, { midi: 88, t: 0.06, dur: 0.1, wave: 'triangle', vol: 0.09 }, { midi: 91, t: 0.14, dur: 0.12, wave: 'triangle', vol: 0.08 }] },
   levelup: { notes: [{ midi: 60, t: 0, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 64, t: 0.08, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 67, t: 0.16, dur: 0.08, wave: 'square', vol: 0.12 }, { midi: 72, t: 0.24, dur: 0.18, wave: 'square', vol: 0.13 }] },
   chest:   { notes: [{ midi: 72, t: 0, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 76, t: 0.07, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 79, t: 0.14, dur: 0.1, wave: 'triangle', vol: 0.1 }] },
+  break:   { notes: [{ midi: 96, t: 0, dur: 0.04, wave: 'sawtooth', vol: 0.15 }, { midi: 88, t: 0.03, dur: 0.05, wave: 'square', vol: 0.14 }, { midi: 76, t: 0.07, dur: 0.06, wave: 'sawtooth', vol: 0.12 }, { midi: 64, t: 0.12, dur: 0.08, wave: 'square', vol: 0.1 }] },
+  crit:    { notes: [{ midi: 36, t: 0, dur: 0.08, wave: 'sawtooth', vol: 0.18 }, { midi: 40, t: 0.02, dur: 0.07, wave: 'square', vol: 0.16 }, { midi: 33, t: 0.07, dur: 0.09, wave: 'triangle', vol: 0.15 }] },
+  heal:    { notes: [{ midi: 64, t: 0, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 67, t: 0.06, dur: 0.08, wave: 'triangle', vol: 0.1 }, { midi: 72, t: 0.12, dur: 0.1, wave: 'triangle', vol: 0.11 }, { midi: 79, t: 0.2, dur: 0.16, wave: 'sine', vol: 0.12 }] },
+  shop:    { notes: [{ midi: 83, t: 0, dur: 0.05, wave: 'square', vol: 0.11 }, { midi: 88, t: 0.05, dur: 0.08, wave: 'square', vol: 0.12 }] },
+  door:    { notes: [{ midi: 36, t: 0, dur: 0.12, wave: 'triangle', vol: 0.15 }, { midi: 41, t: 0.08, dur: 0.14, wave: 'triangle', vol: 0.14 }, { midi: 48, t: 0.16, dur: 0.2, wave: 'sine', vol: 0.12 }] },
 };
 
 class SfxEngine {

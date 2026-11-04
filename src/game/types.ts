@@ -62,6 +62,7 @@ export interface Spell {
   guardHit?: number; // extra guard chip even without hitting a weakness
   inflict?: Inflict; // chance to apply an ailment to damaged targets
   haste?: { mult: number; turns: number }; // buff-kind only: CTB speed boost applied to the target
+  shield?: { mult: number; turns: number }; // buff-kind only: damage taken reduction shield
   desc?: string;
 }
 

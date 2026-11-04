@@ -299,6 +299,16 @@ export class DescentScene extends Phaser.Scene {
             fontFamily: FONT, fontSize: '11px', color: '#ffffff', strokeThickness: 3,
           })).setOrigin(0.5).setDepth(3).setName(`event_label_${tileKey}`);
         }
+        if (ch === 'M') {
+          const spriteKey = this.textures.exists('e_merchant') ? 'e_merchant' : 'aether';
+          const img = this.add.image(c * GAME.tile + GAME.tile / 2, r * GAME.tile + GAME.tile / 2, spriteKey)
+            .setOrigin(0.5, 0.5).setDepth(2);
+          if (spriteKey === 'aether') img.setTint(ROOM_INFO.shop.tint);
+          this.tileImages.set(tileKey, img);
+          this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile - 4, '◈ Merchant', sharpText({
+            fontFamily: FONT, fontSize: '8px', color: '#ffe066', strokeThickness: 3,
+          })).setOrigin(0.5, 1).setDepth(3).setName(`shop_label_${tileKey}`);
+        }
         if (ch >= '1' && ch <= '3') this.drawDoor(c, r, tileKey);
         if (ch === 'T' && !this.isUsed('chest', tileKey)) {
           const img = this.add.image(c * GAME.tile, r * GAME.tile, 'chest').setOrigin(0, 0).setDepth(2);
@@ -433,6 +443,16 @@ export class DescentScene extends Phaser.Scene {
       this.scene.pause();
       this.scene.launch('GameMenu', { caller: this.scene.key });
     }));
+    this.unsubs.push(input.on('confirm', () => {
+      if (this.busy) return;
+      const dirs = [{ x: 0, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 1, y: 0 }];
+      for (const d of dirs) {
+        if (this.map[this.py + d.y]?.[this.px + d.x] === 'M') {
+          this.openDungeonShop();
+          return;
+        }
+      }
+    }));
   }
 
   /** Zoom-aware replacement for Camera.startFollow()/setBounds() — see the
@@ -520,6 +540,10 @@ export class DescentScene extends Phaser.Scene {
     }
     if ((ch === 'B' || ch === 'X' || ch === 'E') && !this.isUsed('enc', tileKey)) {
       this.triggerEncounter(tileKey, ch === 'B', ch === 'X');
+      return;
+    }
+    if (ch === 'M') {
+      this.openDungeonShop();
       return;
     }
     if (ch === '?' && !this.isUsed('event', tileKey)) {
@@ -844,6 +868,8 @@ export class DescentScene extends Phaser.Scene {
       this.hud.setGold(run.gold);
       this.floatText(`Purse: +${purse} gold`, '#f0d36c', 0);
     }
+    sfx.play('door');
+    this.cameras.main.flash(200, 108, 240, 194);
     for (const o of this.doorObjects) {
       this.tweens.add({ targets: o, alpha: 1, duration: 400 });
     }
@@ -866,6 +892,22 @@ export class DescentScene extends Phaser.Scene {
     })).setOrigin(1, 0.5).setDepth(3);
     this.doorObjects.push(img, arrow, label);
     if (!getRun().room?.cleared) for (const o of [img, arrow, label]) o.setAlpha(0.35);
+  }
+
+  /** Opens the in-dungeon merchant shop. */
+  private openDungeonShop() {
+    this.busy = true;
+    this.scene.pause();
+    this.scene.launch('DungeonShop', {
+      onDone: () => {
+        this.busy = false;
+        this.scene.resume();
+        this.moveLockedUntil = this.time.now + 250;
+        this.hud.setGold(getRun().gold);
+        this.hud.refreshBoonHud();
+        this.hud.flashVitals();
+      },
+    });
   }
 
   /** A room's '?' tile: the event's choice cards, then its outcome. */
@@ -938,6 +980,7 @@ export class DescentScene extends Phaser.Scene {
       if ((ch === 'B' || ch === 'X' || ch === 'E') && !this.isUsed('enc', key)) {
         return ch === 'B' ? 'Z / tap  ·  boss battle!' : ch === 'X' ? 'Z / tap  ·  elite guardian!' : 'Z / tap  ·  fight!';
       }
+      if (ch === 'M') return 'Z / tap  ·  shop with merchant';
       if (ch === '?' && !this.isUsed('event', key)) return 'Z / tap  ·  investigate';
       if (ch === 'T' && !this.isUsed('chest', key)) return 'Z / tap  ·  open chest';
       if (ch === 'H' && !springUsed(this.springKey(key))) return 'Z / tap  ·  rest at the spring';

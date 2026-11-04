@@ -24,7 +24,7 @@ const ELEMENT_NAME: Partial<Record<Element, string>> = { physical: 'Physical', f
 
 // --- Elite affixes -----------------------------------------------------------
 
-export type AffixId = 'armored' | 'hasted' | 'regenerating' | 'splitting';
+export type AffixId = 'armored' | 'hasted' | 'regenerating' | 'splitting' | 'reflective' | 'enraged';
 
 interface AffixDef {
   id: AffixId;
@@ -38,6 +38,8 @@ export const ELITE_AFFIXES: Record<AffixId, AffixDef> = {
   hasted: { id: 'hasted', name: 'Hasted', badge: 'HASTED', intro: 'Hasted: it acts far more often — Chill slows it.' },
   regenerating: { id: 'regenerating', name: 'Regenerating', badge: 'REGEN', intro: 'Regenerating: heals each turn unless Burned or Poisoned.' },
   splitting: { id: 'splitting', name: 'Splitting', badge: 'SPLITS AT 50%', intro: 'Splitting: at half HP a shard breaks away to fight.' },
+  reflective: { id: 'reflective', name: 'Reflective', badge: 'REFLECTS 25%', intro: 'Reflective: reflects 25% of magic damage unless hitting weakness.' },
+  enraged: { id: 'enraged', name: 'Enraged', badge: 'ENRAGES AT 50%', intro: 'Enraged: gains +30% attack damage when below half HP.' },
 };
 
 const AFFIX_IDS = Object.keys(ELITE_AFFIXES) as AffixId[];
@@ -69,6 +71,11 @@ export function applyEliteAffix(c: Combatant, id: AffixId): void {
       break;
     case 'splitting':
       c.splitSpawn = makeShard(c, baseName);
+      break;
+    case 'reflective':
+      c.reflectFrac = 0.25;
+      break;
+    case 'enraged':
       break;
   }
 }
@@ -125,7 +132,12 @@ export function mechanicBadge(c: Combatant): MechanicBadge | null {
   if (c.turnSteal) parts.push({ text: 'STEALS TURNS', color: '#9fd8f0' });
   if (hasFreezeSpell(c)) parts.push({ text: 'FREEZES', color: '#bfeaff' });
   if (c.affix && (c.affix !== 'splitting' || c.splitSpawn)) {
-    parts.push({ text: ELITE_AFFIXES[c.affix as AffixId]?.badge ?? '', color: '#ffcf6a' });
+    if (c.affix === 'enraged') {
+      const isEnraged = c.stats.hp <= c.stats.maxHp * 0.5;
+      parts.push({ text: isEnraged ? 'ENRAGED (+30% DMG)' : 'ENRAGES AT 50%', color: isEnraged ? '#ff4d4d' : '#ffcf6a' });
+    } else {
+      parts.push({ text: ELITE_AFFIXES[c.affix as AffixId]?.badge ?? '', color: '#ffcf6a' });
+    }
   }
   if (parts.length === 0) return null;
   return { text: parts.map((p) => p.text).join(' · '), color: parts[0].color };

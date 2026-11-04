@@ -2040,6 +2040,8 @@ export class BattleScene extends Phaser.Scene {
     const isHeal = amount < 0;
     const crit = ev?.crit === true;
     const weak = ev?.weak === true;
+    if (isHeal) sfx.play('heal');
+    else if (crit) sfx.play('crit');
     const label = isHeal ? `+${Math.abs(amount)}` : `-${amount}`;
     const color = isHeal ? '#66ffaa' : crit ? '#ffd34d' : weak ? '#ffa03c' : '#ff6655';
     const size = crit ? '16px' : weak ? '13px' : '11px';
@@ -2447,11 +2449,11 @@ export class BattleScene extends Phaser.Scene {
     const img = this.sprites.get(targetId);
     if (!img) return;
     this.guardShown.delete(targetId); // pips/BREAK label now show the live (broken) state
-    sfx.play('hit');
-    sfx.play('levelup');
+    sfx.play('break');
+    this.cameras.main.flash(180, 255, 255, 255);
     const stop = this.fastForward() ? 60 : 120;
     this.hitStop(stop);
-    this.time.delayedCall(stop, () => this.shake(260, 0.014));
+    this.time.delayedCall(stop, () => this.shake(260, 0.016));
     img.setTintFill(0xffffff);
     this.time.delayedCall(stop + 120, () => this.restoreTint(targetId));
     const stamp = this.add.text(img.x, img.y - 6, 'BREAK!', sharpText({

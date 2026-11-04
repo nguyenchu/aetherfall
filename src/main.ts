@@ -9,6 +9,7 @@ import { DescentHudScene } from './scenes/DescentHudScene';
 import { BattleScene } from './scenes/BattleScene';
 import { BoonScene } from './scenes/BoonScene';
 import { EventScene } from './scenes/EventScene';
+import { DungeonShopScene } from './scenes/DungeonShopScene';
 import { DialogueScene } from './scenes/DialogueScene';
 import { GameMenuScene } from './scenes/GameMenuScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -42,7 +43,7 @@ const game = new Phaser.Game({
     width: GAME.width * 2,
     height: GAME.height * 2,
   },
-  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, DescentHudScene, BattleScene, BoonScene, EventScene, DialogueScene, GameMenuScene, RunSummaryScene, ChapterClearScene],
+  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, DescentHudScene, BattleScene, BoonScene, EventScene, DungeonShopScene, DialogueScene, GameMenuScene, RunSummaryScene, ChapterClearScene],
 });
 
 // Exposed for dev tooling and automated smoke tests.

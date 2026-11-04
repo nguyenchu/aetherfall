@@ -590,7 +590,7 @@ export class Battle {
     if (actor.turnSteal) this.stealTempo(actor, target, events);
     this.applyLifesteal(actor, hit.dmg, events);
     this.afterHitMechanics(actor, target, element, events);
-    this.applyReflect(actor, target, hit, events);
+    this.applyReflect(actor, target, hit, events, false, element);
     this.maybeKo(target, events);
   }
 
@@ -610,13 +610,15 @@ export class Battle {
   /** Prism Sprite's reflect: a non-weakness hit bounces part of its damage
    * back at the attacker. Hitting the actual weakness bypasses it entirely,
    * rewarding correct play. */
-  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean; warded: boolean }, events: BattleEvent[], parallel = false): void {
+  private applyReflect(actor: Combatant, target: Combatant, hit: { dmg: number; weak: boolean; warded: boolean }, events: BattleEvent[], parallel = false, element: Element = 'none'): void {
+    // Reflective elites only reflect magical damage (non-physical). Physical attacks bypass reflection.
+    if (target.affix === 'reflective' && element === 'physical') return;
     // An attuning crystal only throws back the element it's attuned to.
     if (!target.reflectFrac || (target.attuning ? !hit.warded : hit.weak) || actor.stats.hp <= 0) return;
     const reflect = Math.round(hit.dmg * target.reflectFrac);
     if (reflect <= 0) return;
     this.applyDamage(actor, reflect);
-    events.push({ kind: 'info', text: `${target.name} refracts ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect, parallel });
+    events.push({ kind: 'info', text: `${target.name} reflects ${reflect} damage back at ${actor.name}!`, targetId: actor.id, amount: reflect, parallel });
     this.maybeKo(actor, events, parallel);
   }
 
@@ -639,7 +641,7 @@ export class Battle {
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
       this.applyLifesteal(actor, hit.dmg, events);
       this.afterHitMechanics(actor, target, 'physical', events);
-      this.applyReflect(actor, target, hit, events);
+      this.applyReflect(actor, target, hit, events, false, 'physical');
       this.maybeKo(target, events);
       return;
     }
@@ -667,7 +669,7 @@ export class Battle {
       if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
       if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
       this.afterHitMechanics(actor, target, spell.element, events, isAoe);
-      this.applyReflect(actor, target, hit, events, isAoe);
+      this.applyReflect(actor, target, hit, events, isAoe, spell.element);
       this.maybeKo(target, events, isAoe);
     }
   }
@@ -688,10 +690,15 @@ export class Battle {
 
   /** Ally-targeted CTB speed buff (Mira's Dawnrush) — see applySpeedStatus. */
   private castBuff(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
-    if (!spell.haste) return;
     const target = this.aliveTargetOr(targetId, actor.side) ?? actor;
     events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name} on ${target.name}.`, actorId: actor.id, targetId: target.id, element: spell.element, spellId: spell.id });
-    this.applySpeedStatus(target, 'haste', spell.haste.mult, spell.haste.turns, events);
+    if (spell.haste) {
+      this.applySpeedStatus(target, 'haste', spell.haste.mult, spell.haste.turns, events);
+    }
+    if (spell.shield) {
+      target.dmgTakenStatus = { mult: spell.shield.mult, turns: spell.shield.turns };
+      events.push({ kind: 'info', text: `${target.name} is protected by a radiant shield!`, targetId: target.id });
+    }
   }
 
   // --- Boss Phase Transitions -----------------------------------------------
@@ -860,6 +867,9 @@ export class Battle {
   /** Central damage roll: variance, modifiers, boons, weakness, break, crit. */
   private computeHit(actor: Combatant, target: Combatant, base: number, element: Element): { dmg: number; crit: boolean; weak: boolean; warded: boolean } {
     let dmg = base * rnd(0.88, 1.12) * this.modMult(actor, target);
+    if (actor.affix === 'enraged' && actor.stats.hp <= actor.stats.maxHp * 0.5) {
+      dmg *= 1.3;
+    }
     if (actor.ailments?.chill) dmg *= CHILL_DMG_MULT; // chilled hands strike weakly
     // A warded element is never also a weakness (an attuning crystal can
     // ward its own weak element after being hit with it).

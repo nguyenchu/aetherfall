@@ -140,6 +140,192 @@ export const EVENTS: Record<string, GameEvent> = {
       ];
     },
   },
+  ancient_grove: {
+    id: 'ancient_grove',
+    title: 'Ancient Grove',
+    text: 'Twisted roots wrap around an ancient monolith. Ur-sap hums with unbridled vitality.',
+    options: () => [
+      {
+        label: 'Drink Ur-Sap', desc: 'Every living hero gains +15 Max HP, but loses 10 MP.', enabled: true,
+        apply: () => {
+          for (const c of getRun().party) {
+            if (c.stats.hp <= 0) continue;
+            c.stats.maxHp += 15;
+            c.stats.hp += 15;
+            c.stats.mp = Math.max(0, c.stats.mp - 10);
+          }
+          saveProgress();
+          return { lines: ['The sap strengthens your blood: +15 Max HP'] };
+        },
+      },
+      {
+        label: 'Commune with Roots', desc: 'Mira and Lyra gain +8 Max MP. Choose a blessing.', enabled: true,
+        apply: () => {
+          for (const c of getRun().party) {
+            if (c.id === 'mira' || c.id === 'lyra') {
+              c.stats.maxMp += 8;
+              c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + 8);
+            }
+          }
+          saveProgress();
+          return { lines: ['The grove imparts ancient focus (+8 Max MP)'], boon: { elite: false } };
+        },
+      },
+      leave('Pass in silence'),
+    ],
+  },
+  drowned_archive: {
+    id: 'drowned_archive',
+    title: 'Drowned Archive',
+    text: 'Waterlogged stone shelves hold pristine scrolls preserved in glowing brine.',
+    options: () => [
+      {
+        label: 'Study Sunken Runes', desc: 'Choose a rare or epic blessing. Party loses 20% of max HP.', enabled: true,
+        apply: () => {
+          bleed(0.2);
+          return { lines: ['Sunken incantations etch into your soul...'], boon: { elite: true } };
+        },
+      },
+      {
+        label: 'Salvage Relics', desc: '+65 gold and 1x Aether Bomb from the submerged coffers.', enabled: true,
+        apply: () => {
+          getRun().gold += 65;
+          addItem('aether_bomb', 1);
+          saveProgress();
+          return { lines: ['+65 gold', 'Aether Bomb acquired'] };
+        },
+      },
+      leave('Leave the archive'),
+    ],
+  },
+  smoldering_forge: {
+    id: 'smoldering_forge',
+    title: 'Smoldering Forge',
+    text: 'An anvil carved of volcanic glass still radiates the heat of forgotten blacksmiths.',
+    options: () => [
+      {
+        label: 'Temper Weaponry', desc: 'Kael gains +4 STR for this descent. Party loses 15% HP in the heat.', enabled: true,
+        apply: () => {
+          const kael = getRun().party.find((c) => c.id === 'kael');
+          if (kael) kael.stats.str += 4;
+          bleed(0.15);
+          saveProgress();
+          return { lines: ["Kael's blade glows cherry-red: +4 STR"] };
+        },
+      },
+      {
+        label: 'Quench the Embers', desc: 'Cool your wounds in the slag pool: party recovers 40% HP.', enabled: true,
+        apply: () => {
+          for (const c of getRun().party) {
+            if (c.stats.hp > 0) c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.round(c.stats.maxHp * 0.4));
+          }
+          saveProgress();
+          return { lines: ['Soot washes clean: party recovers 40% HP'] };
+        },
+      },
+      leave('Step past the forge'),
+    ],
+  },
+  resonating_geode: {
+    id: 'resonating_geode',
+    title: 'Resonating Geode',
+    text: 'A crystalline geode hums at a frequency that vibrates the iron in your weapons.',
+    options: () => [
+      {
+        label: 'Harmonize Pulse', desc: 'Fills all party members\' Limit Break gauges to 100%!', enabled: true,
+        apply: () => {
+          for (const c of getRun().party) c.limit = 100;
+          return { lines: ['Harmonic resonance: Limit gauges FULL!'] };
+        },
+      },
+      {
+        label: 'Prismatic Infusion', desc: 'Lyra gains +4 INT. Party restores 15 MP.', enabled: true,
+        apply: () => {
+          const lyra = getRun().party.find((c) => c.id === 'lyra');
+          if (lyra) lyra.stats.int += 4;
+          for (const c of getRun().party) c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + 15);
+          saveProgress();
+          return { lines: ['Lyra attunes to the core: +4 INT, +15 MP to party'] };
+        },
+      },
+      leave('Divert around the geode'),
+    ],
+  },
+  storm_roost: {
+    id: 'storm_roost',
+    title: 'Storm Roost',
+    text: 'Howling winds whip across an aerie perched above the roaring clouds.',
+    options: () => [
+      {
+        label: 'Ride the Updraft', desc: 'Every hero gains +3 AGI for this descent, but loses 20% HP to wind shear.', enabled: true,
+        apply: () => {
+          bleed(0.2);
+          for (const c of getRun().party) c.stats.agi += 3;
+          saveProgress();
+          return { lines: ['The gale quickens your reflexes: +3 AGI', 'Biting winds took 20% HP'] };
+        },
+      },
+      {
+        label: 'Gather Storm Flotsam', desc: '+80 gold and 1x Frost Vial blown in from higher spires.', enabled: true,
+        apply: () => {
+          getRun().gold += 80;
+          addItem('frost_vial', 1);
+          saveProgress();
+          return { lines: ['+80 gold', 'Frost Vial acquired'] };
+        },
+      },
+      leave('Huddle close and pass'),
+    ],
+  },
+  frozen_memorial: {
+    id: 'frozen_memorial',
+    title: 'Frozen Memorial',
+    text: 'A frost-cloaked monument to the first Wardens, encased in diamond-hard rime.',
+    options: () => {
+      const gold = getRun().gold;
+      return [
+        {
+          label: 'Shatter the Permafrost', desc: 'Break the tomb for an elite-weighted blessing. Takes 25% frost damage.', enabled: true,
+          apply: () => {
+            bleed(0.25);
+            return { lines: ['The ice shatters with deafening force!'], boon: { elite: true } };
+          },
+        },
+        {
+          label: 'Light Memorial Beacon', desc: 'Spend 35 gold: revives fallen allies to 50% HP and restores 50% HP to living.', enabled: gold >= 35,
+          apply: () => {
+            getRun().gold -= 35;
+            for (const c of getRun().party) {
+              if (c.stats.hp <= 0) c.stats.hp = Math.round(c.stats.maxHp * 0.5);
+              else c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.round(c.stats.maxHp * 0.5));
+            }
+            saveProgress();
+            return { lines: ['-35 gold', 'The beacon warms the memorial: party rejuvenated!'] };
+          },
+        },
+        leave('Pay silent respects'),
+      ];
+    },
+  },
 };
 
 export const EVENT_IDS = Object.keys(EVENTS);
+
+export const CHAPTER_EVENTS: Record<number, string> = {
+  1: 'ancient_grove',
+  2: 'drowned_archive',
+  3: 'smoldering_forge',
+  4: 'resonating_geode',
+  5: 'storm_roost',
+  6: 'frozen_memorial',
+};
+
+export const BASE_EVENT_IDS = ['altar', 'merchant', 'bound_chest', 'aether_pool', 'gambler'];
+
+export function getEventForChapter(chapter: number, rng: () => number = Math.random): string {
+  const chEvent = CHAPTER_EVENTS[chapter];
+  if (chEvent && rng() < 0.65) {
+    return chEvent;
+  }
+  return BASE_EVENT_IDS[Math.floor(rng() * BASE_EVENT_IDS.length)];
+}
