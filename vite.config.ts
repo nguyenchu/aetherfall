@@ -52,10 +52,12 @@ export default defineConfig(({ command }) => ({
     // its own chunk: a gameplay update only re-fetches the small app chunk.
     // Scene-level lazy loading wouldn't help — every scene is registered at
     // boot and the game needs the engine before anything renders.
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          if (/[\\/]node_modules[\\/].*phaser[\\/]|[\\/]src[\\/]vendor[\\/]phaser-lite\.js$/.test(id)) return 'phaser';
+        codeSplitting: {
+          groups: [
+            { name: 'phaser', test: /[\\/]node_modules[\\/].*phaser[\\/]|[\\/]src[\\/]vendor[\\/]phaser-lite\.js$/ },
+          ],
         },
       },
     },

@@ -54,25 +54,27 @@ import Light from 'phaser/src/gameobjects/lights/Light.js';
 import LightsManager from 'phaser/src/gameobjects/lights/LightsManager.js';
 import LightsPlugin from 'phaser/src/gameobjects/lights/LightsPlugin.js';
 // Factories/creators register `this.add.*` / `this.make.*` as a side effect.
-import ContainerFactory from 'phaser/src/gameobjects/container/ContainerFactory.js';
-import GraphicsFactory from 'phaser/src/gameobjects/graphics/GraphicsFactory.js';
-import GroupFactory from 'phaser/src/gameobjects/group/GroupFactory.js';
-import ImageFactory from 'phaser/src/gameobjects/image/ImageFactory.js';
-import LayerFactory from 'phaser/src/gameobjects/layer/LayerFactory.js';
-import SpriteFactory from 'phaser/src/gameobjects/sprite/SpriteFactory.js';
-import TextFactory from 'phaser/src/gameobjects/text/TextFactory.js';
-import ZoneFactory from 'phaser/src/gameobjects/zone/ZoneFactory.js';
-import ArcFactory from 'phaser/src/gameobjects/shape/arc/ArcFactory.js';
-import EllipseFactory from 'phaser/src/gameobjects/shape/ellipse/EllipseFactory.js';
-import RectangleFactory from 'phaser/src/gameobjects/shape/rectangle/RectangleFactory.js';
-import ContainerCreator from 'phaser/src/gameobjects/container/ContainerCreator.js';
-import GraphicsCreator from 'phaser/src/gameobjects/graphics/GraphicsCreator.js';
-import GroupCreator from 'phaser/src/gameobjects/group/GroupCreator.js';
-import ImageCreator from 'phaser/src/gameobjects/image/ImageCreator.js';
-import LayerCreator from 'phaser/src/gameobjects/layer/LayerCreator.js';
-import SpriteCreator from 'phaser/src/gameobjects/sprite/SpriteCreator.js';
-import TextCreator from 'phaser/src/gameobjects/text/TextCreator.js';
-import ZoneCreator from 'phaser/src/gameobjects/zone/ZoneCreator.js';
+// They export nothing, so they are imported bare (Rolldown rejects a default
+// import from a CommonJS file without exports; Rollup quietly gave `{}`).
+import 'phaser/src/gameobjects/container/ContainerFactory.js';
+import 'phaser/src/gameobjects/graphics/GraphicsFactory.js';
+import 'phaser/src/gameobjects/group/GroupFactory.js';
+import 'phaser/src/gameobjects/image/ImageFactory.js';
+import 'phaser/src/gameobjects/layer/LayerFactory.js';
+import 'phaser/src/gameobjects/sprite/SpriteFactory.js';
+import 'phaser/src/gameobjects/text/TextFactory.js';
+import 'phaser/src/gameobjects/zone/ZoneFactory.js';
+import 'phaser/src/gameobjects/shape/arc/ArcFactory.js';
+import 'phaser/src/gameobjects/shape/ellipse/EllipseFactory.js';
+import 'phaser/src/gameobjects/shape/rectangle/RectangleFactory.js';
+import 'phaser/src/gameobjects/container/ContainerCreator.js';
+import 'phaser/src/gameobjects/graphics/GraphicsCreator.js';
+import 'phaser/src/gameobjects/group/GroupCreator.js';
+import 'phaser/src/gameobjects/image/ImageCreator.js';
+import 'phaser/src/gameobjects/layer/LayerCreator.js';
+import 'phaser/src/gameobjects/sprite/SpriteCreator.js';
+import 'phaser/src/gameobjects/text/TextCreator.js';
+import 'phaser/src/gameobjects/zone/ZoneCreator.js';
 import Geom from 'phaser/src/geom/index.js';
 import Input from 'phaser/src/input/index.js';
 import Loader from 'phaser/src/loader/index.js';
@@ -98,16 +100,9 @@ const GameObjects = {
   Components, GetCalcMatrix, BuildGameObject, BuildGameObjectAnimation, GameObject,
   Container, Graphics, Group, Image, Layer, Sprite, Text, GetTextSize, MeasureText,
   TextStyle, Zone, Shape, Arc, Ellipse, Rectangle, Light, LightsManager, LightsPlugin,
-  Factories: {
-    Container: ContainerFactory, Graphics: GraphicsFactory, Group: GroupFactory,
-    Image: ImageFactory, Layer: LayerFactory, Sprite: SpriteFactory, Text: TextFactory,
-    Zone: ZoneFactory, Arc: ArcFactory, Ellipse: EllipseFactory, Rectangle: RectangleFactory,
-  },
-  Creators: {
-    Container: ContainerCreator, Graphics: GraphicsCreator, Group: GroupCreator,
-    Image: ImageCreator, Layer: LayerCreator, Sprite: SpriteCreator, Text: TextCreator,
-    Zone: ZoneCreator,
-  },
+  // Stock Phaser fills these with the factory modules' empty exports.
+  Factories: {},
+  Creators: {},
 };
 
 const Phaser = Extend(false, {
