@@ -1,21 +1,29 @@
 // Runtime game state: living party, gold, inventory, and current depth.
-// Connects persistent meta-progression (save.ts) with runtime state.
-// Death is not total: the Anchor returns you to town, but level/gold remain.
+//
+// A run is one descent from Sanctuary to the bottom of the world (all six
+// strata, depth 1-12) or until the party falls. Everything inside a run —
+// levels, talents, boons, gold, found gear — is lost when it ends; what the
+// Anchor keeps is Echoes (meta.ts), spent on permanent upgrades in Sanctuary.
+// The run in progress is snapshotted into the save so it survives a reload.
 
 import { track } from './analytics';
-import { boonTotals, type BoonTotals } from './boons';
-import { clearRiftArea, clearRoomArea, type ChestContents } from './chapters';
-import type { RoomProgress } from './rooms';
+import { boonTotals, rollBoonChoices, type Boon, type BoonTotals } from './boons';
+import { clearRiftArea, clearRoomArea, TOTAL_CHAPTERS, type ChestContents } from './chapters';
+import { isCombatRoom, type RoomKind, type RoomProgress } from './rooms';
 import { ITEMS, SPELLS, makeParty } from './content';
-import { EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
-import { rollModifier, type RunModifier } from './modifiers';
+import { DEFAULT_EQUIPPED, EQUIPMENT, STARTING_EQUIPMENT, equipmentBonus, gearFor, type EquipSlot } from './equipment';
+import { MODIFIERS, rollModifier, type RunModifier } from './modifiers';
+import { emptyTally, echoesForRun, nextRankCost, type EchoBreakdown, type RunTally } from './meta';
 import { restoreLevel } from './progression';
 import { QUESTS, questRewardText, type QuestDef } from './quests';
 import { loadSave, writeSave, wipeSave, type SaveData } from './save';
 import { reportSaveResult } from './saveStatus';
+import { applyTalent, rollTalentChoices, talentPerks, type Talent } from './talents';
 import type { Combatant, Stats } from './types';
 
 export interface RunState {
+  /** True from the moment the party descends until the run's summary. */
+  active: boolean;
   party: Combatant[];
   gold: number;
   inventory: Record<string, number>;
@@ -28,29 +36,81 @@ export interface RunState {
   /** Progress through the current chapter entrance's generated rooms
    *  (rooms.ts); null outside them (Sanctuary, boss strata, the Rift). */
   room: RoomProgress | null;
+  /** Used fights/chests on the fixed boss maps this run ('enc_4_11,7'). */
+  usedTiles: string[];
+  /** What this run has done so far, paid out as Echoes at the end. */
+  tally: RunTally;
+  /** Talent/blessing rerolls left this run (Anchor upgrade). */
+  rerolls: number;
+  /** Anchor's Mercy charges left: a wipe is undone while > 0. */
+  mercy: number;
+  /** Talent picks waiting per hero id (earned on level-ups). */
+  pendingTalents: Record<string, number>;
+  /** Name of the strongest foe in the last fight, for the run recap. */
+  lastFoe?: string;
 }
 
-const HP_PER_BLESSING = 8;
+/** Sanctuary's starting stock for every run (before Anchor upgrades). */
+const BASE_START_ITEMS: Record<string, number> = { potion: 2 };
+const START_GOLD_PER_PURSE = 40;
+const VITALITY_PER_RANK = 0.08;
+const FOCUS_PER_RANK = 4;
+const XP_PER_SCHOLAR = 0.15;
+/** Between strata the Anchor's pull steadies the party a little. */
+const STRATUM_HEAL = 0.3;
 
 let save: SaveData = loadSave();
 let state: RunState = buildRun();
 let modifierApplied = false;
 
+function townState(): RunState {
+  return {
+    active: false,
+    party: freshParty(),
+    gold: save.gold,
+    inventory: { ...save.items },
+    depth: 1,
+    modifier: rollModifier(),
+    boons: [],
+    springsUsed: [],
+    room: null,
+    usedTiles: [],
+    tally: emptyTally(),
+    rerolls: 0,
+    mercy: 0,
+    pendingTalents: {},
+  };
+}
+
 function buildRun(): RunState {
+  const restored = restoreSnapshot(save.run);
+  if (restored) {
+    modifierApplied = true; // its start-of-run effects already happened
+    return restored;
+  }
+  save.run = null;
+  return townState();
+}
+
+export function upgradeRank(id: string): number {
+  return save.upgrades[id] ?? 0;
+}
+
+/** A level-1 party (plus Veteran's Start), with Anchor upgrades and the gear
+ *  currently equipped in Sanctuary applied, at full health. */
+function freshParty(): Combatant[] {
   const party = makeParty();
   for (const c of party) {
-    const savedLevel = save.levels[c.id] ?? (c.id === 'mira' ? save.levels.bram : undefined) ?? 1;
-    restoreLevel(c, savedLevel);
-    if (save.hpBlessings) {
-      c.stats.maxHp += save.hpBlessings * HP_PER_BLESSING;
-      c.stats.hp = c.stats.maxHp;
-    }
+    restoreLevel(c, 1 + upgradeRank('veteran'));
+    c.stats.maxHp = Math.round(c.stats.maxHp * (1 + VITALITY_PER_RANK * upgradeRank('vitality')));
+    c.stats.maxMp += FOCUS_PER_RANK * upgradeRank('focus');
+    c.stats.hp = c.stats.maxHp;
+    c.stats.mp = c.stats.maxMp;
     applyEquipment(c);
+    c.stats.hp = c.stats.maxHp;
+    c.stats.mp = c.stats.maxMp;
   }
-  return {
-    party, gold: save.gold, inventory: { ...save.items }, depth: 1,
-    modifier: rollModifier(), boons: [], springsUsed: [], room: null,
-  };
+  return party;
 }
 
 export function getRun(): RunState {
@@ -66,11 +126,166 @@ export function saveProgress(): boolean {
   save.gold = state.gold;
   save.items = { ...state.inventory };
   save.potions = state.inventory.potion ?? 0;
-  for (const c of state.party) save.levels[c.id] = c.level ?? 1;
   if (state.depth > save.deepest) save.deepest = state.depth;
+  if (state.active) {
+    if (state.depth > state.tally.deepest) state.tally.deepest = state.depth;
+    save.run = snapshot();
+  }
   const saved = writeSave(save);
   reportSaveResult(saved);
   return saved;
+}
+
+// --- Run lifecycle ------------------------------------------------------------
+
+/** Called as the party steps through Sanctuary's portal. Rebuilds the party
+ *  so Anchor upgrades bought since the last run apply, keeps the gold, items
+ *  and gear bought in town, and resets everything run-scoped. */
+export function startRun(): void {
+  clearRiftArea();
+  clearRoomArea();
+  save.runs += 1;
+  state = {
+    ...townState(),
+    active: true,
+    gold: state.gold,
+    inventory: { ...state.inventory },
+    rerolls: upgradeRank('reroll'),
+    mercy: upgradeRank('mercy') > 0 ? 1 + (upgradeRank('mercy') > 1 ? 1 : 0) : 0,
+  };
+  modifierApplied = false;
+  track('run_start', { n: save.runs, asc: save.ngPlus });
+  saveProgress();
+}
+
+export function isRunActive(): boolean {
+  return state.active;
+}
+
+/** Ends the run: banks Echoes, records how it went, and resets Sanctuary's
+ *  stock for the next one. Safe to call twice (the second call is a no-op
+ *  that returns the first payout). */
+let lastPayout: EchoBreakdown | null = null;
+export function finishRun(result: 'wipe' | 'retreat' | 'clear'): EchoBreakdown {
+  if (!state.active) return lastPayout ?? { lines: [], total: 0 };
+  const payout = echoesForRun(state.tally, state.gold, save.ngPlus, result === 'clear');
+  save.echoes += payout.total;
+  save.bestDepth = Math.max(save.bestDepth, state.tally.deepest, state.depth);
+  if (result === 'clear') {
+    save.clears += 1;
+    save.ngPlus += 1;
+    track('ngplus_start', { tier: save.ngPlus });
+  }
+  save.lastRun = { result, depth: state.depth, echoes: payout.total, foe: result === 'wipe' ? state.lastFoe : undefined };
+  track('run_payout', { r: result, d: state.depth, e: payout.total });
+  state.active = false;
+  save.run = null;
+  lastPayout = payout;
+  resetTownStock();
+  return payout;
+}
+
+/** Gold, items and gear go back to what the Anchor grants every run. */
+function resetTownStock(): void {
+  state.gold = START_GOLD_PER_PURSE * upgradeRank('purse');
+  const items: Record<string, number> = { ...BASE_START_ITEMS };
+  items.potion = (items.potion ?? 0) + upgradeRank('satchel');
+  if (upgradeRank('satchel') >= 3) items.phoenix_down = 1;
+  state.inventory = items;
+  save.equipmentOwned = [...STARTING_EQUIPMENT];
+  save.equipped = structuredClone(DEFAULT_EQUIPPED);
+}
+
+/** Buys the next rank of an Anchor upgrade with Echoes. */
+export function buyUpgrade(id: string): boolean {
+  const cost = nextRankCost(id, upgradeRank(id));
+  if (cost == null || save.echoes < cost || state.active) return false;
+  save.echoes -= cost;
+  save.upgrades[id] = upgradeRank(id) + 1;
+  // Starting stock upgrades show up in town right away.
+  if (id === 'purse') state.gold += START_GOLD_PER_PURSE;
+  if (id === 'satchel') {
+    state.inventory.potion = (state.inventory.potion ?? 0) + 1;
+    if (upgradeRank('satchel') >= 3) state.inventory.phoenix_down = Math.max(1, state.inventory.phoenix_down ?? 0);
+  }
+  state.party = freshParty();
+  track('upgrade_buy', { id, rank: upgradeRank(id) });
+  saveProgress();
+  return true;
+}
+
+/** Leaving a boss stratum for the next chapter's rooms: KO'd heroes stand
+ *  back up and everyone recovers a little. */
+export function steadyBetweenStrata(): void {
+  for (const c of state.party) {
+    if (c.stats.hp <= 0) c.stats.hp = 1;
+    c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.round(c.stats.maxHp * STRATUM_HEAL));
+    c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + Math.round(c.stats.maxMp * STRATUM_HEAL));
+    c.ailments = undefined;
+  }
+}
+
+export function isFinalDepth(depth: number): boolean {
+  return depth >= TOTAL_CHAPTERS * 2;
+}
+
+export function xpMultiplier(): number {
+  return 1 + XP_PER_SCHOLAR * upgradeRank('scholar');
+}
+
+export function recordVictory(kind: 'fight' | 'elite' | 'boss', chapter: number, foe?: string): void {
+  if (!state.active) return;
+  if (kind === 'boss') state.tally.bossChapters.push(chapter);
+  else if (kind === 'elite') state.tally.elites++;
+  else state.tally.fights++;
+  if (foe) state.lastFoe = foe;
+}
+
+export function recordFoe(name: string): void {
+  state.lastFoe = name;
+}
+
+export function recordRoom(): void {
+  if (state.active) state.tally.rooms++;
+}
+
+/** Spends one Anchor's Mercy charge; true if the wipe should be undone. */
+export function consumeMercy(): boolean {
+  if (state.mercy <= 0) return false;
+  state.mercy--;
+  return true;
+}
+
+// --- Talents --------------------------------------------------------------------
+
+export function talentChoiceCount(): number {
+  return 3 + upgradeRank('insight');
+}
+
+export function addPendingTalents(heroId: string, picks: number): void {
+  if (picks <= 0) return;
+  state.pendingTalents[heroId] = (state.pendingTalents[heroId] ?? 0) + picks;
+}
+
+export function rollTalentsFor(heroId: string): Talent[] {
+  const hero = state.party.find((c) => c.id === heroId);
+  return hero ? rollTalentChoices(hero, talentChoiceCount()) : [];
+}
+
+export function pickTalent(heroId: string, talentId: string): void {
+  const hero = state.party.find((c) => c.id === heroId);
+  if (!hero) return;
+  applyTalent(hero, talentId);
+  refreshGearEffects(hero);
+  state.pendingTalents[heroId] = Math.max(0, (state.pendingTalents[heroId] ?? 0) - 1);
+  if (state.pendingTalents[heroId] === 0) delete state.pendingTalents[heroId];
+  saveProgress();
+}
+
+export function useReroll(): boolean {
+  if (state.rerolls <= 0) return false;
+  state.rerolls--;
+  return true;
 }
 
 // --- Boons (run-scoped blessings) --------------------------------------------
@@ -82,6 +297,87 @@ export function addBoon(id: string): void {
 /** Aggregated boon effects for the current run. */
 export function runBoons(): BoonTotals {
   return boonTotals(state.boons);
+}
+
+/** Blessing choices for this run; the Favored upgrade tilts ordinary picks
+ *  toward the elite (rare/epic) table. */
+export function rollBoons(elite = false): Boon[] {
+  const favored = !elite && Math.random() < 0.3 * upgradeRank('fortune');
+  return rollBoonChoices(state.boons, elite || favored);
+}
+
+// --- Run snapshot (resume after reload) ----------------------------------------
+
+interface RunSnapshot {
+  depth: number;
+  party: Combatant[];
+  boons: string[];
+  modifierId: string;
+  springsUsed: string[];
+  room: { index: number; kind: RoomKind } | null;
+  usedTiles: string[];
+  tally: RunTally;
+  rerolls: number;
+  mercy: number;
+  pendingTalents: Record<string, number>;
+  lastFoe?: string;
+}
+
+function snapshot(): Record<string, unknown> {
+  const snap: RunSnapshot = {
+    depth: state.depth,
+    party: state.party.map((c) => ({ ...c, intent: undefined, readiness: undefined, defending: false, gear: undefined })),
+    boons: [...state.boons],
+    modifierId: state.modifier.id,
+    springsUsed: [...state.springsUsed],
+    room: state.room ? { index: state.room.index, kind: state.room.kind } : null,
+    usedTiles: [...state.usedTiles],
+    tally: { ...state.tally, bossChapters: [...state.tally.bossChapters] },
+    rerolls: state.rerolls,
+    mercy: state.mercy,
+    pendingTalents: { ...state.pendingTalents },
+    lastFoe: state.lastFoe,
+  };
+  return JSON.parse(JSON.stringify(snap)) as Record<string, unknown>;
+}
+
+function restoreSnapshot(raw: Record<string, unknown> | null): RunState | null {
+  if (!raw) return null;
+  try {
+    const snap = raw as unknown as RunSnapshot;
+    if (typeof snap.depth !== 'number' || !Array.isArray(snap.party) || snap.party.length !== 3) return null;
+    const fresh = makeParty();
+    const party = snap.party.map((c, i) => {
+      if (!c || typeof c !== 'object' || !c.stats || typeof c.stats.maxHp !== 'number') throw new Error('bad hero');
+      // Code-defined fields (growth curves, sprite keys) come from content.ts
+      // so a balance change reaches resumed runs too.
+      const base = fresh.find((f) => f.id === c.id) ?? fresh[i];
+      return { ...c, growth: base.growth, spriteKey: base.spriteKey, color: base.color, learnset: {} } as Combatant;
+    });
+    for (const c of party) refreshGearEffects(c);
+    const room = snap.room && isCombatRoom(snap.room.kind) !== undefined
+      ? { index: snap.room.index, kind: snap.room.kind, cleared: !isCombatRoom(snap.room.kind), done: [] }
+      : null;
+    return {
+      active: true,
+      party,
+      gold: save.gold,
+      inventory: { ...save.items },
+      depth: snap.depth,
+      modifier: MODIFIERS.find((m) => m.id === snap.modifierId) ?? MODIFIERS[0],
+      boons: Array.isArray(snap.boons) ? snap.boons : [],
+      springsUsed: Array.isArray(snap.springsUsed) ? snap.springsUsed : [],
+      room,
+      usedTiles: Array.isArray(snap.usedTiles) ? snap.usedTiles : [],
+      tally: { ...emptyTally(), ...(snap.tally ?? {}) },
+      rerolls: typeof snap.rerolls === 'number' ? snap.rerolls : 0,
+      mercy: typeof snap.mercy === 'number' ? snap.mercy : 0,
+      pendingTalents: snap.pendingTalents ?? {},
+      lastFoe: snap.lastFoe,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // --- Descent Interactables ----------------------------------------------------
@@ -122,14 +418,6 @@ export function useSpring(key: string): boolean {
 
 export function springUsed(key: string): boolean {
   return state.springsUsed.includes(key);
-}
-
-/** Party wipe stake: half the carried gold scatters. Returns the loss. */
-export function applyWipePenalty(): number {
-  const lost = Math.floor(state.gold / 2);
-  state.gold -= lost;
-  saveProgress();
-  return lost;
 }
 
 // --- Story Flags ------------------------------------------------------------
@@ -197,23 +485,6 @@ export function checkMilestoneQuests(): QuestDef[] {
 }
 
 // --- Sanctuary Economy ------------------------------------------------------
-
-export function hpBlessingCost(): number {
-  return 30 + save.hpBlessings * 20;
-}
-
-export function buyHpBlessing(): boolean {
-  const cost = hpBlessingCost();
-  if (state.gold < cost) return false;
-  state.gold -= cost;
-  save.hpBlessings++;
-  for (const c of state.party) {
-    c.stats.maxHp += HP_PER_BLESSING;
-    c.stats.hp = c.stats.maxHp;
-  }
-  saveProgress();
-  return true;
-}
 
 export const POTION_COST = 15;
 
@@ -572,27 +843,15 @@ export function restoreParty(): void {
   }
 }
 
-/** Back to Sanctuary: full healing, reset depth/boons, roll new modifier. */
+/** Back to Sanctuary: the run (if one is still open) ends as a retreat, and
+ *  the party wakes at level 1 with Sanctuary's starting stock. */
 export function returnToTown(): void {
   clearRiftArea(); // any active Rift run ends the moment we're safely home
   clearRoomArea();
-  state.room = null;
-  restoreParty();
-  state.depth = 1;
-  state.modifier = rollModifier();
-  state.boons = [];
-  state.springsUsed = [];
+  if (state.active) finishRun('retreat');
+  state = { ...townState(), gold: state.gold, inventory: { ...state.inventory } };
   modifierApplied = false;
   saveProgress();
-}
-
-/** Raises the permanent Ascension tier and sends the player back to descend
- * again — levels/gear/gold/flags are untouched, only postgame difficulty and
- * rewards scale with the tier (see makeEncounterForArea in chapters.ts). */
-export function ascend(): void {
-  save.ngPlus += 1;
-  track('ngplus_start', { tier: save.ngPlus });
-  returnToTown();
 }
 
 /** Called in DescentScene.create() — applies startHpFactor once per run. */
@@ -627,10 +886,18 @@ function applyEquipment(c: Combatant): void {
 function refreshGearEffects(c: Combatant): void {
   const slots = equippedFor(c.id);
   const fx = gearFor([slots.weapon, slots.armor, slots.charm]);
-  c.attackElement = fx.attackElement;
+  const perks = talentPerks(c.talents ?? []);
+  const gear = { ...fx.gear };
+  for (const [key, value] of Object.entries(perks)) {
+    const cur = (gear as Record<string, unknown>)[key];
+    if (key === 'spellDmgMult') gear.spellDmgMult = (gear.spellDmgMult ?? 1) * (value as number);
+    else if (typeof value === 'number') (gear as Record<string, unknown>)[key] = ((cur as number | undefined) ?? 0) + value;
+    else (gear as Record<string, unknown>)[key] = value;
+  }
+  c.gear = gear;
+  c.attackElement = perks.holyAttack ? 'holy' : fx.attackElement;
   c.attackInflict = fx.attackInflict;
   c.critInflict = fx.critInflict;
-  c.gear = fx.gear;
 }
 
 function currentEquipmentBonus(memberId: string): Partial<Stats> {

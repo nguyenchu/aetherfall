@@ -6,7 +6,6 @@ import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
 import {
   buyEquipment,
-  buyHpBlessing,
   buyItem,
   canSellEquipment,
   checkMilestoneQuests,
@@ -16,19 +15,22 @@ import {
   getRun,
   getSave,
   hasFlag,
-  hpBlessingCost,
   isQuestActive,
   ownedEquipment,
   sellEquipment,
   sellItem,
   setFlag,
+  startRun,
 } from '../game/run';
-import { setRiftArea } from '../game/chapters';
-import { generateRift } from '../game/rift';
 import { sharpText, FONT } from '../ui/text';
 import { showQuestToast } from '../ui/questToast';
 import { showBanterToast } from '../ui/banterToast';
-import { pickBanter, SANCTUARY_BANTER, MERCHANT_QUIPS } from '../game/banter';
+import { pickBanter, returnBanter, SANCTUARY_BANTER, MERCHANT_QUIPS } from '../game/banter';
+import { ANCHOR_UPGRADES, nextRankCost } from '../game/meta';
+import { upgradeRank } from '../game/run';
+
+// The run whose ending the party already reacted to (per session).
+let greetedRun = -1;
 import { tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
@@ -169,7 +171,7 @@ interface ChapterPortal {
 // Each pos sits inside its own carved gate alcove in the outer wall (see
 // MAP) -- right gate for Ch2, left for Ch3, the three bottom gates for
 // Ch4/5/6 (middle bottom gate added for Ch6, between the pre-existing pair).
-const CHAPTER_PORTALS: ChapterPortal[] = [
+export const CHAPTER_PORTALS: ChapterPortal[] = [
   { chapter: 2, flag: 'ch1_complete', pos: { x: 36, y: 10 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
   { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 10 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
   { chapter: 4, flag: 'ch3_complete', pos: { x: 24, y: 18 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
@@ -181,7 +183,7 @@ interface Npc {
   spriteKey: string;
   scale: number;
   name: string;
-  kind: 'dialogue' | 'vendor' | 'rift';
+  kind: 'dialogue' | 'vendor' | 'anchor';
   scriptId?: string;
   /** Shows a bouncing "!" above the figure while true — an unclaimed quest. */
   questActive?: boolean;
@@ -272,9 +274,7 @@ function npcs(): Record<string, Npc> {
     // Sanctuary's own Anchor — a shard of the one that shattered long ago
     // (see IntroScene). Once the other anchors are restored it tears open into a
     // Rift: a procedural endgame dungeon that raises the tier each time cleared.
-    ...(ch4Done ? {
-      A: { spriteKey: 'aether', scale: 0.9, name: 'the Rift', kind: 'rift' as const },
-    } : {}),
+    A: { spriteKey: 'aether', scale: 0.9, name: 'the Anchor', kind: 'anchor' as const },
   };
 }
 
@@ -313,6 +313,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private questMarkers = new Map<string, Phaser.GameObjects.Text>();
   private storyMarkers = new Map<string, Phaser.GameObjects.Text>();
   private activePortals: ChapterPortal[] = [];
+  private echoText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Sanctuary');
@@ -332,7 +333,10 @@ export class SanctuaryScene extends Phaser.Scene {
     // without resetting these, update() can touch a destroyed GameObject.
     this.hintText = undefined;
     this.shopBox = undefined;
-    this.activePortals = CHAPTER_PORTALS.filter((p) => hasFlag(p.flag));
+    this.echoText = undefined;
+    // Every run starts from the top now (Ashenveil Forest), so the old
+    // per-chapter shortcut portals stay closed.
+    this.activePortals = [];
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
     this.drawMap(npcs());
@@ -342,6 +346,7 @@ export class SanctuaryScene extends Phaser.Scene {
     attachTouchControls(this);
 
     music.play('sanctuary'); // resumes/switches if returning from dungeon
+    this.refreshEchoes();
 
     // Arrival story: only intro on first visit. Chapter wins play from BattleScene.
     if (!hasFlag('intro_seen')) {
@@ -352,6 +357,31 @@ export class SanctuaryScene extends Phaser.Scene {
     // Milestone/delivery quests have no NPC or boss to trigger them — check
     // in every time the player is back in town, same as a real turn-in.
     for (const quest of checkMilestoneQuests()) showQuestToast(this, quest);
+
+    // The party reacts to how the last run ended (once per run).
+    const save = getSave();
+    if (save.lastRun && hasFlag('intro_seen') && greetedRun !== save.runs) {
+      greetedRun = save.runs;
+      const last = save.lastRun;
+      this.time.delayedCall(700, () => showBanterToast(this, returnBanter({ ...last, runs: save.runs, canAfford: this.canAffordUpgrade() })));
+    }
+  }
+
+  private canAffordUpgrade(): boolean {
+    const echoes = getSave().echoes;
+    return ANCHOR_UPGRADES.some((u) => { const c = nextRankCost(u.id, upgradeRank(u.id)); return c != null && c <= echoes; });
+  }
+
+  /** Echoes (meta currency) and the run's starting gold, top-right. */
+  private refreshEchoes() {
+    const text = `✦ ${getSave().echoes} Echoes    ${getRun().gold}g`;
+    if (!this.echoText) {
+      this.echoText = this.add.text(GAME.width - 8, 6, text, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#9ae8ff', strokeThickness: 3 }))
+        .setOrigin(1, 0).setDepth(30).setScrollFactor(0);
+    } else {
+      this.echoText.setText(text);
+    }
+    this.echoText.setColor(this.canAffordUpgrade() ? '#f0d36c' : '#9ae8ff');
   }
 
   // --- Map and figures ------------------------------------------------------
@@ -682,7 +712,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
       const live = this.liveNpcAt(nx, ny);
       if (live) {
-        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'rift' ? 'enter' : 'talk';
+        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'anchor' ? 'commune (upgrades)' : 'talk';
         return {
           label: `Z / tap  ·  ${verb}`,
           run: () => this.interact(live),
@@ -748,21 +778,24 @@ export class SanctuaryScene extends Phaser.Scene {
     this.faceNpcTowardPlayer(live);
     const npc = live.def;
     if (npc.kind === 'vendor') this.openShop();
-    else if (npc.kind === 'rift') this.enterRift();
+    else if (npc.kind === 'anchor') this.openAnchor();
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
-  /** Generates a fresh Rift floor for the current tier and descends into it.
-   *  Theme pool is capped to chapters actually cleared (see generateRift) —
-   *  the Rift itself opens at ch4_complete, so without this a fresh Chapter 4
-   *  finisher could roll a later chapter's theme blind. */
-  private enterRift() {
+  /** The Anchor: spend Echoes on permanent upgrades (AnchorScene). */
+  private openAnchor() {
     this.state = 'busy';
-    const maxChapter = hasFlag('ch6_complete') ? 6 : hasFlag('ch5_complete') ? 5 : 4;
-    setRiftArea(generateRift(getSave().ngPlus, maxChapter));
-    getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
-    this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
+    input.releaseAll();
+    this.scene.pause();
+    this.scene.launch('Anchor', {
+      onDone: () => {
+        input.releaseAll();
+        this.scene.resume();
+        this.state = 'roam';
+        this.moveLockedUntil = this.time.now + 300;
+        this.refreshEchoes();
+      },
+    });
   }
 
   // --- Dialog ---------------------------------------------------------------
@@ -845,14 +878,14 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private descend() {
     this.state = 'busy';
-    getRun().depth = 1;
+    startRun();
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
-  private descendToChapterPortal(portal: ChapterPortal) {
+  private descendToChapterPortal(_portal: ChapterPortal) {
     this.state = 'busy';
-    getRun().depth = portal.targetDepth;
+    startRun();
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
@@ -862,13 +895,6 @@ export class SanctuaryScene extends Phaser.Scene {
   private buildShopOptions() {
     const inv = getRun().inventory;
     this.buys = [
-      {
-        kind: 'blessing',
-        label: () => 'Crystal Blessing',
-        price: () => hpBlessingCost(),
-        enabled: () => getRun().gold >= hpBlessingCost(),
-        action: () => { buyHpBlessing(); },
-      },
       ...(['potion', 'tonic'] as const).map((id) => ({
         id, kind: 'buyItem' as const,
         label: () => ITEMS[id].name,
@@ -1060,12 +1086,6 @@ export class SanctuaryScene extends Phaser.Scene {
       box.add(this.add.text(tx, py + 42, o.kind === 'buyItem'
         ? `Buy ${item.buyPrice ?? 0}g   ·   sells back for ${item.sellPrice ?? 0}g`
         : `Sells the whole stack at once — total ${o.price()}g`,
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
-    } else if (o.kind === 'blessing') {
-      head('Crystal Blessing');
-      box.add(this.add.text(42, py + 22, 'Permanent +8 max HP for the whole party. Stacks with every purchase, and heals everyone to full when bought.',
-        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 540 } })));
-      box.add(this.add.text(42, py + 44, `Cost rises each time — next: ${hpBlessingCost()}g`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
     } else if (o.kind === 'sellAll') {
       head('Sell all junk');

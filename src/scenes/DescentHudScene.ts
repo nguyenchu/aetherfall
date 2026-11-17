@@ -46,6 +46,8 @@ export class DescentHudScene extends Phaser.Scene {
     const hex = '#' + accentColor.toString(16).padStart(6, '0');
     const run = getRun();
     this.add.text(4, 4, 'AETHERFALL', sharpText({ fontFamily: FONT, fontSize: '12px', color: hex })).setDepth(10);
+    const lvl = Math.max(...run.party.map((c) => c.level ?? 1));
+    this.add.text(4, 30, `Stratum ${Math.ceil(run.depth / 2)}/6  ·  Lv ${lvl}`, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9ae8ff', strokeThickness: 2 })).setDepth(10);
     this.add.text(4, 18, areaName, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#dfe4f5' })).setDepth(10);
     this.goldText = this.add.text(GAME.width - 4, 4, `Gold ${run.gold}`,
       sharpText({ fontFamily: FONT, fontSize: '10px', color: '#f0d36c' })).setOrigin(1, 0).setDepth(10);

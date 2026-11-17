@@ -20,7 +20,7 @@
 
 import { boonTotals, type BoonTotals } from './boons';
 import { ITEMS, SPELLS } from './content';
-import { getRun } from './run';
+import { consumeMercy, getRun } from './run';
 import type { Ailment, BattleEvent, BattlePhase, Combatant, Command, Element, Inflict, Spell, SpeedSource, SpeedStatus } from './types';
 
 function rnd(min: number, max: number): number {
@@ -33,6 +33,11 @@ const WEAK_MULT = 1.5;
 const WARD_MULT = 0.3; // a warded element does only 30% damage to that enemy
 const BREAK_MULT = 1.5;
 const DEFEND_MP_GAIN = 2;
+// A hero's basic attack restores MP (+1 more on a weakness hit), so Attack
+// feeds skills instead of being the thing you mash when skills are spent.
+const ATTACK_MP_GAIN = 2;
+// Talent perk thresholds (talents.ts).
+const EXECUTE_THRESHOLD = 0.3;
 // Ailments (see types.ts): burn/venom tick at end of round, chill slows.
 const CHILL_AGI_MULT = 0.55;
 const CHILL_DMG_MULT = 0.75;
@@ -122,6 +127,8 @@ export class Battle {
 
   private bn: BoonTotals;
   private reviveUsed = false;
+  private deathSaveUsed = false; // Guardian Angel talent: once per battle
+  private currentActor?: Combatant; // whoever's action is resolving (kill rewards)
   private momentumStacks = 0; // Momentum boon: +crit per weakness hit landed, for the rest of the battle
 
   /** Shared inventory (item id -> count), mutated when items are used. */
@@ -163,6 +170,14 @@ export class Battle {
    * a guarantee that the same party member opens literally every fight. */
   start(): void {
     for (const c of this.all()) c.readiness = Math.floor(Math.random() * READY_THRESHOLD);
+    // Talent perks: Vanguard's head start, Dawn Chorus's opening Limit.
+    const chorus = Math.max(0, ...this.party.map((c) => c.gear?.battleStartLimit ?? 0));
+    for (const c of this.living('party')) {
+      const head = c.gear?.firstStrike ?? 0;
+      if (head > 0) c.readiness = Math.max(c.readiness ?? 0, Math.floor(READY_THRESHOLD * (0.3 + head)));
+      if (chorus > 0) c.limit = Math.min(LIMIT_MAX, (c.limit ?? 0) + chorus);
+      c.taunt = undefined;
+    }
     for (const e of this.living('enemy')) this.refreshIntent(e);
   }
 
@@ -222,7 +237,9 @@ export class Battle {
     if (actor.side === 'party' && cmd.type !== 'limit') {
       actor.limit = Math.min(LIMIT_MAX, (actor.limit ?? 0) + LIMIT_ACT_GAIN);
     }
+    this.currentActor = actor;
     this.execute(actor, cmd, events);
+    this.currentActor = undefined;
     this.resolveSplits(events);
     // Guardian's Wrath: the buff persists through repeated defends, and is
     // spent by whatever non-defend action finally uses it.
@@ -334,6 +351,13 @@ export class Battle {
       if (actor.dmgTakenStatus.turns - 1 <= 0) actor.dmgTakenStatus = undefined;
       else actor.dmgTakenStatus = { ...actor.dmgTakenStatus, turns: actor.dmgTakenStatus.turns - 1 };
     }
+    if (actor.taunt) {
+      actor.taunt = actor.taunt - 1 > 0 ? actor.taunt - 1 : undefined;
+      if (!actor.taunt && actor.stats.hp > 0) {
+        events.push({ kind: 'info', text: `${actor.name} no longer holds the enemy's attention.`, targetId: actor.id });
+        for (const e of this.living('enemy')) if (!e.broken) this.refreshIntent(e);
+      }
+    }
   }
 
   // --- Resolution ------------------------------------------------------------
@@ -344,6 +368,11 @@ export class Battle {
         actor.defending = true;
         actor.stats.mp = Math.min(actor.stats.maxMp, actor.stats.mp + DEFEND_MP_GAIN);
         let text = `${actor.name} braces (+${DEFEND_MP_GAIN} MP).`;
+        const heal = Math.round(actor.stats.maxHp * (actor.gear?.defendHeal ?? 0));
+        if (heal > 0 && actor.stats.hp < actor.stats.maxHp) {
+          actor.stats.hp = Math.min(actor.stats.maxHp, actor.stats.hp + heal);
+          text += ` Stalwart: +${heal} HP.`;
+        }
         if (actor.side === 'party' && this.bn.hasGuardiansWrath) {
           actor.guardBuffed = true;
           text += ' Their next strike will hit harder.';
@@ -363,7 +392,12 @@ export class Battle {
         const mod = getRun().modifier;
         const effectiveCost = Math.max(0, spell.cost + (actor.side === 'party' ? (mod.spellCostDelta ?? 0) : 0));
         if (actor.stats.mp < effectiveCost) return;
-        actor.stats.mp -= effectiveCost;
+        // Spellweaver: sometimes the weave holds without paying for it.
+        if (effectiveCost > 0 && Math.random() < (actor.gear?.freeCastChance ?? 0)) {
+          events.push({ kind: 'info', text: `Spellweaver — ${spell.name} costs nothing!`, actorId: actor.id });
+        } else {
+          actor.stats.mp -= effectiveCost;
+        }
         if (spell.kind === 'heal') {
           this.castHeal(actor, spell, cmd.targetId, events);
         } else if (spell.kind === 'buff') {
@@ -555,21 +589,30 @@ export class Battle {
   // --- Attacks and Spells -----------------------------------------------------
 
   /** Basic attack. Element comes from the weapon (default physical). */
-  private strike(actor: Combatant, target: Combatant, spell: Spell | null, events: BattleEvent[]): void {
+  private strike(actor: Combatant, target: Combatant, spell: Spell | null, events: BattleEvent[], counter = false): void {
     const element = actor.attackElement ?? 'physical';
     const base = actor.stats.str * 1.6 - target.stats.vit * 0.6;
     const hit = this.computeHit(actor, target, base, element);
     this.applyDamage(target, hit.dmg);
     this.maybeGainMomentum(actor, hit.weak);
     const tags = hitTags(hit);
+    // Attacking builds MP: Attack is how you pay for skills, not filler.
+    let mpGain = 0;
+    if (actor.side === 'party' && !counter) {
+      mpGain = ATTACK_MP_GAIN + (hit.weak ? 1 : 0) + (actor.gear?.attackMpBonus ?? 0);
+      const before = actor.stats.mp;
+      actor.stats.mp = Math.min(actor.stats.maxMp, actor.stats.mp + mpGain);
+      mpGain = actor.stats.mp - before;
+    }
     events.push({
       kind: 'attack',
-      text: `${actor.name} hits ${target.name} for ${hit.dmg}.${tags}`,
+      text: `${counter ? 'Riposte! ' : ''}${actor.name} hits ${target.name} for ${hit.dmg}.${tags}${mpGain > 0 ? ` (+${mpGain} MP)` : ''}`,
       actorId: actor.id, targetId: target.id, amount: hit.dmg, element, crit: hit.crit, weak: hit.weak,
     });
     // After the damage event, so the log and BREAK stamp follow the hit
     // that caused them (nothing above reads guard/broken).
     this.chipGuard(actor, target, hit.weak, spell?.guardHit ?? 0, events);
+    this.checkElementalCombo(actor, target, element, hit.dmg, events, false);
     // Venomous bites, chilling blades: attacks can carry an ailment
     // (enemy nature or a party weapon like the Tidecleaver). Ashbrand's
     // "Scorched Ground": a defending target gets no benefit of the doubt —
@@ -592,6 +635,11 @@ export class Battle {
     this.afterHitMechanics(actor, target, element, events);
     this.applyReflect(actor, target, hit, events, false, element);
     this.maybeKo(target, events);
+    // Riposte: a hero with the talent may answer an enemy's attack in kind.
+    if (!counter && actor.side === 'enemy' && actor.stats.hp > 0 && target.stats.hp > 0
+      && !target.ailments?.freeze && Math.random() < (target.gear?.counterChance ?? 0)) {
+      this.strike(target, actor, null, events, true);
+    }
   }
 
   /** Lifesteal: the Vampiric Edge boon and gear like the Vampire Fang. Covers
@@ -624,25 +672,15 @@ export class Battle {
 
   private castDamage(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
     const enemySide = actor.side === 'party' ? 'enemy' : 'party';
-    if (spell.element === 'physical' && spell.target !== 'all-enemies') {
-      // Physical skills (Crush) behave like boosted attacks with guard chip.
-      const target = this.aliveTargetOr(targetId, enemySide);
-      if (!target) return;
-      const base = spell.power + actor.stats.str * 1.2 - target.stats.vit * 0.5;
-      const hit = this.computeHit(actor, target, base, 'physical');
-      this.applyDamage(target, hit.dmg);
-      this.maybeGainMomentum(actor, hit.weak);
-      events.push({
-        kind: 'spell',
-        text: `${actor.name} uses ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
-        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak,
-      });
-      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events);
-      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events);
-      this.applyLifesteal(actor, hit.dmg, events);
-      this.afterHitMechanics(actor, target, 'physical', events);
-      this.applyReflect(actor, target, hit, events, false, 'physical');
-      this.maybeKo(target, events);
+    // Aether Flurry and the like: several hits, each at a random living foe.
+    if (spell.hits && spell.hits > 1) {
+      for (let i = 0; i < spell.hits; i++) {
+        const pool = this.living(enemySide);
+        if (pool.length === 0) break;
+        const target = pool[Math.floor(Math.random() * pool.length)];
+        this.castDamageOn(actor, spell, target, events, false);
+        if (this.living(enemySide).length === 0) break;
+      }
       return;
     }
 
@@ -651,30 +689,74 @@ export class Battle {
       : [this.aliveTargetOr(targetId, enemySide)].filter((t): t is Combatant => t != null);
     if (targets.length === 0) return;
     const isAoe = targets.length > 1;
-
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
-      const basePower = spell.element === 'physical'
-        ? spell.power + actor.stats.str * 1.0 - target.stats.vit * 0.4
-        : spell.power + actor.stats.int * 0.8 - target.stats.int * 0.2;
-      const hit = this.computeHit(actor, target, basePower, spell.element);
-      this.applyDamage(target, hit.dmg);
-      this.maybeGainMomentum(actor, hit.weak);
-      events.push({
-        kind: 'spell',
-        text: `${actor.name} casts ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
-        actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak, parallel: isAoe,
-      });
-      this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, isAoe);
-      if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, isAoe);
-      if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, isAoe);
-      this.afterHitMechanics(actor, target, spell.element, events, isAoe);
-      this.applyReflect(actor, target, hit, events, isAoe, spell.element);
-      this.maybeKo(target, events, isAoe);
+      this.castDamageOn(actor, spell, target, events, isAoe);
+    }
+
+    // Echo: a single-target hex may ring out a second time.
+    const single = spell.target === 'enemy';
+    if (single && actor.side === 'party' && Math.random() < (actor.gear?.echoChance ?? 0)) {
+      const again = this.aliveTargetOr(targetId, enemySide);
+      if (again) {
+        events.push({ kind: 'info', text: `Echo — ${spell.name} rings out again!`, actorId: actor.id });
+        this.castDamageOn(actor, spell, again, events, false);
+      }
     }
   }
 
+  /** One damage spell landing on one target. Physical skills scale like a
+   *  boosted attack; elemental ones off INT (or STR for Kael's blades). */
+  private castDamageOn(actor: Combatant, spell: Spell, target: Combatant, events: BattleEvent[], parallel: boolean): void {
+    let base: number;
+    if (spell.element === 'physical') {
+      base = spell.target === 'all-enemies'
+        ? spell.power + actor.stats.str * 1.0 - target.stats.vit * 0.4
+        : spell.power + actor.stats.str * 1.2 - target.stats.vit * 0.5;
+    } else if (spell.scale === 'str') {
+      base = spell.power + actor.stats.str * 1.1 - target.stats.vit * 0.4;
+    } else {
+      base = spell.power + actor.stats.int * 0.8 - target.stats.int * 0.2;
+    }
+    if (actor.side === 'party') base *= actor.gear?.spellDmgMult ?? 1;
+    const hit = this.computeHit(actor, target, base, spell.element);
+    this.applyDamage(target, hit.dmg);
+    this.maybeGainMomentum(actor, hit.weak);
+    const verb = spell.element === 'physical' || spell.scale === 'str' ? 'uses' : 'casts';
+    events.push({
+      kind: 'spell',
+      text: `${actor.name} ${verb} ${spell.name}; ${target.name} takes ${hit.dmg}.${hitTags(hit)}`,
+      actorId: actor.id, targetId: target.id, amount: hit.dmg, element: spell.element, spellId: spell.id, crit: hit.crit, weak: hit.weak, parallel,
+    });
+    this.chipGuard(actor, target, hit.weak, spell.guardHit ?? 0, events, parallel);
+    this.checkElementalCombo(actor, target, spell.element, hit.dmg, events, parallel);
+    if (spell.inflict) this.applySpellInflict(actor, target, spell.inflict, events, parallel);
+    if (spell.element === 'physical') this.applyLifesteal(actor, hit.dmg, events, parallel);
+    if (spell.drainMp && actor.stats.hp > 0) {
+      const gain = Math.min(actor.stats.maxMp - actor.stats.mp, Math.round(hit.dmg * spell.drainMp));
+      if (gain > 0) {
+        actor.stats.mp += gain;
+        events.push({ kind: 'info', text: `${actor.name} siphons ${gain} MP.`, actorId: actor.id, parallel });
+      }
+    }
+    this.afterHitMechanics(actor, target, spell.element, events, parallel);
+    this.applyReflect(actor, target, hit, events, parallel, spell.element);
+    this.maybeKo(target, events, parallel);
+  }
+
   private castHeal(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
+    // Rekindle: a fallen ally rises.
+    if (spell.revive) {
+      const target = this.byId(targetId);
+      if (!target || target.side !== actor.side || target.stats.hp > 0) {
+        events.push({ kind: 'info', text: `${spell.name} finds no one to call back.`, actorId: actor.id });
+        return;
+      }
+      target.stats.hp = Math.max(1, Math.round(target.stats.maxHp * spell.revive));
+      target.ailments = undefined;
+      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} rises again!`, actorId: actor.id, targetId: target.id, amount: -target.stats.hp, element: spell.element, spellId: spell.id });
+      return;
+    }
     const heal = Math.round(spell.power + actor.stats.int * 0.5 + (actor.gear?.healBonus ?? 0));
     const targets = spell.target === 'party'
       ? [...this.living(actor.side)]
@@ -683,21 +765,29 @@ export class Battle {
     for (const target of targets) {
       if (target.stats.hp <= 0) continue;
       target.stats.hp = Math.min(target.stats.maxHp, target.stats.hp + heal);
-      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id, parallel: isAoe });
+      const cleansed = spell.cleanse && target.ailments && Object.keys(target.ailments).length > 0;
+      if (spell.cleanse) target.ailments = undefined;
+      events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}; ${target.name} +${heal} HP.${cleansed ? ' Ailments cleansed.' : ''}`, actorId: actor.id, targetId: target.id, amount: -heal, element: spell.element, spellId: spell.id, parallel: isAoe });
       this.thaw(target, events, isAoe);
     }
   }
 
-  /** Ally-targeted CTB speed buff (Mira's Dawnrush) — see applySpeedStatus. */
+  /** Ally-targeted buffs: Dawnrush (speed), Radiant Ward (shield), and
+   *  Warden's Call (taunt + shield on the caster). */
   private castBuff(actor: Combatant, spell: Spell, targetId: string, events: BattleEvent[]): void {
-    const target = this.aliveTargetOr(targetId, actor.side) ?? actor;
-    events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name} on ${target.name}.`, actorId: actor.id, targetId: target.id, element: spell.element, spellId: spell.id });
+    const target = spell.target === 'self' ? actor : this.aliveTargetOr(targetId, actor.side) ?? actor;
+    events.push({ kind: 'spell', text: `${actor.name} casts ${spell.name}${target === actor ? '' : ` on ${target.name}`}.`, actorId: actor.id, targetId: target.id, element: spell.element, spellId: spell.id });
     if (spell.haste) {
       this.applySpeedStatus(target, 'haste', spell.haste.mult, spell.haste.turns, events);
     }
     if (spell.shield) {
       target.dmgTakenStatus = { mult: spell.shield.mult, turns: spell.shield.turns };
       events.push({ kind: 'info', text: `${target.name} is protected by a radiant shield!`, targetId: target.id });
+    }
+    if (spell.taunt) {
+      target.taunt = spell.taunt;
+      events.push({ kind: 'info', text: `${target.name} draws every enemy's eye!`, targetId: target.id });
+      for (const e of this.living('enemy')) if (!e.broken) this.refreshIntent(e);
     }
   }
 
@@ -888,6 +978,13 @@ export class Battle {
       }
       // Guardian's Wrath: consumed by executeTurn() right after this action resolves.
       if (actor.guardBuffed) dmg *= GUARDIANS_WRATH_MULT;
+      // Talent perks: Executioner finishes the wounded, Searing Mind the afflicted.
+      if (actor.gear?.executeBonus && target.stats.hp <= target.stats.maxHp * EXECUTE_THRESHOLD) {
+        dmg *= 1 + actor.gear.executeBonus;
+      }
+      if (actor.gear?.afflictedBonus && target.ailments && Object.keys(target.ailments).length > 0) {
+        dmg *= 1 + actor.gear.afflictedBonus;
+      }
       const critChance = CRIT_BASE + (actor.gear?.critBonus ?? 0)
         + (this.bn.hasMomentum ? this.momentumStacks * MOMENTUM_CRIT_PER_STACK : 0);
       crit = Math.random() < critChance;
@@ -915,6 +1012,119 @@ export class Battle {
       target.broken = true;
       target.intent = undefined;
       events.push({ kind: 'break', text: `${target.name} is BROKEN — it reels, defenseless!`, targetId: target.id, parallel });
+    }
+  }
+
+  /** Elemental & Synergy Reaction Combos:
+   *  - Shatter: Chill/Freeze + Physical/Ice -> massive bonus critical damage, chips extra guard, shatters ice!
+   *  - Combustion: Venom + Fire -> toxic detonation (+45% burst), applies burn, splashes fire to allies!
+   *  - Sanctify: Broken + Holy -> radiant holy judgment (+40%), heals whole party +8% HP and +3 MP!
+   *  - Melt: Burn + Ice -> thermal shock (+35% burst), strips burn, fractures armor (+30% damage taken)!
+   */
+  private checkElementalCombo(actor: Combatant, target: Combatant, element: Element, baseDmg: number, events: BattleEvent[], parallel: boolean): void {
+    if (actor.side !== 'party' || target.side !== 'enemy' || target.stats.hp <= 0) return;
+
+    // 1. SHATTER (Chill or Freeze + Physical or Ice)
+    if ((target.ailments?.freeze || target.ailments?.chill) && (element === 'physical' || element === 'ice')) {
+      const bonus = Math.max(2, Math.round(baseDmg * 0.5));
+      if (target.ailments.freeze) delete target.ailments.freeze;
+      else if (target.ailments.chill) delete target.ailments.chill;
+      this.applyDamage(target, bonus);
+      this.chipGuard(actor, target, true, 1, events, parallel);
+      events.push({
+        kind: 'combo',
+        comboType: 'shatter',
+        text: `💥 SHATTER! Ice shatters for +${bonus} bonus damage!`,
+        actorId: actor.id,
+        targetId: target.id,
+        amount: bonus,
+        element: 'ice',
+        parallel,
+      });
+      return;
+    }
+
+    // 2. COMBUSTION (Venom + Fire)
+    if (target.ailments?.venom && element === 'fire') {
+      const bonus = Math.max(2, Math.round(baseDmg * 0.45));
+      delete target.ailments.venom;
+      target.ailments = { ...target.ailments, burn: 3 };
+      this.applyDamage(target, bonus);
+      events.push({
+        kind: 'combo',
+        comboType: 'combustion',
+        text: `🔥 COMBUSTION! Toxic flames detonate for +${bonus}!`,
+        actorId: actor.id,
+        targetId: target.id,
+        amount: bonus,
+        element: 'fire',
+        parallel,
+      });
+      // Splash damage to other living enemies
+      for (const other of this.living('enemy')) {
+        if (other.id === target.id) continue;
+        const splash = Math.max(1, Math.round(bonus * 0.35));
+        this.applyDamage(other, splash);
+        events.push({
+          kind: 'spell',
+          text: `${other.name} caught in detonation! −${splash}`,
+          targetId: other.id,
+          amount: splash,
+          element: 'fire',
+          parallel: true,
+        });
+        this.maybeKo(other, events, true);
+      }
+      return;
+    }
+
+    // 3. SANCTIFY (Broken + Holy)
+    if (target.broken && element === 'holy') {
+      const bonus = Math.max(2, Math.round(baseDmg * 0.4));
+      this.applyDamage(target, bonus);
+      events.push({
+        kind: 'combo',
+        comboType: 'sanctify',
+        text: `✨ SANCTIFY! Radiant light strikes for +${bonus}!`,
+        actorId: actor.id,
+        targetId: target.id,
+        amount: bonus,
+        element: 'holy',
+        parallel,
+      });
+      for (const hero of this.living('party')) {
+        const heal = Math.max(1, Math.round(hero.stats.maxHp * 0.08) + 4);
+        hero.stats.hp = Math.min(hero.stats.maxHp, hero.stats.hp + heal);
+        hero.stats.mp = Math.min(hero.stats.maxMp, hero.stats.mp + 3);
+        events.push({
+          kind: 'spell',
+          text: `${hero.name} blessed! +${heal} HP, +3 MP`,
+          targetId: hero.id,
+          amount: -heal,
+          element: 'holy',
+          parallel: true,
+        });
+      }
+      return;
+    }
+
+    // 4. MELT (Burn + Ice)
+    if (target.ailments?.burn && element === 'ice') {
+      const bonus = Math.max(2, Math.round(baseDmg * 0.35));
+      delete target.ailments.burn;
+      target.dmgTakenStatus = { mult: 1.3, turns: 2 };
+      this.applyDamage(target, bonus);
+      events.push({
+        kind: 'combo',
+        comboType: 'melt',
+        text: `❄️ MELT! Thermal shock shatters defenses (+${bonus}, +30% vuln)!`,
+        actorId: actor.id,
+        targetId: target.id,
+        amount: bonus,
+        element: 'ice',
+        parallel,
+      });
+      return;
     }
   }
 
@@ -993,6 +1203,19 @@ export class Battle {
 
   private maybeKo(t: Combatant, events: BattleEvent[], parallel = false): void {
     if (t.stats.hp > 0) return;
+    // Guardian Angel (Mira's talent): the first lethal hit of the battle on
+    // any hero leaves them standing at 1 HP.
+    if (t.side === 'party' && !this.deathSaveUsed && this.party.some((p) => p.gear?.deathSave && p.stats.hp > 0 || p === t && p.gear?.deathSave)) {
+      this.deathSaveUsed = true;
+      t.stats.hp = 1;
+      events.push({ kind: 'info', text: `A guardian light holds ${t.name} up — 1 HP!`, targetId: t.id, parallel });
+      return;
+    }
+    // Battle Rhythm: a killing blow feeds the killer's MP.
+    const killer = this.currentActor;
+    if (t.side === 'enemy' && killer?.side === 'party' && killer.stats.hp > 0 && (killer.gear?.killMp ?? 0) > 0) {
+      killer.stats.mp = Math.min(killer.stats.maxMp, killer.stats.mp + (killer.gear?.killMp ?? 0));
+    }
     // Anchor's Promise: once per battle, a fallen hero returns.
     if (t.side === 'party' && this.bn.reviveOnce && !this.reviveUsed) {
       this.reviveUsed = true;
@@ -1142,6 +1365,16 @@ export class Battle {
       return { type: 'attack', targetId: wild.id };
     }
 
+    // Warden's Call: a taunting hero takes every attack and single-target spell.
+    const taunter = targets.find((t) => (t.taunt ?? 0) > 0);
+    if (taunter) {
+      const harmful = e.spells.filter((s) => SPELLS[s] && SPELLS[s].kind === 'damage' && SPELLS[s].target === 'enemy' && e.stats.mp >= SPELLS[s].cost);
+      if (harmful.length > 0 && Math.random() < (e.isBoss ? 0.45 : 0.3)) {
+        return { type: 'spell', spellId: harmful[Math.floor(Math.random() * harmful.length)], targetId: taunter.id };
+      }
+      return { type: 'attack', targetId: taunter.id };
+    }
+
     // A defending target only takes half damage from a physical hit (75% from
     // magic) — usually the weaker play, so prefer whoever isn't bracing
     // unless everyone is (Ashbrand's hunt-the-defender case is handled above).
@@ -1210,6 +1443,17 @@ export class Battle {
       this.phase = 'won';
       this.clearPartyAilments();
       return true;
+    }
+    if (this.living('party').length === 0 && consumeMercy()) {
+      // Anchor's Mercy (meta upgrade): once per run the Anchor refuses the wipe.
+      events.push({ kind: 'info', text: 'The Anchor refuses to let you fall!' });
+      for (const p of this.party) {
+        p.stats.hp = Math.round(p.stats.maxHp * 0.5);
+        p.ailments = undefined;
+        events.push({ kind: 'info', text: `${p.name} rises (${p.stats.hp} HP).`, targetId: p.id, amount: -p.stats.hp, parallel: true });
+      }
+      for (const e of this.living('enemy')) if (!e.broken) this.refreshIntent(e);
+      return false;
     }
     if (this.living('party').length === 0) {
       events.push({ kind: 'info', text: 'The party is defeated...' });

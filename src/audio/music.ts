@@ -679,7 +679,7 @@ export const music = new MusicEngine();
 // Sound effects — short one-shot bursts, no files needed.
 // ---------------------------------------------------------------------------
 
-export type SfxName = 'cursor' | 'confirm' | 'cancel' | 'hit' | 'magic' | 'levelup' | 'chest' | 'break' | 'crit' | 'heal' | 'shop' | 'door';
+export type SfxName = 'cursor' | 'confirm' | 'cancel' | 'hit' | 'magic' | 'levelup' | 'chest' | 'break' | 'crit' | 'heal' | 'shop' | 'door' | 'shatter' | 'combustion' | 'sanctify' | 'pickup' | 'victory';
 
 interface SfxDef { notes: StingNote[] }
 
@@ -696,6 +696,11 @@ const SFX: Record<SfxName, SfxDef> = {
   heal:    { notes: [{ midi: 64, t: 0, dur: 0.07, wave: 'triangle', vol: 0.1 }, { midi: 67, t: 0.06, dur: 0.08, wave: 'triangle', vol: 0.1 }, { midi: 72, t: 0.12, dur: 0.1, wave: 'triangle', vol: 0.11 }, { midi: 79, t: 0.2, dur: 0.16, wave: 'sine', vol: 0.12 }] },
   shop:    { notes: [{ midi: 83, t: 0, dur: 0.05, wave: 'square', vol: 0.11 }, { midi: 88, t: 0.05, dur: 0.08, wave: 'square', vol: 0.12 }] },
   door:    { notes: [{ midi: 36, t: 0, dur: 0.12, wave: 'triangle', vol: 0.15 }, { midi: 41, t: 0.08, dur: 0.14, wave: 'triangle', vol: 0.14 }, { midi: 48, t: 0.16, dur: 0.2, wave: 'sine', vol: 0.12 }] },
+  shatter: { notes: [{ midi: 98, t: 0, dur: 0.03, wave: 'sawtooth', vol: 0.16 }, { midi: 91, t: 0.02, dur: 0.04, wave: 'square', vol: 0.15 }, { midi: 86, t: 0.05, dur: 0.05, wave: 'triangle', vol: 0.14 }, { midi: 74, t: 0.08, dur: 0.06, wave: 'sawtooth', vol: 0.12 }] },
+  combustion: { notes: [{ midi: 32, t: 0, dur: 0.14, wave: 'sawtooth', vol: 0.22 }, { midi: 28, t: 0.02, dur: 0.16, wave: 'square', vol: 0.20 }, { midi: 40, t: 0.04, dur: 0.12, wave: 'sawtooth', vol: 0.18 }, { midi: 48, t: 0.08, dur: 0.10, wave: 'triangle', vol: 0.14 }] },
+  sanctify: { notes: [{ midi: 72, t: 0, dur: 0.08, wave: 'triangle', vol: 0.12 }, { midi: 76, t: 0.04, dur: 0.09, wave: 'sine', vol: 0.13 }, { midi: 79, t: 0.08, dur: 0.11, wave: 'triangle', vol: 0.14 }, { midi: 84, t: 0.12, dur: 0.18, wave: 'sine', vol: 0.15 }] },
+  pickup: { notes: [{ midi: 83, t: 0, dur: 0.06, wave: 'triangle', vol: 0.12 }, { midi: 88, t: 0.05, dur: 0.10, wave: 'sine', vol: 0.14 }] },
+  victory: { notes: [{ midi: 67, t: 0, dur: 0.08, wave: 'square', vol: 0.14 }, { midi: 72, t: 0.08, dur: 0.08, wave: 'square', vol: 0.14 }, { midi: 76, t: 0.16, dur: 0.08, wave: 'square', vol: 0.15 }, { midi: 79, t: 0.24, dur: 0.24, wave: 'square', vol: 0.17 }] },
 };
 
 class SfxEngine {

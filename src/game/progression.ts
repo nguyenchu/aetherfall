@@ -12,7 +12,8 @@ export function xpForLevel(level: number): number {
 const GROWABLE: (keyof Stats)[] = ['maxHp', 'maxMp', 'str', 'agi', 'vit', 'int'];
 
 /**
- * Raises one combatant by one level, applies growth, refills HP/MP, and
+ * Raises one combatant by one level, applies growth (current HP/MP grow by
+ * the same amount), and
  * teaches any spells in the learnset. Returns the newly learned spell ids.
  */
 export function levelUp(c: Combatant): string[] {
@@ -22,8 +23,9 @@ export function levelUp(c: Combatant): string[] {
     if (inc) c.stats[key] += inc;
   }
   c.level = (c.level ?? 1) + 1;
-  c.stats.hp = c.stats.maxHp;
-  c.stats.mp = c.stats.maxMp;
+  // Runs are attrition: a level-up grows the bars but doesn't refill them.
+  if (c.stats.hp > 0) c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + (g.maxHp ?? 0));
+  c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + (g.maxMp ?? 0));
   const learned = c.learnset?.[c.level] ?? [];
   for (const id of learned) {
     if (!c.spells.includes(id)) c.spells.push(id);
@@ -43,7 +45,8 @@ export function restoreLevel(c: Combatant, targetLevel: number): void {
 export function grantXp(party: Combatant[], amount: number): BattleEvent[] {
   const events: BattleEvent[] = [];
   for (const c of party) {
-    if (c.stats.hp <= 0) continue; // defeated members do not receive XP this battle
+    // Fallen heroes still learn from the fight: in a run, a hero who fell
+    // behind in levels would never catch up.
     c.xp = (c.xp ?? 0) + amount;
     while (c.xp >= xpForLevel(c.level ?? 1)) {
       c.xp -= xpForLevel(c.level ?? 1);

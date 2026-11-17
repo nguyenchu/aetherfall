@@ -4,7 +4,7 @@ import { music, sfx } from '../audio/music';
 import { BOONS } from '../game/boons';
 import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
 import { EQUIPMENT, equipmentEffectText, type EquipSlot } from '../game/equipment';
-import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedByOther, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, returnToTown, rewardTextForQuest, useItemOn } from '../game/run';
+import { castPartyHealOutOfBattle, castSpellOutOfBattle, effectiveSpellCost, equipItem, equippedByOther, equippedFor, equipmentPreviewStats, getRun, hardReset, ownedEquipment, questList, rewardTextForQuest, useItemOn } from '../game/run';
 import { input, attachTouchControls } from '../game/input';
 import { xpForLevel } from '../game/progression';
 import { loadSaveSummary } from '../game/save';
@@ -947,7 +947,7 @@ export class GameMenuScene extends Phaser.Scene {
   }
 
   private quitToTitle() {
-    if (this.caller === 'Descent') returnToTown(); // the Anchor draws the party home
+    // A run in progress is saved and resumes from Continue; quitting doesn't end it.
     input.releaseAll();
     this.scene.stop(this.caller);
     this.scene.start('Title');

@@ -3,7 +3,7 @@ import { GAME, COLORS, renderScale } from '../config';
 import { music, sfx } from '../audio/music';
 import { input } from '../game/input';
 import { loadSaveSummary } from '../game/save';
-import { hardReset } from '../game/run';
+import { hardReset, isRunActive } from '../game/run';
 import { sharpText, FONT } from '../ui/text';
 import { track } from '../game/analytics';
 import { openFeedback } from '../ui/feedback';
@@ -151,7 +151,13 @@ export class TitleScene extends Phaser.Scene {
     const entries: Array<{ label: string; action: () => void }> = [];
     const summary = loadSaveSummary();
     if (summary) {
-      entries.push({ label: `Continue  -  Lv ${summary.highestLevel}, Stratum ${summary.deepest}, ${summary.gold}g`, action: () => this.begin(false) });
+      const resume = summary.runDepth != null;
+      entries.push({
+        label: resume
+          ? `Resume descent  -  Stratum ${Math.ceil(summary.runDepth! / 2)}, best ${Math.ceil(summary.bestDepth / 2)}, ✦${summary.echoes}`
+          : `Continue  -  ✦${summary.echoes} Echoes, ${summary.runs} descents, best Stratum ${Math.max(1, Math.ceil(summary.bestDepth / 2))}`,
+        action: () => this.begin(false),
+      });
       entries.push({ label: 'New Game', action: () => this.buildConfirm() });
       entries.push({ label: 'Watch the prologue', action: () => this.watchPrologue() });
     } else {
@@ -230,10 +236,10 @@ export class TitleScene extends Phaser.Scene {
     if (reset) hardReset();
     this.unsubs.forEach((u) => u());
     this.unsubs = [];
-    music.play('sanctuary'); // head start before the fade into Sanctuary
+    if (reset || !isRunActive()) music.play('sanctuary'); // head start before the fade into Sanctuary
     this.cameras.main.fadeOut(400, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      this.scene.start('Sanctuary');
+      this.scene.start(!reset && isRunActive() ? 'Descent' : 'Sanctuary');
     });
   }
 }

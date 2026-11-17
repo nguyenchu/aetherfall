@@ -179,3 +179,71 @@ export function pickBanter(pool: BanterBeat[]): BanterBeat | null {
   lastId = pick.id;
   return pick;
 }
+
+// --- Return-to-Sanctuary reactions ------------------------------------------
+// Every run ends back in Sanctuary; the party reacts to how the last one
+// went (where it fell, to what), so dying reads as part of the story — the
+// Anchor drags them home and keeps an echo of the attempt.
+
+const STRATUM_NAMES = ['Ashenveil Forest', 'the Sunken City', 'the Ashen Peaks', 'the Crystal Depths', 'Stormcrag Heights', 'Frostbound Reach'];
+
+export interface ReturnContext {
+  result: 'wipe' | 'retreat' | 'clear';
+  depth: number;
+  echoes: number;
+  foe?: string;
+  runs: number;
+  canAfford: boolean;
+}
+
+export function returnBanter(ctx: ReturnContext): BanterLine[] {
+  const place = STRATUM_NAMES[Math.min(STRATUM_NAMES.length - 1, Math.ceil(ctx.depth / 2) - 1)];
+  const foe = ctx.foe ?? 'Whatever that was';
+  const pick = <T,>(xs: T[]): T => xs[Math.floor(Math.random() * xs.length)];
+  let lines: BanterLine[];
+  if (ctx.result === 'clear') {
+    lines = pick([
+      [
+        { ...MIRA, text: 'We reached the bottom. And still the Anchor called us home.' },
+        { ...LYRA, text: 'Because the fall isn\'t over — only slower. Every descent slows it a little more.' },
+      ],
+      [
+        { ...KAEL, text: 'Six anchors lit. I can feel them, like lanterns under the floor.' },
+        { ...LYRA, text: 'And something underneath them, still pulling. We go again.' },
+      ],
+    ]);
+  } else if (ctx.result === 'retreat') {
+    lines = pick([
+      [
+        { ...KAEL, text: `We pulled back from ${place}. Right call.` },
+        { ...LYRA, text: 'Cowardly call. Also the right one.' },
+      ],
+      [
+        { ...MIRA, text: 'The Anchor let us walk home on our own feet this time. Small mercies.' },
+      ],
+    ]);
+  } else {
+    lines = pick([
+      [
+        { ...KAEL, text: `${foe}. In ${place}. I'll see it coming next time.` },
+        { ...MIRA, text: 'The Anchor dragged us out before the dark could keep us. It always does.' },
+      ],
+      [
+        { ...LYRA, text: `${foe}. I'm writing that name down.` },
+        { ...KAEL, text: 'Write down how to kill it, too.' },
+      ],
+      [
+        { ...MIRA, text: 'Same beds. Same ceiling. Again.' },
+        { ...LYRA, text: 'Different scars, though. The Anchor remembers what our bodies forget.' },
+      ],
+      [
+        { ...KAEL, text: `We made it to ${place} this time.` },
+        { ...LYRA, text: 'Further than the dark expected. That\'s what it hates.' },
+      ],
+    ]);
+  }
+  if (ctx.echoes > 0) {
+    lines.push({ ...LYRA, text: `It kept ${ctx.echoes} echoes of that descent.${ctx.canAfford ? ' Go and touch the Anchor — spend them.' : ''}` });
+  }
+  return lines;
+}

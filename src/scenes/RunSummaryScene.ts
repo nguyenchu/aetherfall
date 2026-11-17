@@ -1,16 +1,17 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { input } from '../game/input';
-import { getRun, returnToTown } from '../game/run';
+import { finishRun, getRun, returnToTown } from '../game/run';
 import { BOONS } from '../game/boons';
+import { TALENTS } from '../game/talents';
+import { getSave } from '../game/run';
 import { music, sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import { track, chapterOfDepth } from '../game/analytics';
 import { openFeedback } from '../ui/feedback';
 
 interface RunSummaryData {
-  reason: 'wipe' | 'retreat';
-  lostGold?: number;
+  reason: 'wipe' | 'retreat' | 'clear';
   depth?: number;
 }
 
@@ -34,10 +35,14 @@ export class RunSummaryScene extends Phaser.Scene {
     const depth = data.depth ?? run.depth;
     // Both outcomes (a party wipe and a voluntary retreat) funnel through here,
     // so this is the single canonical "run ended" signal.
-    track('run_end', { reason: data.reason, ch: chapterOfDepth(depth), d: depth, g: run.gold });
-    const title = data.reason === 'wipe' ? 'THE ANCHOR PULLS YOU HOME' : 'RETURNED TO SANCTUARY';
+    const goldLeft = run.gold;
+    track('run_end', { reason: data.reason, ch: chapterOfDepth(depth), d: depth, g: goldLeft });
+    const payout = finishRun(data.reason);
+    const title = data.reason === 'wipe' ? 'THE ANCHOR PULLS YOU HOME'
+      : data.reason === 'clear' ? 'YOU REACHED THE BOTTOM' : 'RETURNED TO SANCTUARY';
     const subtitle = data.reason === 'wipe'
-      ? 'The descent ends, but your growth remains.'
+      ? 'The descent ends. Only the Echoes remain.'
+      : data.reason === 'clear' ? 'The Aether is quiet. The Anchor remembers everything.'
       : 'You leave the dark before it can take more.';
 
     // The whole background is the "continue" tap target. Making it an
@@ -56,28 +61,30 @@ export class RunSummaryScene extends Phaser.Scene {
     this.add.text(54, 58, title, sharpText({ fontFamily: FONT, fontSize: '15px', color: '#f0d36c', strokeThickness: 2 }));
     this.add.text(54, 80, subtitle, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#c9cee8', strokeThickness: 2 }));
 
-    const rows = [
-      ['Depth reached', `Stratum ${depth}`],
-      ['Gold carried', `${run.gold}`],
-      ['Gold lost', data.lostGold && data.lostGold > 0 ? `${data.lostGold}` : '0'],
-    ];
-    rows.forEach(([label, value], i) => {
-      const y = 116 + i * 24;
+    this.add.text(70, 104, `Stratum ${Math.ceil(depth / 2)} (depth ${depth})`, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', strokeThickness: 2 }));
+    payout.lines.forEach(([label, amount], i) => {
+      const y = 122 + i * 12;
       this.add.text(70, y, label, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 }));
-      this.add.text(208, y - 1, value, sharpText({ fontFamily: FONT, fontSize: '10px', color: '#dfe4f5', strokeThickness: 2 }));
+      this.add.text(300, y, `+${amount}`, sharpText({ fontFamily: FONT, fontSize: '8px', color: '#9ae8ff', strokeThickness: 2 })).setOrigin(1, 0);
     });
+    this.add.text(300, 122 + payout.lines.length * 12 + 4, `✦ ${payout.total} Echoes  (bank: ${getSave().echoes})`, sharpText({
+      fontFamily: FONT, fontSize: '11px', color: '#f0d36c', strokeThickness: 2,
+    })).setOrigin(1, 0);
 
     // Actual boon names, not just a count — the whole point of a roguelite
     // recap is seeing what you actually built this run.
     const boonNames = run.boons.map((id) => BOONS[id]?.name ?? id);
-    this.add.text(70, 190, 'Boons collected', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 }));
-    this.add.text(70, 202, boonNames.length > 0 ? boonNames.join('  ·  ') : 'None this run', sharpText({
-      fontFamily: FONT, fontSize: '8px', color: '#c9a8ff', strokeThickness: 2, wordWrap: { width: 400 },
+    this.add.text(330, 104, 'Boons', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#8a93b8', strokeThickness: 2 }));
+    this.add.text(330, 116, boonNames.length > 0 ? boonNames.join('\n') : 'None', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: '#c9a8ff', strokeThickness: 2, wordWrap: { width: 130 },
     }));
 
-    this.add.text(70, 238, run.party.map((m) => `${m.name}  Lv ${m.level ?? 1}`).join('     '),
-      sharpText({ fontFamily: FONT, fontSize: '9px', color: '#a8d8ff', strokeThickness: 2 }));
-    this.add.text(70, 270, 'Z / tap  ·  wake in Sanctuary',
+    run.party.forEach((m, i) => {
+      const names = (m.talents ?? []).map((t) => TALENTS[t]?.name ?? t).join(', ');
+      this.add.text(70, 216 + i * 16, `${m.name} Lv ${m.level ?? 1}: ${names || '—'}`,
+        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#a8d8ff', strokeThickness: 2, wordWrap: { width: 400 } }));
+    });
+    this.add.text(70, 276, 'Z / tap  ·  wake in Sanctuary',
       sharpText({ fontFamily: FONT, fontSize: '8px', color: '#6cf0c2', strokeThickness: 2 }));
 
     // Contextual feedback prompt: this is a natural pause right after an

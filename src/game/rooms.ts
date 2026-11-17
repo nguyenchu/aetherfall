@@ -18,7 +18,9 @@ import type { Combatant } from './types';
 
 export type RoomKind = 'fight' | 'boon' | 'elite' | 'treasure' | 'spring' | 'event' | 'shop';
 
-export const ROOMS_PER_CHAPTER = 5;
+// A run crosses all six chapters, so each chapter is a short stretch:
+// three rooms (two door choices), then the boss stratum.
+export const ROOMS_PER_CHAPTER = 3;
 
 // Walking through a door restores a little: HP/MP carry over between fights
 // (only town fully restores), and over five rooms in a row that attrition
@@ -215,6 +217,15 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
   const teleports: Record<string, string> = {};
   const gusts: Record<string, 'up' | 'down' | 'left' | 'right'> = {};
   if (!bare) addFieldTiles(grid, base.theme.id, teleports, gusts, reserved, opts.rng);
+
+  // Aether Caches: 2-3 interactive sparkling pickups per room on open floor
+  const cacheCount = Phaser.Math.Between(2, 3);
+  for (let i = 0; i < cacheCount; i++) {
+    const spot = pickSpot(5, DOOR_COL - 2);
+    if (spot && grid[spot.y][spot.x] === '.') {
+      grid[spot.y][spot.x] = 'O';
+    }
+  }
 
   if (!connected(grid)) return null;
 
