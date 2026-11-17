@@ -47,14 +47,16 @@ export interface RoomProgress {
   done: string[];
 }
 
-export const ROOM_INFO: Record<RoomKind, { label: string; color: string; tint: number }> = {
-  boon:     { label: '◆ Blessing', color: '#b8a8f8', tint: 0x8a6cf0 },
-  fight:    { label: '$ Gold',     color: '#f0d36c', tint: 0xd8b040 },
-  elite:    { label: '!! Elite',   color: '#ffa03c', tint: 0xff8800 },
-  treasure: { label: '▣ Treasure', color: '#ffd27a', tint: 0xc08a30 },
-  spring:   { label: '✚ Rest',     color: '#9ae8ff', tint: 0x2a8ab8 },
-  event:    { label: '? Unknown',  color: '#6cf0c2', tint: 0x3aa888 },
-  shop:     { label: '◈ Merchant', color: '#ffe066', tint: 0xe6b800 },
+/** label = what the door is; hint = what you get for taking it. Shown on the
+ *  door so the choice reads without knowing the game's vocabulary. */
+export const ROOM_INFO: Record<RoomKind, { label: string; hint: string; color: string; tint: number }> = {
+  boon:     { label: '◆ Boon Fight',  hint: 'Win: pick 1 of 3 boons',      color: '#b8a8f8', tint: 0x8a6cf0 },
+  fight:    { label: '$ Gold Fight',  hint: 'Win: bonus gold',             color: '#f0d36c', tint: 0xd8b040 },
+  elite:    { label: '!! Elite',      hint: 'Hard fight, rare boon + XP',  color: '#ffa03c', tint: 0xff8800 },
+  treasure: { label: '▣ Gear Chest',  hint: 'Elite guards a gear chest',   color: '#ffd27a', tint: 0xc08a30 },
+  spring:   { label: '✚ Spring',      hint: 'No fight: heal the party',    color: '#9ae8ff', tint: 0x2a8ab8 },
+  event:    { label: '? Mystery',     hint: 'No fight: a risky choice',    color: '#6cf0c2', tint: 0x3aa888 },
+  shop:     { label: '◈ Merchant',    hint: 'No fight: spend your gold',   color: '#ffe066', tint: 0xe6b800 },
 };
 
 /** Combat rooms hold a visible fight that has to be won before the doors open. */

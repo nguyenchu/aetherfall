@@ -928,11 +928,14 @@ export class DescentScene extends Phaser.Scene {
       fontFamily: FONT, fontSize: '10px', color: '#ffffff',
     })).setOrigin(0.5).setDepth(3);
     // Labels sit left of the door so they stay on-screen at the map's edge.
-    const label = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2, info.label, sharpText({
+    const label = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2 - 5, info.label, sharpText({
       fontFamily: FONT, fontSize: '8px', color: info.color, strokeThickness: 3,
     })).setOrigin(1, 0.5).setDepth(3);
-    this.doorObjects.push(img, arrow, label);
-    if (!getRun().room?.cleared) for (const o of [img, arrow, label]) o.setAlpha(0.35);
+    const hint = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2 + 5, info.hint, sharpText({
+      fontFamily: FONT, fontSize: '7px', color: '#c9cee8', strokeThickness: 3,
+    })).setOrigin(1, 0.5).setDepth(3);
+    this.doorObjects.push(img, arrow, label, hint);
+    if (!getRun().room?.cleared) for (const o of [img, arrow, label, hint]) o.setAlpha(0.35);
   }
 
   /** Opens the in-dungeon merchant shop. */

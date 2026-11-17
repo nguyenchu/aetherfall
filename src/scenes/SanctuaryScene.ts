@@ -109,15 +109,16 @@ const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase
 // Warden Eda and Scholar Voss keep their posts flanking the Anchor shrine at
 // the keep's true center; the Merchant/Child/everyday plaza sits south of it,
 // same as a real keep's inner ward vs. outer bailey.
-// '#' wall, '.' floor, 'P' player start, 'D' descent portal
+// '#' wall, '.' floor, 'P' player start, 'D' descent portal (the forest gate,
+// top centre — the great avenue runs straight from the Anchor up to it)
 // 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'A' the Anchor, 'T' the
 // Stranger, 'F' plaza fountain (blocking)
 const MAP = [
   '#######################################',
   '#######################################',
-  '##############################DD#######',
-  '##############################D.#######',
-  '##############################..#######',
+  '##################DDD##################',
+  '##################...##################',
+  '##################...##################',
   '#######...###.............###...#######',
   '######....###.............###....######',
   '#####.....###.............###.....#####',
@@ -144,7 +145,7 @@ const MAP = [
  *  particular got confused for pickups/markers) rather than detail. Every
  *  piece left here also does double duty as a wayfinding cue (which
  *  building is whose, where the Merchant is) instead of being pure filler. */
-type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel';
+type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel' | 'bush' | 'flowers' | 'torch' | 'bench';
 const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
   { x: 9, y: 7, kind: 'lantern' },   // flanking Warden Eda's building
   { x: 29, y: 7, kind: 'lantern' },  // flanking Scholar Voss's building
@@ -152,7 +153,22 @@ const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
   { x: 27, y: 5, kind: 'banner_violet' }, // Scholar Voss's building
   { x: 22, y: 15, kind: 'crate' },  // near the Merchant
   { x: 26, y: 15, kind: 'barrel' }, // near the Merchant
+  // Forest gate: torches on the wall either side of the avenue.
+  { x: 17, y: 4, kind: 'torch' },
+  { x: 21, y: 4, kind: 'torch' },
+  // Garden corners (grass patches, see GRASS) and benches around the fountain.
+  { x: 5, y: 12, kind: 'bush' }, { x: 8, y: 14, kind: 'bush' }, { x: 6, y: 14, kind: 'flowers' }, { x: 7, y: 12, kind: 'flowers' },
+  { x: 33, y: 12, kind: 'bush' }, { x: 30, y: 14, kind: 'bush' }, { x: 32, y: 14, kind: 'flowers' }, { x: 31, y: 12, kind: 'flowers' },
+  { x: 16, y: 12, kind: 'bench' }, { x: 22, y: 12, kind: 'bench' },
 ];
+
+/** Ground look is render-only (collision reads MAP): paved avenue + garden turf. */
+const GRASS = [{ c0: 5, c1: 8, r0: 12, r1: 14 }, { c0: 30, c1: 33, r0: 12, r1: 14 }];
+function groundKind(c: number, r: number): 'paved' | 'grass' | 'cobble' {
+  if (GRASS.some((g) => c >= g.c0 && c <= g.c1 && r >= g.r0 && r <= g.r1)) return 'grass';
+  if ((c >= 18 && c <= 20 && r <= 14) || (r >= 9 && r <= 10 && c >= 3 && c <= 35)) return 'paved';
+  return 'cobble';
+}
 
 /** Chapter descent portals beyond the always-open Chapter 1 gate ('D' tiles
  *  baked into MAP), keyed by the flag that unlocks them — a single table
@@ -396,11 +412,13 @@ export class SanctuaryScene extends Phaser.Scene {
         if (ch === '#') {
           this.add.image(x, y, 'wall').setOrigin(0, 0);
         } else {
-          const base = (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
+          const kind = groundKind(c, r);
+          const base = kind === 'grass' ? 'grass' : kind === 'paved' ? 'paved' : (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
           this.add.image(x, y, `${base}_${tileVariant(c, r, 2)}`).setOrigin(0, 0);
         }
         if (ch === 'D') {
-          this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85);
+          const glow = this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85).setTint(0x9affd0);
+          this.tweens.add({ targets: glow, alpha: { from: 0.95, to: 0.45 }, scale: { from: 1, to: 1.12 }, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         }
         if (ch === 'F') {
           this.placeFountain(x + GAME.tile / 2, y + GAME.tile / 2);
@@ -453,6 +471,15 @@ export class SanctuaryScene extends Phaser.Scene {
         case 'crate':
           this.add.image(x, y, 'decor_crate').setOrigin(0.5, 0.6).setDepth(2);
           break;
+        case 'bush': this.add.image(x, y + 2, 'decor_bush').setDepth(2); break;
+        case 'flowers': this.add.image(x, y + 3, 'decor_flowers').setDepth(2); break;
+        case 'bench': this.add.image(x, y, 'decor_bench').setDepth(2); break;
+        case 'torch': {
+          this.add.image(x, y, 'decor_torch').setOrigin(0.5, 0.7).setDepth(3);
+          const flame = this.add.circle(x, y - 10, 6, 0xff9a3a, 0.28).setDepth(3);
+          this.tweens.add({ targets: flame, alpha: { from: 0.3, to: 0.1 }, scale: { from: 1, to: 1.35 }, duration: 380 + Phaser.Math.Between(0, 200), yoyo: true, repeat: -1 });
+          break;
+        }
         case 'barrel':
           this.add.image(x, y, 'decor_barrel').setOrigin(0.5, 0.6).setDepth(2);
           break;
@@ -836,8 +863,12 @@ export class SanctuaryScene extends Phaser.Scene {
         if (this.grid[r][c] === 'D') dTiles.push({ c, r });
     if (dTiles.length > 0) {
       const mid = dTiles[Math.floor(dTiles.length / 2)];
-      this.add.text(mid.c * GAME.tile + GAME.tile / 2, mid.r * GAME.tile - 6, 'Ashenveil Forest',
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#a58cff' })).setOrigin(0.5, 1).setDepth(5);
+      const cx = mid.c * GAME.tile + GAME.tile / 2;
+      this.add.image(cx, 56, 'decor_gate').setOrigin(0.5, 1).setDepth(1.5);
+      const haze = this.add.ellipse(cx, 44, 56, 26, 0x9affd0, 0.16).setDepth(1.6);
+      this.tweens.add({ targets: haze, alpha: { from: 0.2, to: 0.06 }, scaleX: { from: 1, to: 1.15 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.add.text(cx, 6, 'ASHENVEIL FOREST', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#bff0d0', strokeThickness: 2 }))
+        .setOrigin(0.5, 0).setDepth(5);
     }
 
     // Every unlocked chapter portal beyond Chapter 1's always-open gate.

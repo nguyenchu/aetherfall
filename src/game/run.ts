@@ -59,9 +59,9 @@ const XP_PER_SCHOLAR = 0.15;
 /** Between strata the Anchor's pull steadies the party a little. */
 const STRATUM_HEAL = 0.3;
 
+let modifierApplied = false; // declared before buildRun() runs at module load (resume reads it)
 let save: SaveData = loadSave();
 let state: RunState = buildRun();
-let modifierApplied = false;
 
 function townState(): RunState {
   return {
