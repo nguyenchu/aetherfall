@@ -55,8 +55,8 @@ type Facing = 'down' | 'up' | 'left' | 'right';
 /**
  * Dungeon exploration. A chapter's entrance stratum (odd depth) is played as
  * a run of generated rooms (rooms.ts): each holds one visible fight ('E'/'X'),
- * chest, spring or event ('?'), and its doors ('1'-'3') show what the next
- * room gives. Boss strata (even depths) are the fixed hand-made maps from
+ * chest, spring or event ('?'), and its single exit ('1') leads to a room
+ * whose kind is a surprise. Boss strata (even depths) are the fixed hand-made maps from
  * chapters.ts, and the Rift is its own generated floor with random fights.
  */
 // How quickly the camera catches up to the player each frame (0-1, higher = snappier).
@@ -76,7 +76,7 @@ export class DescentScene extends Phaser.Scene {
   private wardOpen = false;
   private wardImages = new Map<string, Phaser.GameObjects.Image>();
   private leverImages = new Map<string, Phaser.GameObjects.Image>();
-  // Generated rooms: door tiles and their labels, dimmed while sealed.
+  // Generated rooms: the exit (and boss door label), dimmed while sealed.
   private doorObjects: Phaser.GameObjects.Components.Alpha[] = [];
   private walkFrame = 0;
   private facing: Facing = 'down';
@@ -914,28 +914,21 @@ export class DescentScene extends Phaser.Scene {
     for (const o of this.doorObjects) {
       this.tweens.add({ targets: o, alpha: 1, duration: 400 });
     }
-    this.floatText('The doors unseal...', '#6cf0c2', room.kind === 'fight' ? 14 : 0);
+    this.floatText('The way opens...', '#6cf0c2', room.kind === 'fight' ? 14 : 0);
   }
 
-  /** A door tile plus a label naming the room behind it; dim while sealed. */
+  /** The room's exit tile; dim while sealed. */
   private drawDoor(c: number, r: number, tileKey: string) {
     const kind = getArea(getRun().depth).doors?.[tileKey] as RoomKind | undefined;
     if (!kind) return;
-    const info = ROOM_INFO[kind];
     const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
-      .setOrigin(0, 0).setTint(info.tint).setDepth(2);
+      .setOrigin(0, 0).setTint(0x6cf0c2).setDepth(2);
     const arrow = this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile + GAME.tile / 2, '▶', sharpText({
       fontFamily: FONT, fontSize: '10px', color: '#ffffff',
     })).setOrigin(0.5).setDepth(3);
-    // Labels sit left of the door so they stay on-screen at the map's edge.
-    const label = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2 - 5, info.label, sharpText({
-      fontFamily: FONT, fontSize: '8px', color: info.color, strokeThickness: 3,
-    })).setOrigin(1, 0.5).setDepth(3);
-    const hint = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2 + 5, info.hint, sharpText({
-      fontFamily: FONT, fontSize: '7px', color: '#c9cee8', strokeThickness: 3,
-    })).setOrigin(1, 0.5).setDepth(3);
-    this.doorObjects.push(img, arrow, label, hint);
-    if (!getRun().room?.cleared) for (const o of [img, arrow, label, hint]) o.setAlpha(0.35);
+    // No text: a plain exit, like a classic RPG. What's behind it is a surprise.
+    this.doorObjects.push(img, arrow);
+    if (!getRun().room?.cleared) for (const o of [img, arrow]) o.setAlpha(0.35);
   }
 
   /** Opens the in-dungeon merchant shop. */
@@ -1020,7 +1013,7 @@ export class DescentScene extends Phaser.Scene {
       if (ch >= '1' && ch <= '3') {
         const kind = getArea(depth).doors?.[key] as RoomKind | undefined;
         if (sealed) return 'Sealed  ·  win this room\'s fight first';
-        return kind ? `Z / tap  ·  next room: ${ROOM_INFO[kind].label}` : '';
+        return kind ? `Z / tap  ·  onward` : '';
       }
       if (ch === '<') return 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X' || ch === 'E') && !this.isUsed('enc', key)) {

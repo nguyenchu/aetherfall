@@ -2,6 +2,17 @@
 
 > Paste this into a new session to continue the work. Last updated: 2026-11-17.
 
+## 2026-11-17 (exits): One Unlabelled Exit Per Room
+
+Generated rooms no longer offer 2-3 labelled doors. Classic RPG flow: each
+room has one exit ('1', row 7) and what's behind it is a surprise.
+`rollDoors` returns a one-element list, weighted as before; after a spring,
+event or shop the next room is always a combat room (replaces the old
+"at least one combat door" swap), and a non-combat kind never repeats.
+The exit tile is a plain teal door with no label/hint, and the prompt says
+"onward" instead of naming the room. `ROOM_INFO` stays for the '?' and
+merchant tints.
+
 ## 2026-11-17: Roguelite Redesign (replay value)
 
 Ask: "forbedre gameplay betraktelig, null gjenspillverdi". Cause: permanent

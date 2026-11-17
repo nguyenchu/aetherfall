@@ -154,8 +154,8 @@ export interface AreaDef {
   teleports?: Record<string, string>;
   /** Gust tiles ('G'): 'col,row' -> fixed shove direction */
   gusts?: Record<string, 'up' | 'down' | 'left' | 'right'>;
-  /** Generated rooms only (rooms.ts): door tiles ('1'-'3') -> the room kind
-   *  behind that door, shown as a label so the player picks their reward. */
+  /** Generated rooms only (rooms.ts): exit tile ('1') -> the kind of the
+   *  next room (not shown to the player: it's a surprise). */
   doors?: Record<string, string>;
   /** Generated rooms only: the event behind the room's '?' tile (events.ts). */
   eventId?: string;
