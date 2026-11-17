@@ -14,28 +14,23 @@ const { ROOMS_PER_CHAPTER, generateRoom, healBetweenRooms, isCombatRoom, rollDoo
 const { getEventForChapter, CHAPTER_EVENTS } = await import('./events');
 type RoomKind = import('./rooms').RoomKind;
 
-/** Replays the given values, then repeats the last one. */
-function seq(...values: number[]): () => number {
-  let i = 0;
-  return () => values[Math.min(i++, values.length - 1)];
-}
-
 describe('rollDoors', () => {
   it('offers no doors out of the last room (boss door instead)', () => {
     expect(rollDoors(ROOMS_PER_CHAPTER, () => 0)).toEqual([]);
     expect(rollDoors(ROOMS_PER_CHAPTER + 1, () => 0)).toEqual([]);
   });
 
-  it('first rng picks two or three doors', () => {
-    // < 0.5 rolls 2 doors, >= 0.5 rolls 3
-    expect(rollDoors(2, seq(0.1, 0))).toHaveLength(2);
-    expect(rollDoors(2, seq(0.9, 0))).toHaveLength(3);
+  it('always offers exactly one exit', () => {
+    for (let i = 0; i < 200; i++) expect(rollDoors(2)).toHaveLength(1);
   });
 
-  it('picks by weight without repeating a kind', () => {
-    // 0.9 rolls 3 doors; subsequent 0s take the first candidate from the pool
-    // each time, which walks the keys in order (boon, fight, elite).
-    expect(rollDoors(2, seq(0.9, 0))).toEqual(['boon', 'fight', 'elite']);
+  it('picks by weight: a roll of 0 takes the first candidate', () => {
+    expect(rollDoors(2, () => 0)).toEqual(['boon']);
+  });
+
+  it('follows a non-combat room with a fight', () => {
+    for (const kind of ['spring', 'event', 'shop'] as const)
+      for (let i = 0; i < 100; i++) expect(isCombatRoom(rollDoors(2, Math.random, kind)[0])).toBe(true);
   });
 
   it('never offers an elite out of the opening room', () => {
@@ -55,20 +50,6 @@ describe('rollDoors', () => {
     }
   });
 
-  it('always offers at least one combat door', () => {
-    for (let index = 0; index < ROOMS_PER_CHAPTER; index++) {
-      for (let i = 0; i < 200; i++) {
-        const doors = rollDoors(index);
-        expect(doors.some(isCombatRoom)).toBe(true);
-        expect(new Set(doors).size).toBe(doors.length);
-      }
-    }
-  });
-
-  it('swaps the last door for a blessing when every pick was non-combat', () => {
-    // Rolls landing near the top of the pool take event, then spring.
-    expect(rollDoors(2, seq(0.1, 0.999, 0.999))).toEqual(['event', 'boon']);
-  });
 });
 
 describe('healBetweenRooms', () => {
@@ -150,9 +131,9 @@ describe('generateRoom', () => {
   });
 
   it('numbers the doors and maps them to the rolled kinds', () => {
-    const room = generateRoom({ depth: 1, index: 2, kind: 'spring', firstFight: false, ownedEquipment: [], rng: seq(0.9, 0) });
-    expect(Object.values(room.doors ?? {})).toEqual(['boon', 'fight', 'elite']);
-    for (const [pos, n] of [['22,3', '1'], ['22,7', '2'], ['22,11', '3']] as const) {
+    const room = generateRoom({ depth: 1, index: 2, kind: 'spring', firstFight: false, ownedEquipment: [], rng: () => 0 });
+    expect(Object.values(room.doors ?? {})).toEqual(['boon']);
+    for (const [pos, n] of [['22,7', '1']] as const) {
       const [x, y] = pos.split(',').map(Number);
       expect(room.map[y][x]).toBe(n);
     }

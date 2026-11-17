@@ -3,8 +3,7 @@ import { GAME, renderScale } from '../config';
 import { getArea, makeEncounterForArea, isRiftActive, isRoomActive, setRoomArea, clearRoomArea, type AreaTheme } from '../game/chapters';
 import { generateRoom, isCombatRoom, goldRoomPurse, healBetweenRooms, ROOM_INFO, ROOM_HEAL_HP, ROOM_HEAL_MP, type RoomKind } from '../game/rooms';
 import { EVENTS } from '../game/events';
-import { rollBoonChoices } from '../game/boons';
-import { getRun, getSave, applyDescentModifier, openChest, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
+import { getRun, getSave, applyDescentModifier, openChest, recordRoom, rollBoons, saveProgress, springUsed, useSpring, hasFlag, setFlag } from '../game/run';
 import { input } from '../game/input';
 import { music, sfx, type AreaThemeId } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -56,8 +55,8 @@ type Facing = 'down' | 'up' | 'left' | 'right';
 /**
  * Dungeon exploration. A chapter's entrance stratum (odd depth) is played as
  * a run of generated rooms (rooms.ts): each holds one visible fight ('E'/'X'),
- * chest, spring or event ('?'), and its doors ('1'-'3') show what the next
- * room gives. Boss strata (even depths) are the fixed hand-made maps from
+ * chest, spring or event ('?'), and its single exit ('1') leads to a room
+ * whose kind is a surprise. Boss strata (even depths) are the fixed hand-made maps from
  * chapters.ts, and the Rift is its own generated floor with random fights.
  */
 // How quickly the camera catches up to the player each frame (0-1, higher = snappier).
@@ -77,7 +76,7 @@ export class DescentScene extends Phaser.Scene {
   private wardOpen = false;
   private wardImages = new Map<string, Phaser.GameObjects.Image>();
   private leverImages = new Map<string, Phaser.GameObjects.Image>();
-  // Generated rooms: door tiles and their labels, dimmed while sealed.
+  // Generated rooms: the exit (and boss door label), dimmed while sealed.
   private doorObjects: Phaser.GameObjects.Components.Alpha[] = [];
   private walkFrame = 0;
   private facing: Facing = 'down';
@@ -98,7 +97,7 @@ export class DescentScene extends Phaser.Scene {
     super('Descent');
   }
 
-  create(data?: { deeper?: boolean; room?: boolean }) {
+  create(data?: { deeper?: boolean; room?: boolean; stratum?: boolean }) {
     this.cameras.main.setOrigin(0, 0).setZoom(renderScale * WORLD_ZOOM_BONUS);
     this.cameras.main.fadeIn(300, 7, 6, 14);
     this.busy = false;
@@ -116,7 +115,11 @@ export class DescentScene extends Phaser.Scene {
     // Chapter entrances play as generated rooms; a fresh entry starts room 1
     // (always a fight). Moving between rooms restarts this scene with
     // { room: true } after enterRoom() has already built the next one.
-    if (!isRiftActive() && run.depth % 2 === 1 && !run.room) this.buildRoom(1, 'fight');
+    if (!isRiftActive() && run.depth % 2 === 1) {
+      if (!run.room) this.buildRoom(1, 'fight');
+      // Resuming a saved run: rebuild the room it was in (fresh layout).
+      else if (!isRoomActive()) this.buildRoom(run.room.index, run.room.kind);
+    }
     const area = getArea(run.depth);
     this.map = area.map;
     this.mapPixelW = this.map[0].length * GAME.tile;
@@ -128,7 +131,7 @@ export class DescentScene extends Phaser.Scene {
     // via RESUME, not create. A fresh entry is the per-chapter "started"
     // signal and reaching the boss stratum is mid-run progress; room-to-room
     // moves aren't separate funnel steps.
-    if (data?.deeper) {
+    if (data?.deeper || data?.stratum) {
       track('descent_progress', { ch: chapterOfDepth(run.depth), d: run.depth });
     } else if (!data?.room) {
       track('chapter_start', { ch: chapterOfDepth(run.depth), d: run.depth, mod: run.modifier.id });
@@ -162,7 +165,7 @@ export class DescentScene extends Phaser.Scene {
     this.time.delayedCall(350, () => {
       this.hud.flashVitals(data?.room
         ? `Catching your breath: +${Math.round(ROOM_HEAL_HP * 100)}% HP, +${Math.round(ROOM_HEAL_MP * 100)}% MP`
-        : undefined);
+        : data?.stratum ? 'The Anchor steadies you: +30% HP/MP, the fallen rise' : undefined);
       // Once ever, on the first room-to-room move: say why HP/MP don't refill.
       if (data?.room && !hasFlag('heard_attrition_tip')) {
         setFlag('heard_attrition_tip');
@@ -310,6 +313,12 @@ export class DescentScene extends Phaser.Scene {
           })).setOrigin(0.5, 1).setDepth(3).setName(`shop_label_${tileKey}`);
         }
         if (ch >= '1' && ch <= '3') this.drawDoor(c, r, tileKey);
+        if (ch === 'O' && !this.isUsed('cache', tileKey)) {
+          const img = this.add.image(c * GAME.tile + GAME.tile / 2, r * GAME.tile + GAME.tile / 2, 'aether')
+            .setOrigin(0.5, 0.5).setTint(0xf0d36c).setScale(0.85).setDepth(2);
+          this.tweens.add({ targets: img, scale: 1.05, alpha: { from: 0.9, to: 0.6 }, duration: 600, yoyo: true, repeat: -1 });
+          this.tileImages.set(tileKey, img);
+        }
         if (ch === 'T' && !this.isUsed('chest', tileKey)) {
           const img = this.add.image(c * GAME.tile, r * GAME.tile, 'chest').setOrigin(0, 0).setDepth(2);
           this.tileImages.set(tileKey, img);
@@ -550,6 +559,10 @@ export class DescentScene extends Phaser.Scene {
       this.openEvent(tileKey);
       return;
     }
+    if (ch === 'O' && !this.isUsed('cache', tileKey)) {
+      this.collectCacheAt(tileKey);
+      return;
+    }
     if (ch === 'T' && !this.isUsed('chest', tileKey)) {
       this.openChestAt(tileKey);
       return;
@@ -718,6 +731,33 @@ export class DescentScene extends Phaser.Scene {
     lines.forEach((line, i) => this.floatText(line, '#f0d36c', i * 14));
   }
 
+  /** Aether Cache: a small pickup — gold, or a trickle of HP/MP. */
+  private collectCacheAt(tileKey: string) {
+    this.markUsed('cache', tileKey);
+    const run = getRun();
+    sfx.play('chest');
+    if (Math.random() < 0.5) {
+      const gold = Phaser.Math.Between(8, 20);
+      run.gold += gold;
+      this.hud.setGold(run.gold);
+      this.floatText(`+${gold} gold`, '#f0d36c', 0);
+    } else {
+      for (const c of run.party) {
+        if (c.stats.hp <= 0) continue;
+        c.stats.hp = Math.min(c.stats.maxHp, c.stats.hp + Math.ceil(c.stats.maxHp * 0.1));
+        c.stats.mp = Math.min(c.stats.maxMp, c.stats.mp + Math.ceil(c.stats.maxMp * 0.15));
+      }
+      this.hud.flashVitals();
+      this.floatText('Aether washes over you', '#9ae8ff', 0);
+    }
+    const img = this.tileImages.get(tileKey);
+    if (img) {
+      this.tweens.killTweensOf(img);
+      this.tweens.add({ targets: img, alpha: 0, scale: 1.6, duration: 300, onComplete: () => img.destroy() });
+      this.tileImages.delete(tileKey);
+    }
+  }
+
   private useSpringAt(tileKey: string) {
     if (!useSpring(this.springKey(tileKey))) return;
     sfx.play('magic');
@@ -849,6 +889,7 @@ export class DescentScene extends Phaser.Scene {
     this.busy = true;
     sfx.play('confirm');
     healBetweenRooms(getRun().party);
+    recordRoom();
     this.buildRoom(room.index + 1, kind);
     saveProgress();
     this.cameras.main.fadeOut(220, 7, 6, 14);
@@ -873,25 +914,21 @@ export class DescentScene extends Phaser.Scene {
     for (const o of this.doorObjects) {
       this.tweens.add({ targets: o, alpha: 1, duration: 400 });
     }
-    this.floatText('The doors unseal...', '#6cf0c2', room.kind === 'fight' ? 14 : 0);
+    this.floatText('The way opens...', '#6cf0c2', room.kind === 'fight' ? 14 : 0);
   }
 
-  /** A door tile plus a label naming the room behind it; dim while sealed. */
+  /** The room's exit tile; dim while sealed. */
   private drawDoor(c: number, r: number, tileKey: string) {
     const kind = getArea(getRun().depth).doors?.[tileKey] as RoomKind | undefined;
     if (!kind) return;
-    const info = ROOM_INFO[kind];
     const img = this.add.image(c * GAME.tile, r * GAME.tile, 'aether')
-      .setOrigin(0, 0).setTint(info.tint).setDepth(2);
+      .setOrigin(0, 0).setTint(0x6cf0c2).setDepth(2);
     const arrow = this.add.text(c * GAME.tile + GAME.tile / 2, r * GAME.tile + GAME.tile / 2, '▶', sharpText({
       fontFamily: FONT, fontSize: '10px', color: '#ffffff',
     })).setOrigin(0.5).setDepth(3);
-    // Labels sit left of the door so they stay on-screen at the map's edge.
-    const label = this.add.text(c * GAME.tile - 3, r * GAME.tile + GAME.tile / 2, info.label, sharpText({
-      fontFamily: FONT, fontSize: '8px', color: info.color, strokeThickness: 3,
-    })).setOrigin(1, 0.5).setDepth(3);
-    this.doorObjects.push(img, arrow, label);
-    if (!getRun().room?.cleared) for (const o of [img, arrow, label]) o.setAlpha(0.35);
+    // No text: a plain exit, like a classic RPG. What's behind it is a surprise.
+    this.doorObjects.push(img, arrow);
+    if (!getRun().room?.cleared) for (const o of [img, arrow]) o.setAlpha(0.35);
   }
 
   /** Opens the in-dungeon merchant shop. */
@@ -932,7 +969,7 @@ export class DescentScene extends Phaser.Scene {
       event,
       onDone: (outcome: { lines: string[]; boon?: { elite: boolean } }) => {
         outcome.lines.forEach((line, i) => this.floatText(line, '#6cf0c2', i * 14));
-        const choices = outcome.boon ? rollBoonChoices(getRun().boons, outcome.boon.elite) : [];
+        const choices = outcome.boon ? rollBoons(outcome.boon.elite) : [];
         if (choices.length === 0) { resume(); return; }
         this.scene.launch('BoonPick', { choices, elite: outcome.boon?.elite, onDone: resume });
       },
@@ -941,16 +978,18 @@ export class DescentScene extends Phaser.Scene {
 
   /** Fixed maps remember used tiles (fights, chests, story beats) in save
    *  flags across runs; a generated room only remembers them for itself. */
-  private isUsed(prefix: 'enc' | 'chest' | 'story' | 'event', key: string): boolean {
+  private isUsed(prefix: 'enc' | 'chest' | 'story' | 'event' | 'cache', key: string): boolean {
     const room = isRoomActive() ? getRun().room : null;
     if (room) return room.done.includes(`${prefix}:${key}`);
-    return hasFlag(`${prefix}_${getRun().depth}_${key}`);
+    if (prefix === 'story') return hasFlag(`story_${getRun().depth}_${key}`);
+    return getRun().usedTiles.includes(`${prefix}_${getRun().depth}_${key}`);
   }
 
-  private markUsed(prefix: 'enc' | 'chest' | 'story' | 'event', key: string): void {
+  private markUsed(prefix: 'enc' | 'chest' | 'story' | 'event' | 'cache', key: string): void {
     const room = isRoomActive() ? getRun().room : null;
     if (room) room.done.push(`${prefix}:${key}`);
-    else setFlag(`${prefix}_${getRun().depth}_${key}`);
+    else if (prefix === 'story') setFlag(`story_${getRun().depth}_${key}`);
+    else { getRun().usedTiles.push(`${prefix}_${getRun().depth}_${key}`); saveProgress(); }
   }
 
   /** Spring keys are per run; rooms reuse coordinates, so add the room number. */
@@ -974,7 +1013,7 @@ export class DescentScene extends Phaser.Scene {
       if (ch >= '1' && ch <= '3') {
         const kind = getArea(depth).doors?.[key] as RoomKind | undefined;
         if (sealed) return 'Sealed  ·  win this room\'s fight first';
-        return kind ? `Z / tap  ·  next room: ${ROOM_INFO[kind].label}` : '';
+        return kind ? `Z / tap  ·  onward` : '';
       }
       if (ch === '<') return 'Z / tap  ·  return home';
       if ((ch === 'B' || ch === 'X' || ch === 'E') && !this.isUsed('enc', key)) {

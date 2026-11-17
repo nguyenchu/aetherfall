@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { COLORS } from '../config';
 import { buildCharacterSprites, paintPixelGrid } from '../art/sprites';
 import { buildBossSprites } from '../art/bossSprites';
-import { cobbleFloor, stoneWall, aetherGlow } from '../art/tiles';
+import { cobbleFloor, stoneWall, aetherGlow, grassFloor, pavedFloor } from '../art/tiles';
 import { ITEMS } from '../game/content';
 import { EQUIPMENT } from '../game/equipment';
 import kaelPortraitUrl from '../assets/portraits/kael.png';
@@ -32,6 +32,10 @@ export class BootScene extends Phaser.Scene {
     paintPixelGrid(this, 'floorAlt_1', cobbleFloor(COLORS.floorAlt, 14));
     paintPixelGrid(this, 'wall', stoneWall(COLORS.wall, 15));
     paintPixelGrid(this, 'aether', aetherGlow());
+    paintPixelGrid(this, 'grass_0', grassFloor(0x1c3326, 31));
+    paintPixelGrid(this, 'grass_1', grassFloor(0x1f3a2a, 32));
+    paintPixelGrid(this, 'paved_0', pavedFloor(0x2e3552, 33));
+    paintPixelGrid(this, 'paved_1', pavedFloor(0x323a58, 34));
 
     // Boss silhouettes first (own geometry) so buildCharacterSprites skips
     // the now-superseded shared-template entries still in spriteData.ts.
@@ -194,6 +198,65 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0x6b4a2e, 1).fillRoundedRect(2, 2, 10, 13, 3);
       g.fillStyle(0x3f2c1a, 1).fillRect(2, 5, 10, 1).fillRect(2, 10, 10, 1);
       g.fillStyle(0x8a6440, 0.5).fillRoundedRect(3, 3, 3, 11, 2); // highlight
+    });
+
+    // The forest gate: a stone archway set into the north wall, framing a
+    // moonlit glimpse of Ashenveil Forest. 80x56; the opening is 48 wide.
+    this.makeDecorTexture('decor_gate', 80, 56, (g) => {
+      const stone = 0x3d4770, light = 0x56628f, dark = 0x232a47;
+      // forest seen through the opening
+      g.fillStyle(0x0b1a1c, 1).fillRect(16, 12, 48, 44);
+      g.fillStyle(0x12302c, 1).fillRect(16, 26, 48, 30);
+      g.fillStyle(0x1d4a3c, 0.9).fillRect(16, 40, 48, 16);
+      for (let i = 0; i < 6; i++) { // tree silhouettes
+        const tx = 20 + i * 8;
+        g.fillStyle(0x0a2420, 1).fillTriangle(tx, 40, tx + 4, 18 + (i % 2) * 6, tx + 8, 40);
+        g.fillStyle(0x0d2d27, 1).fillTriangle(tx + 1, 46, tx + 4, 28 + (i % 2) * 5, tx + 7, 46);
+      }
+      g.fillStyle(0xb9d8c8, 0.14).fillRect(16, 38, 48, 6); // mist
+      g.fillStyle(0xdfffe9, 0.9).fillCircle(54, 20, 3); // moon
+      g.fillStyle(0xdfffe9, 0.2).fillCircle(54, 20, 6);
+      // pillars
+      for (const px of [6, 62]) {
+        g.fillStyle(dark, 1).fillRect(px - 1, 8, 14, 48);
+        g.fillStyle(stone, 1).fillRect(px, 8, 12, 48);
+        g.fillStyle(light, 1).fillRect(px, 8, 3, 48);
+        g.fillStyle(dark, 1).fillRect(px - 2, 52, 16, 4).fillRect(px - 2, 6, 16, 4);
+        g.fillStyle(light, 1).fillRect(px - 2, 6, 16, 1);
+        for (let y = 14; y < 50; y += 6) g.fillStyle(dark, 0.5).fillRect(px, y, 12, 1);
+      }
+      // lintel + keystone
+      g.fillStyle(dark, 1).fillRect(4, 0, 72, 12);
+      g.fillStyle(stone, 1).fillRect(5, 1, 70, 9);
+      g.fillStyle(light, 1).fillRect(5, 1, 70, 1);
+      g.fillStyle(0x8a6cf0, 1).fillRect(4, 10, 72, 1); // aether inlay under the name plate
+      g.fillStyle(dark, 1).fillRect(16, 10, 48, 3);
+    });
+
+    // Low garden dressing, all non-blocking.
+    this.makeDecorTexture('decor_bush', 14, 11, (g) => {
+      g.fillStyle(0x000000, 0.25).fillEllipse(7, 9, 12, 3);
+      g.fillStyle(0x1a4a2c, 1).fillCircle(4, 6, 4).fillCircle(10, 6, 4).fillCircle(7, 4, 4);
+      g.fillStyle(0x2f7a46, 1).fillCircle(5, 4, 2).fillCircle(9, 5, 1.5);
+    });
+    this.makeDecorTexture('decor_flowers', 12, 8, (g) => {
+      const cols = [0xf08ac0, 0xf0d36c, 0xa58cff, 0xffffff];
+      for (let i = 0; i < 5; i++) {
+        g.fillStyle(0x2f7a46, 1).fillRect(1 + i * 2, 4, 1, 3);
+        g.fillStyle(cols[i % 4], 1).fillCircle(1.5 + i * 2, 3 + (i % 2), 1.3);
+      }
+    });
+    this.makeDecorTexture('decor_torch', 8, 22, (g) => {
+      g.fillStyle(0x2a2018, 1).fillRect(3, 8, 2, 14);
+      g.fillStyle(0x4a3a28, 1).fillRect(1, 6, 6, 4);
+      g.fillStyle(0xff9a3a, 1).fillTriangle(1, 6, 7, 6, 4, 0);
+      g.fillStyle(0xffe08a, 1).fillTriangle(2.5, 6, 5.5, 6, 4, 2);
+    });
+    this.makeDecorTexture('decor_bench', 20, 10, (g) => {
+      g.fillStyle(0x000000, 0.22).fillEllipse(10, 9, 18, 3);
+      g.fillStyle(0x6b4a2e, 1).fillRect(1, 3, 18, 3);
+      g.fillStyle(0x8a6440, 1).fillRect(1, 3, 18, 1);
+      g.fillStyle(0x3f2c1a, 1).fillRect(2, 6, 2, 3).fillRect(16, 6, 2, 3);
     });
 
     // Plaza centerpiece: stone basin around aether-tinted water, tying the

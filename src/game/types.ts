@@ -38,6 +38,20 @@ export interface GearEffects {
   resist: Ailment[]; // ailments this member is immune to
   speedMult?: number; // permanent turn-order speed multiplier (unused so far)
   breakBonusDmg?: number; // extra damage multiplier against broken (staggered) enemies
+  // --- Talent perks (talents.ts), merged into the same struct as gear ---
+  counterChance?: number; // chance to strike back when hit by an enemy attack
+  executeBonus?: number; // extra damage multiplier vs enemies at <=30% HP
+  firstStrike?: number; // 0..1 head start on the turn gauge at battle start
+  attackMpBonus?: number; // extra MP regained by basic attacks
+  defendHeal?: number; // fraction of max HP restored when defending
+  freeCastChance?: number; // chance a spell costs no MP
+  spellDmgMult?: number; // multiplier on this hero's damage spells
+  afflictedBonus?: number; // extra damage vs enemies carrying any ailment
+  echoChance?: number; // chance a single-target damage spell casts again
+  deathSave?: boolean; // once per battle, an ally's lethal hit leaves them at 1 HP
+  battleStartLimit?: number; // Limit gauge granted at the start of each battle
+  holyAttack?: boolean; // basic attacks strike as holy
+  killMp?: number; // MP regained when this hero lands a killing blow
 }
 
 export interface Stats {
@@ -58,7 +72,13 @@ export interface Spell {
   kind: 'damage' | 'heal' | 'buff';
   power: number;
   element: Element;
-  target: 'enemy' | 'ally' | 'all-enemies' | 'party';
+  target: 'enemy' | 'ally' | 'all-enemies' | 'party' | 'self';
+  scale?: 'str'; // damage scales off STR instead of INT (Kael's elemental blades)
+  hits?: number; // strikes this many times at random living enemies
+  cleanse?: boolean; // heal-kind: also clears ailments
+  revive?: number; // heal-kind: targets a fallen ally, returning them at this fraction of max HP
+  drainMp?: number; // damage-kind: fraction of damage dealt returned to the caster as MP
+  taunt?: number; // buff-kind: enemies must target the caster for this many of its turns
   guardHit?: number; // extra guard chip even without hitting a weakness
   inflict?: Inflict; // chance to apply an ailment to damaged targets
   haste?: { mult: number; turns: number }; // buff-kind only: CTB speed boost applied to the target
@@ -160,6 +180,8 @@ export interface Combatant {
   xp?: number;
   growth?: Partial<Stats>; // stat increase per level
   learnset?: Record<number, string[]>; // level -> spell ids learned
+  talents?: string[]; // talent ids picked this run (talents.ts)
+  taunt?: number; // own-turns left of a taunt: enemies must target this hero
   // Runtime battle state:
   defending?: boolean;
   // Guardian's Wrath boon: set when defending, consumed by the bearer's
@@ -203,7 +225,8 @@ export type EventKind =
   | 'recover'
   | 'ailment' // an ailment was applied
   | 'dot' // end-of-round burn/venom damage tick
-  | 'limit'; // a party member's Limit Break was unleashed (announcement only; its actual damage/heal follow as normal events)
+  | 'limit' // a party member's Limit Break was unleashed (announcement only; its actual damage/heal follow as normal events)
+  | 'combo'; // elemental synergy reaction (Shatter, Combustion, Sanctify, Melt)
 
 /** One battle log step; the scene plays these with animation and text. */
 export interface BattleEvent {
@@ -222,6 +245,7 @@ export interface BattleEvent {
   // limit break) — the scene plays a consecutive run of these together
   // instead of one at a time, so every target reacts at once.
   parallel?: boolean;
+  comboType?: 'shatter' | 'combustion' | 'sanctify' | 'melt';
 }
 
 export type BattlePhase = 'input' | 'won' | 'lost' | 'fled';

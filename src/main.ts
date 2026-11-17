@@ -18,6 +18,8 @@ import { TitleScene } from './scenes/TitleScene';
 import { IntroScene } from './scenes/IntroScene';
 import { RunSummaryScene } from './scenes/RunSummaryScene';
 import { ChapterClearScene } from './scenes/ChapterClearScene';
+import { TalentScene } from './scenes/TalentScene';
+import { AnchorScene } from './scenes/AnchorScene';
 
 // 2× gives 1280×720 canvas. CSS fills the remaining fraction via image-rendering: pixelated.
 setRenderScale(2);
@@ -47,7 +49,7 @@ const game = new Phaser.Game({
     width: GAME.width * 2,
     height: GAME.height * 2,
   },
-  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, DescentHudScene, BattleScene, BoonScene, EventScene, DungeonShopScene, DialogueScene, GameMenuScene, RunSummaryScene, ChapterClearScene],
+  scene: [BootScene, IntroScene, TitleScene, SanctuaryScene, DescentScene, DescentHudScene, BattleScene, BoonScene, EventScene, DungeonShopScene, DialogueScene, GameMenuScene, RunSummaryScene, ChapterClearScene, TalentScene, AnchorScene],
 });
 
 // Exposed for dev tooling and automated smoke tests.

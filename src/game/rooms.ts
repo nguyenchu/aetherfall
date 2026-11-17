@@ -2,14 +2,14 @@
 // stratum used to be one fixed hand-made map with random encounters, the same
 // on every run. Now it's ROOMS_PER_CHAPTER generated rooms: each room is a
 // small fresh map in the chapter's theme with its field mechanic, holds one
-// thing (a visible fight, a chest, a spring, an event, or a merchant shop), and ends in 2-3
-// doors that show what the *next* room gives — so the player picks their
-// reward and their route. The last room's single door leads to the chapter's
-// unchanged hand-made boss stratum.
+// thing (a visible fight, a chest, a spring, an event, or a merchant shop), and ends in a
+// single unlabelled exit, classic-RPG style: what the next room holds is a
+// surprise. The last room's exit is the door to the chapter's unchanged
+// hand-made boss stratum.
 //
 // generateRoom() emits a plain AreaDef (like rift.ts), so DescentScene draws
-// it with the same tile code; the room-specific bits are the door tiles
-// ('1'-'3' → AreaDef.doors), 'E' (a visible trash fight), '?' (an event), and 'M' (merchant shop).
+// it with the same tile code; the room-specific bits are the exit tile
+// ('1' → AreaDef.doors), 'E' (a visible trash fight), '?' (an event), and 'M' (merchant shop).
 
 import Phaser from 'phaser';
 import { baseArea, type AreaDef, type ChestContents } from './chapters';
@@ -18,7 +18,9 @@ import type { Combatant } from './types';
 
 export type RoomKind = 'fight' | 'boon' | 'elite' | 'treasure' | 'spring' | 'event' | 'shop';
 
-export const ROOMS_PER_CHAPTER = 5;
+// A run crosses all six chapters, so each chapter is a short stretch:
+// three rooms, then the boss stratum.
+export const ROOMS_PER_CHAPTER = 3;
 
 // Walking through a door restores a little: HP/MP carry over between fights
 // (only town fully restores), and over five rooms in a row that attrition
@@ -39,23 +41,25 @@ export function healBetweenRooms(party: Combatant[]): void {
 export interface RoomProgress {
   index: number; // 1-based
   kind: RoomKind;
-  /** Combat rooms open their doors once their fight is won; others start open. */
+  /** Combat rooms open their exit once their fight is won; others start open. */
   cleared: boolean;
   /** Tiles already used up in this room ('enc:x,y', 'chest:x,y', 'event:x,y'). */
   done: string[];
 }
 
-export const ROOM_INFO: Record<RoomKind, { label: string; color: string; tint: number }> = {
-  boon:     { label: '◆ Blessing', color: '#b8a8f8', tint: 0x8a6cf0 },
-  fight:    { label: '$ Gold',     color: '#f0d36c', tint: 0xd8b040 },
-  elite:    { label: '!! Elite',   color: '#ffa03c', tint: 0xff8800 },
-  treasure: { label: '▣ Treasure', color: '#ffd27a', tint: 0xc08a30 },
-  spring:   { label: '✚ Rest',     color: '#9ae8ff', tint: 0x2a8ab8 },
-  event:    { label: '? Unknown',  color: '#6cf0c2', tint: 0x3aa888 },
-  shop:     { label: '◈ Merchant', color: '#ffe066', tint: 0xe6b800 },
+/** Per-kind name, blurb and colours. Exits no longer show these (the next
+ *  room is a surprise); the tints still colour '?' events and the merchant. */
+export const ROOM_INFO: Record<RoomKind, { label: string; hint: string; color: string; tint: number }> = {
+  boon:     { label: '◆ Boon Fight',  hint: 'Win: pick 1 of 3 boons',      color: '#b8a8f8', tint: 0x8a6cf0 },
+  fight:    { label: '$ Gold Fight',  hint: 'Win: bonus gold',             color: '#f0d36c', tint: 0xd8b040 },
+  elite:    { label: '!! Elite',      hint: 'Hard fight, rare boon + XP',  color: '#ffa03c', tint: 0xff8800 },
+  treasure: { label: '▣ Gear Chest',  hint: 'Elite guards a gear chest',   color: '#ffd27a', tint: 0xc08a30 },
+  spring:   { label: '✚ Spring',      hint: 'No fight: heal the party',    color: '#9ae8ff', tint: 0x2a8ab8 },
+  event:    { label: '? Mystery',     hint: 'No fight: a risky choice',    color: '#6cf0c2', tint: 0x3aa888 },
+  shop:     { label: '◈ Merchant',    hint: 'No fight: spend your gold',   color: '#ffe066', tint: 0xe6b800 },
 };
 
-/** Combat rooms hold a visible fight that has to be won before the doors open. */
+/** Combat rooms hold a visible fight that has to be won before the exit opens. */
 export function isCombatRoom(kind: RoomKind): boolean {
   return kind === 'fight' || kind === 'boon' || kind === 'elite' || kind === 'treasure';
 }
@@ -71,32 +75,28 @@ const DOOR_WEIGHTS: Record<RoomKind, number> = {
   boon: 3, fight: 2, elite: 1.2, treasure: 1, shop: 1.1, spring: 1, event: 1.6,
 };
 
-/** Kinds offered by the doors out of room `index` (none: boss door instead). */
+/** The kind of the next room. Classic RPG flow: every room has exactly one
+ *  exit (no door choices, no labels) and what lies behind it is a surprise.
+ *  Returned as a one-element list (none: boss door instead). After a rest,
+ *  event or shop the next room is always a fight, so a run can't skip its way
+ *  to the boss under-levelled. */
 export function rollDoors(index: number, rng: () => number = Math.random, currentKind?: RoomKind): RoomKind[] {
   if (index >= ROOMS_PER_CHAPTER) return [];
-  const count = rng() < 0.5 ? 2 : 3;
   const pool = (Object.keys(DOOR_WEIGHTS) as RoomKind[]).filter((k) => {
     if (k === 'elite' && index < 1) return false;
     // Shop appears only as rooms 2 to 4 (doors out of 1, 2, 3), and never twice in a row
     if (k === 'shop' && (index < 1 || index >= 4 || currentKind === 'shop')) return false;
+    if (currentKind && !isCombatRoom(currentKind) && !isCombatRoom(k)) return false;
+    if (k === currentKind && !isCombatRoom(k)) return false;
     return true;
   });
-  const picks: RoomKind[] = [];
-  while (picks.length < count && pool.length > 0) {
-    const total = pool.reduce((sum, k) => sum + DOOR_WEIGHTS[k], 0);
-    let roll = rng() * total;
-    let idx = 0;
-    for (let i = 0; i < pool.length; i++) {
-      roll -= DOOR_WEIGHTS[pool[i]];
-      if (roll <= 0) { idx = i; break; }
-    }
-    picks.push(pool[idx]);
-    pool.splice(idx, 1);
+  const total = pool.reduce((sum, k) => sum + DOOR_WEIGHTS[k], 0);
+  let roll = rng() * total;
+  for (const k of pool) {
+    roll -= DOOR_WEIGHTS[k];
+    if (roll <= 0) return [k];
   }
-  // Never offer only non-combat doors: a run that can skip every fight
-  // reaches the boss under-levelled with no warning.
-  if (!picks.some(isCombatRoom)) picks[picks.length - 1] = 'boon';
-  return picks;
+  return [pool[pool.length - 1] ?? 'fight'];
 }
 
 const W = 24;
@@ -153,17 +153,13 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
   grid[START.y][START.x] = 'P';
   grid[START.y][1] = '<';
 
-  // Doors on the right wall's inner column; the final room has one boss door.
+  // One exit on the right wall's inner column; the final room's is the boss door.
   const doors: Record<string, string> = {};
-  const doorRows = doorKinds.length === 3 ? [3, 7, 11] : doorKinds.length === 2 ? [4, 10] : [7];
   if (doorKinds.length === 0) {
     grid[7][DOOR_COL] = '>';
   } else {
-    doorKinds.forEach((kind, i) => {
-      const y = doorRows[i];
-      grid[y][DOOR_COL] = String(i + 1);
-      doors[`${DOOR_COL},${y}`] = kind;
-    });
+    grid[7][DOOR_COL] = '1';
+    doors[`${DOOR_COL},7`] = doorKinds[0];
   }
 
   // The room's one thing, placed in the middle band so it's on the way.
@@ -215,6 +211,15 @@ function tryBuild(opts: RoomOptions, base: AreaDef, chapter: number, doorKinds: 
   const teleports: Record<string, string> = {};
   const gusts: Record<string, 'up' | 'down' | 'left' | 'right'> = {};
   if (!bare) addFieldTiles(grid, base.theme.id, teleports, gusts, reserved, opts.rng);
+
+  // Aether Caches: 2-3 interactive sparkling pickups per room on open floor
+  const cacheCount = Phaser.Math.Between(2, 3);
+  for (let i = 0; i < cacheCount; i++) {
+    const spot = pickSpot(5, DOOR_COL - 2);
+    if (spot && grid[spot.y][spot.x] === '.') {
+      grid[spot.y][spot.x] = 'O';
+    }
+  }
 
   if (!connected(grid)) return null;
 

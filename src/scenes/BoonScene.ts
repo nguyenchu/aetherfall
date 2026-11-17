@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { GAME, renderScale } from '../config';
 import { rarityColor, type Boon } from '../game/boons';
-import { addBoon } from '../game/run';
+import { addBoon, getRun, rollBoons, useReroll } from '../game/run';
 import { input, isTouchDevice } from '../game/input';
 import { sfx } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
@@ -92,8 +92,10 @@ export class BoonScene extends Phaser.Scene {
       this.cards.push({ frame, glow, name });
     });
 
-    if (!isTouchDevice()) {
-      this.add.text(GAME.width / 2, top + cardH + 20, '< >  choose   Z  take', sharpText({
+    const rerolls = getRun().rerolls;
+    if (!isTouchDevice() || rerolls > 0) {
+      const base = isTouchDevice() ? 'Tap a card' : '< >  choose   Z  take';
+      this.add.text(GAME.width / 2, top + cardH + 20, rerolls > 0 ? `${base}   X/B  reroll (${rerolls} left)` : base, sharpText({
         fontFamily: FONT, fontSize: '9px', color: '#6cf0c2',
       })).setOrigin(0.5).setDepth(2);
     }
@@ -103,6 +105,7 @@ export class BoonScene extends Phaser.Scene {
     this.unsubs.push(input.on('up', () => this.move(-1)));
     this.unsubs.push(input.on('down', () => this.move(1)));
     this.unsubs.push(input.on('confirm', () => this.choose()));
+    this.unsubs.push(input.on('cancel', () => this.reroll()));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
 
     this.updateSelection();
@@ -138,6 +141,16 @@ export class BoonScene extends Phaser.Scene {
     const flash = this.add.rectangle(0, 0, GAME.width, GAME.height, 0xffffff, 0.18).setOrigin(0, 0).setDepth(10);
     this.tweens.add({ targets: flash, alpha: 0, duration: 350 });
     this.time.delayedCall(420, () => this.finish());
+  }
+
+  /** Second Thoughts (Anchor upgrade): spend a reroll for three new cards. */
+  private reroll() {
+    if (this.done || !useReroll()) return;
+    sfx.play('magic');
+    const data = this.scene.settings.data as BoonPickData;
+    data.choices = rollBoons(data.elite === true);
+    if (data.choices.length === 0) return;
+    this.scene.restart(data);
   }
 
   private finish() {

@@ -17,7 +17,28 @@ export interface SaveData {
   equipped: Record<string, Partial<Record<EquipSlot, string>>>;
   quests: Record<string, QuestStatus>;
   ngPlus: number; // Ascension tier — raises postgame enemy difficulty/rewards
+  // --- Run-based meta-progression (meta.ts), save version 2 ---
+  version: number;
+  echoes: number; // persistent currency banked at the end of every run
+  upgrades: Record<string, number>; // Anchor upgrade id -> ranks owned
+  runs: number; // runs started
+  clears: number; // full descents completed
+  bestDepth: number; // deepest depth any run has reached
+  lastRun: LastRun | null; // how the previous run ended (Sanctuary reacts to it)
+  /** The run in progress, so closing the tab mid-descent resumes it. Shape
+   *  owned and validated by run.ts (RunSnapshot). */
+  run: Record<string, unknown> | null;
 }
+
+export interface LastRun {
+  result: 'wipe' | 'retreat' | 'clear';
+  depth: number;
+  echoes: number;
+  /** Name of whatever ended the run, if a fight did. */
+  foe?: string;
+}
+
+export const SAVE_VERSION = 2;
 
 export interface SaveSummary {
   gold: number;
@@ -27,6 +48,11 @@ export interface SaveSummary {
   partyLevels: string;
   equipmentCount: number;
   completeQuests: number;
+  echoes: number;
+  bestDepth: number;
+  runs: number;
+  /** Depth of the run in progress, or null when resting in Sanctuary. */
+  runDepth: number | null;
 }
 
 const KEY = 'aetherfall.save.v1';
@@ -45,6 +71,14 @@ function defaults(): SaveData {
     equipped: structuredClone(DEFAULT_EQUIPPED),
     quests: initialQuests(),
     ngPlus: 0,
+    version: SAVE_VERSION,
+    echoes: 0,
+    upgrades: {},
+    runs: 0,
+    clears: 0,
+    bestDepth: 1,
+    lastRun: null,
+    run: null,
   };
 }
 
@@ -89,6 +123,10 @@ export function loadSaveSummary(): SaveSummary | null {
     partyLevels: `Kael L${levels.kael}  Lyra L${levels.lyra}  Mira L${levels.mira}`,
     equipmentCount: data.equipmentOwned.length,
     completeQuests: Object.values(data.quests).filter((status) => status === 'complete').length,
+    echoes: data.echoes,
+    bestDepth: data.bestDepth,
+    runs: data.runs,
+    runDepth: data.run && typeof data.run.depth === 'number' ? data.run.depth : null,
   };
 }
 
@@ -110,6 +148,14 @@ function normalize(stored: Record<string, unknown>): SaveData {
     equipped: equippedRecord(stored.equipped),
     quests: questRecord(stored.quests),
     ngPlus: count(stored.ngPlus, base.ngPlus),
+    version: count(stored.version, 1),
+    echoes: count(stored.echoes, base.echoes),
+    upgrades: numberRecord(stored.upgrades, 0),
+    runs: count(stored.runs, base.runs),
+    clears: count(stored.clears, base.clears),
+    bestDepth: count(stored.bestDepth, base.bestDepth, 1),
+    lastRun: lastRunRecord(stored.lastRun),
+    run: isRecord(stored.run) ? stored.run : null,
   };
   // Saves from before items existed only have potions; keep that count.
   data.items = { potion: data.potions, ...(isRecord(stored.items) ? data.items : base.items) };
@@ -118,7 +164,40 @@ function normalize(stored: Record<string, unknown>): SaveData {
   data.equipmentOwned = Array.from(new Set([...data.equipmentOwned, ...STARTING_EQUIPMENT]));
   data.equipped = { ...structuredClone(DEFAULT_EQUIPPED), ...data.equipped };
   data.quests = { ...initialQuests(), ...data.quests };
+  if (data.version < SAVE_VERSION) migrateToRuns(data);
   return data;
+}
+
+/** Version 1 saves kept levels, gold and gear forever. Runs now start fresh,
+ *  so that progress is converted into Echoes (spent on permanent Anchor
+ *  upgrades) instead of silently vanishing. Story flags, quests and the
+ *  Ascension tier carry over untouched. */
+function migrateToRuns(data: SaveData): void {
+  const chapters = [1, 2, 3, 4, 5, 6].filter((ch) => data.flags.includes(`ch${ch}_complete`)).length;
+  const topLevel = Math.max(1, ...Object.values(data.levels));
+  data.echoes += chapters * 25 + data.hpBlessings * 10 + Math.floor(data.gold / 20) + (topLevel - 1) * 3;
+  data.bestDepth = Math.max(data.bestDepth, data.deepest);
+  data.hpBlessings = 0;
+  data.gold = 0;
+  data.levels = {};
+  data.items = { potion: 3 };
+  data.potions = 3;
+  data.equipmentOwned = [...STARTING_EQUIPMENT];
+  data.equipped = structuredClone(DEFAULT_EQUIPPED);
+  data.run = null;
+  data.version = SAVE_VERSION;
+}
+
+function lastRunRecord(value: unknown): LastRun | null {
+  if (!isRecord(value)) return null;
+  const result = value.result;
+  if (result !== 'wipe' && result !== 'retreat' && result !== 'clear') return null;
+  return {
+    result,
+    depth: count(value.depth, 1, 1),
+    echoes: count(value.echoes, 0),
+    foe: typeof value.foe === 'string' ? value.foe : undefined,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -33,7 +33,7 @@ describe('loadSave with unreadable data', () => {
   });
 
   it('does not write a backup for a readable save', () => {
-    const storage = memoryStorage({ [KEY]: JSON.stringify({ gold: 120 }) });
+    const storage = memoryStorage({ [KEY]: JSON.stringify({ version: 2, gold: 120 }) });
     vi.stubGlobal('localStorage', storage);
 
     expect(loadSave().gold).toBe(120);
@@ -63,7 +63,7 @@ describe('loadSave with fields of the wrong type', () => {
   }
 
   it('does not crash the save summary when flags and levels are null', () => {
-    stored({ gold: 50, flags: null, levels: null });
+    stored({ version: 2, gold: 50, flags: null, levels: null });
 
     expect(() => loadSaveSummary()).not.toThrow();
     expect(loadSaveSummary()?.partyLevels).toBe('Kael L1  Lyra L1  Mira L1');
@@ -72,7 +72,7 @@ describe('loadSave with fields of the wrong type', () => {
   });
 
   it('replaces numbers of the wrong type with defaults', () => {
-    const save = (stored({ gold: 'mye', potions: -2, deepest: 0, ngPlus: null, hpBlessings: Infinity }), loadSave());
+    const save = (stored({ version: 2, gold: 'mye', potions: -2, deepest: 0, ngPlus: null, hpBlessings: Infinity }), loadSave());
 
     expect(save.gold).toBe(0);
     expect(save.potions).toBe(3);
@@ -83,6 +83,7 @@ describe('loadSave with fields of the wrong type', () => {
 
   it('drops bad entries but keeps the good ones', () => {
     stored({
+      version: 2,
       flags: ['intro_seen', 7, null],
       levels: { kael: 4, lyra: 'høy', mira: 0 },
       items: { potion: 2, ether: 'x' },
@@ -110,8 +111,19 @@ describe('loadSave with fields of the wrong type', () => {
     expect(storage.data.get(BACKUP_KEY)).toBe('[1,2,3]');
   });
 
-  it('keeps a valid older save unchanged where it matters', () => {
+  it('migrates a valid v1 save to v2 and converts progress to echoes', () => {
     stored({ gold: 120, potions: 5, deepest: 4, levels: { kael: 3, bram: 2 }, flags: ['a'] });
+    const save = loadSave();
+
+    expect(save.version).toBe(2);
+    expect(save.echoes).toBeGreaterThan(0);
+    expect(save.bestDepth).toBe(4);
+    expect(save.flags).toEqual(['a']);
+    expect(save.gold).toBe(0);
+  });
+
+  it('keeps a valid v2 save unchanged where it matters', () => {
+    stored({ version: 2, gold: 120, potions: 5, deepest: 4, levels: { kael: 3, bram: 2 }, flags: ['a'] });
     const save = loadSave();
 
     expect(save).toMatchObject({ gold: 120, potions: 5, deepest: 4, flags: ['a'] });
@@ -141,5 +153,20 @@ describe('writeSave', () => {
     });
 
     expect(writeSave(loadSave())).toBe(false);
+  });
+});
+
+describe('v1 → v2 migration', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('turns old permanent progress into Echoes and resets run state', () => {
+    vi.stubGlobal('localStorage', memoryStorage({
+      [KEY]: JSON.stringify({ gold: 400, deepest: 4, levels: { kael: 9 }, hpBlessings: 2 }),
+    }));
+    const save = loadSave();
+    expect(save.version).toBe(2);
+    expect(save.echoes).toBeGreaterThan(0);
+    expect(save.gold).toBe(0);
+    expect(save.run).toBeNull();
   });
 });

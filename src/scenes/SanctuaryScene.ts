@@ -6,7 +6,6 @@ import { input, attachTouchControls } from '../game/input';
 import { music } from '../audio/music';
 import {
   buyEquipment,
-  buyHpBlessing,
   buyItem,
   canSellEquipment,
   checkMilestoneQuests,
@@ -16,19 +15,22 @@ import {
   getRun,
   getSave,
   hasFlag,
-  hpBlessingCost,
   isQuestActive,
   ownedEquipment,
   sellEquipment,
   sellItem,
   setFlag,
+  startRun,
 } from '../game/run';
-import { setRiftArea } from '../game/chapters';
-import { generateRift } from '../game/rift';
 import { sharpText, FONT } from '../ui/text';
 import { showQuestToast } from '../ui/questToast';
 import { showBanterToast } from '../ui/banterToast';
-import { pickBanter, SANCTUARY_BANTER, MERCHANT_QUIPS } from '../game/banter';
+import { pickBanter, returnBanter, SANCTUARY_BANTER, MERCHANT_QUIPS } from '../game/banter';
+import { ANCHOR_UPGRADES, nextRankCost } from '../game/meta';
+import { upgradeRank } from '../game/run';
+
+// The run whose ending the party already reacted to (per session).
+let greetedRun = -1;
 import { tileVariant } from '../art/tiles';
 
 const PLAYER_SCALE_X = 1.08;
@@ -107,15 +109,16 @@ const statAbbr = (k: string) => STAT_ABBR[k] ?? k.replace('max', '').toUpperCase
 // Warden Eda and Scholar Voss keep their posts flanking the Anchor shrine at
 // the keep's true center; the Merchant/Child/everyday plaza sits south of it,
 // same as a real keep's inner ward vs. outer bailey.
-// '#' wall, '.' floor, 'P' player start, 'D' descent portal
+// '#' wall, '.' floor, 'P' player start, 'D' descent portal (the forest gate,
+// top centre — the great avenue runs straight from the Anchor up to it)
 // 'K' warden, 'L' scholar, 'C' child, 'V' merchant, 'A' the Anchor, 'T' the
 // Stranger, 'F' plaza fountain (blocking)
 const MAP = [
   '#######################################',
   '#######################################',
-  '##############################DD#######',
-  '##############################D.#######',
-  '##############################..#######',
+  '##################DDD##################',
+  '##################...##################',
+  '##################...##################',
   '#######...###.............###...#######',
   '######....###.............###....######',
   '#####.....###.............###.....#####',
@@ -142,7 +145,7 @@ const MAP = [
  *  particular got confused for pickups/markers) rather than detail. Every
  *  piece left here also does double duty as a wayfinding cue (which
  *  building is whose, where the Merchant is) instead of being pure filler. */
-type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel';
+type DecorKind = 'lantern' | 'banner_gold' | 'banner_violet' | 'crate' | 'barrel' | 'bush' | 'flowers' | 'torch' | 'bench';
 const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
   { x: 9, y: 7, kind: 'lantern' },   // flanking Warden Eda's building
   { x: 29, y: 7, kind: 'lantern' },  // flanking Scholar Voss's building
@@ -150,7 +153,22 @@ const DECOR: Array<{ x: number; y: number; kind: DecorKind }> = [
   { x: 27, y: 5, kind: 'banner_violet' }, // Scholar Voss's building
   { x: 22, y: 15, kind: 'crate' },  // near the Merchant
   { x: 26, y: 15, kind: 'barrel' }, // near the Merchant
+  // Forest gate: torches on the wall either side of the avenue.
+  { x: 17, y: 4, kind: 'torch' },
+  { x: 21, y: 4, kind: 'torch' },
+  // Garden corners (grass patches, see GRASS) and benches around the fountain.
+  { x: 5, y: 12, kind: 'bush' }, { x: 8, y: 14, kind: 'bush' }, { x: 6, y: 14, kind: 'flowers' }, { x: 7, y: 12, kind: 'flowers' },
+  { x: 33, y: 12, kind: 'bush' }, { x: 30, y: 14, kind: 'bush' }, { x: 32, y: 14, kind: 'flowers' }, { x: 31, y: 12, kind: 'flowers' },
+  { x: 16, y: 12, kind: 'bench' }, { x: 22, y: 12, kind: 'bench' },
 ];
+
+/** Ground look is render-only (collision reads MAP): paved avenue + garden turf. */
+const GRASS = [{ c0: 5, c1: 8, r0: 12, r1: 14 }, { c0: 30, c1: 33, r0: 12, r1: 14 }];
+function groundKind(c: number, r: number): 'paved' | 'grass' | 'cobble' {
+  if (GRASS.some((g) => c >= g.c0 && c <= g.c1 && r >= g.r0 && r <= g.r1)) return 'grass';
+  if ((c >= 18 && c <= 20 && r <= 14) || (r >= 9 && r <= 10 && c >= 3 && c <= 35)) return 'paved';
+  return 'cobble';
+}
 
 /** Chapter descent portals beyond the always-open Chapter 1 gate ('D' tiles
  *  baked into MAP), keyed by the flag that unlocks them — a single table
@@ -169,7 +187,7 @@ interface ChapterPortal {
 // Each pos sits inside its own carved gate alcove in the outer wall (see
 // MAP) -- right gate for Ch2, left for Ch3, the three bottom gates for
 // Ch4/5/6 (middle bottom gate added for Ch6, between the pre-existing pair).
-const CHAPTER_PORTALS: ChapterPortal[] = [
+export const CHAPTER_PORTALS: ChapterPortal[] = [
   { chapter: 2, flag: 'ch1_complete', pos: { x: 36, y: 10 }, areaName: 'Sunken City', tint: 0x4488ff, labelColor: '#6699ff', targetDepth: 3 },
   { chapter: 3, flag: 'ch2_complete', pos: { x: 2, y: 10 }, areaName: 'Ashen Peaks', tint: 0xff6622, labelColor: '#ff8844', targetDepth: 5 },
   { chapter: 4, flag: 'ch3_complete', pos: { x: 24, y: 18 }, areaName: 'Crystal Depths', tint: 0xaa44ff, labelColor: '#c78aff', targetDepth: 7 },
@@ -181,7 +199,7 @@ interface Npc {
   spriteKey: string;
   scale: number;
   name: string;
-  kind: 'dialogue' | 'vendor' | 'rift';
+  kind: 'dialogue' | 'vendor' | 'anchor';
   scriptId?: string;
   /** Shows a bouncing "!" above the figure while true — an unclaimed quest. */
   questActive?: boolean;
@@ -272,9 +290,7 @@ function npcs(): Record<string, Npc> {
     // Sanctuary's own Anchor — a shard of the one that shattered long ago
     // (see IntroScene). Once the other anchors are restored it tears open into a
     // Rift: a procedural endgame dungeon that raises the tier each time cleared.
-    ...(ch4Done ? {
-      A: { spriteKey: 'aether', scale: 0.9, name: 'the Rift', kind: 'rift' as const },
-    } : {}),
+    A: { spriteKey: 'aether', scale: 0.9, name: 'the Anchor', kind: 'anchor' as const },
   };
 }
 
@@ -313,6 +329,7 @@ export class SanctuaryScene extends Phaser.Scene {
   private questMarkers = new Map<string, Phaser.GameObjects.Text>();
   private storyMarkers = new Map<string, Phaser.GameObjects.Text>();
   private activePortals: ChapterPortal[] = [];
+  private echoText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Sanctuary');
@@ -332,7 +349,10 @@ export class SanctuaryScene extends Phaser.Scene {
     // without resetting these, update() can touch a destroyed GameObject.
     this.hintText = undefined;
     this.shopBox = undefined;
-    this.activePortals = CHAPTER_PORTALS.filter((p) => hasFlag(p.flag));
+    this.echoText = undefined;
+    // Every run starts from the top now (Ashenveil Forest), so the old
+    // per-chapter shortcut portals stay closed.
+    this.activePortals = [];
 
     this.add.rectangle(0, 0, GAME.width, GAME.height, COLORS.bg).setOrigin(0, 0).setDepth(0);
     this.drawMap(npcs());
@@ -342,6 +362,7 @@ export class SanctuaryScene extends Phaser.Scene {
     attachTouchControls(this);
 
     music.play('sanctuary'); // resumes/switches if returning from dungeon
+    this.refreshEchoes();
 
     // Arrival story: only intro on first visit. Chapter wins play from BattleScene.
     if (!hasFlag('intro_seen')) {
@@ -352,6 +373,31 @@ export class SanctuaryScene extends Phaser.Scene {
     // Milestone/delivery quests have no NPC or boss to trigger them — check
     // in every time the player is back in town, same as a real turn-in.
     for (const quest of checkMilestoneQuests()) showQuestToast(this, quest);
+
+    // The party reacts to how the last run ended (once per run).
+    const save = getSave();
+    if (save.lastRun && hasFlag('intro_seen') && greetedRun !== save.runs) {
+      greetedRun = save.runs;
+      const last = save.lastRun;
+      this.time.delayedCall(700, () => showBanterToast(this, returnBanter({ ...last, runs: save.runs, canAfford: this.canAffordUpgrade() })));
+    }
+  }
+
+  private canAffordUpgrade(): boolean {
+    const echoes = getSave().echoes;
+    return ANCHOR_UPGRADES.some((u) => { const c = nextRankCost(u.id, upgradeRank(u.id)); return c != null && c <= echoes; });
+  }
+
+  /** Echoes (meta currency) and the run's starting gold, top-right. */
+  private refreshEchoes() {
+    const text = `✦ ${getSave().echoes} Echoes    ${getRun().gold}g`;
+    if (!this.echoText) {
+      this.echoText = this.add.text(GAME.width - 8, 6, text, sharpText({ fontFamily: FONT, fontSize: '9px', color: '#9ae8ff', strokeThickness: 3 }))
+        .setOrigin(1, 0).setDepth(30).setScrollFactor(0);
+    } else {
+      this.echoText.setText(text);
+    }
+    this.echoText.setColor(this.canAffordUpgrade() ? '#f0d36c' : '#9ae8ff');
   }
 
   // --- Map and figures ------------------------------------------------------
@@ -366,11 +412,13 @@ export class SanctuaryScene extends Phaser.Scene {
         if (ch === '#') {
           this.add.image(x, y, 'wall').setOrigin(0, 0);
         } else {
-          const base = (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
+          const kind = groundKind(c, r);
+          const base = kind === 'grass' ? 'grass' : kind === 'paved' ? 'paved' : (r + c) % 2 === 0 ? 'floor' : 'floorAlt';
           this.add.image(x, y, `${base}_${tileVariant(c, r, 2)}`).setOrigin(0, 0);
         }
         if (ch === 'D') {
-          this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85);
+          const glow = this.add.image(x, y, 'aether').setOrigin(0, 0).setDepth(1).setAlpha(0.85).setTint(0x9affd0);
+          this.tweens.add({ targets: glow, alpha: { from: 0.95, to: 0.45 }, scale: { from: 1, to: 1.12 }, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         }
         if (ch === 'F') {
           this.placeFountain(x + GAME.tile / 2, y + GAME.tile / 2);
@@ -423,6 +471,15 @@ export class SanctuaryScene extends Phaser.Scene {
         case 'crate':
           this.add.image(x, y, 'decor_crate').setOrigin(0.5, 0.6).setDepth(2);
           break;
+        case 'bush': this.add.image(x, y + 2, 'decor_bush').setDepth(2); break;
+        case 'flowers': this.add.image(x, y + 3, 'decor_flowers').setDepth(2); break;
+        case 'bench': this.add.image(x, y, 'decor_bench').setDepth(2); break;
+        case 'torch': {
+          this.add.image(x, y, 'decor_torch').setOrigin(0.5, 0.7).setDepth(3);
+          const flame = this.add.circle(x, y - 10, 6, 0xff9a3a, 0.28).setDepth(3);
+          this.tweens.add({ targets: flame, alpha: { from: 0.3, to: 0.1 }, scale: { from: 1, to: 1.35 }, duration: 380 + Phaser.Math.Between(0, 200), yoyo: true, repeat: -1 });
+          break;
+        }
         case 'barrel':
           this.add.image(x, y, 'decor_barrel').setOrigin(0.5, 0.6).setDepth(2);
           break;
@@ -682,7 +739,7 @@ export class SanctuaryScene extends Phaser.Scene {
 
       const live = this.liveNpcAt(nx, ny);
       if (live) {
-        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'rift' ? 'enter' : 'talk';
+        const verb = live.def.kind === 'vendor' ? 'shop' : live.def.kind === 'anchor' ? 'commune (upgrades)' : 'talk';
         return {
           label: `Z / tap  ·  ${verb}`,
           run: () => this.interact(live),
@@ -748,21 +805,24 @@ export class SanctuaryScene extends Phaser.Scene {
     this.faceNpcTowardPlayer(live);
     const npc = live.def;
     if (npc.kind === 'vendor') this.openShop();
-    else if (npc.kind === 'rift') this.enterRift();
+    else if (npc.kind === 'anchor') this.openAnchor();
     else if (npc.scriptId) this.openDialogue(npc.scriptId, npc.questActive ? npc.questId : undefined);
   }
 
-  /** Generates a fresh Rift floor for the current tier and descends into it.
-   *  Theme pool is capped to chapters actually cleared (see generateRift) —
-   *  the Rift itself opens at ch4_complete, so without this a fresh Chapter 4
-   *  finisher could roll a later chapter's theme blind. */
-  private enterRift() {
+  /** The Anchor: spend Echoes on permanent upgrades (AnchorScene). */
+  private openAnchor() {
     this.state = 'busy';
-    const maxChapter = hasFlag('ch6_complete') ? 6 : hasFlag('ch5_complete') ? 5 : 4;
-    setRiftArea(generateRift(getSave().ngPlus, maxChapter));
-    getRun().depth = 8; // endgame difficulty curve (loot tier, encounter rate)
-    this.cameras.main.fadeOut(250, 7, 6, 14);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
+    input.releaseAll();
+    this.scene.pause();
+    this.scene.launch('Anchor', {
+      onDone: () => {
+        input.releaseAll();
+        this.scene.resume();
+        this.state = 'roam';
+        this.moveLockedUntil = this.time.now + 300;
+        this.refreshEchoes();
+      },
+    });
   }
 
   // --- Dialog ---------------------------------------------------------------
@@ -803,8 +863,12 @@ export class SanctuaryScene extends Phaser.Scene {
         if (this.grid[r][c] === 'D') dTiles.push({ c, r });
     if (dTiles.length > 0) {
       const mid = dTiles[Math.floor(dTiles.length / 2)];
-      this.add.text(mid.c * GAME.tile + GAME.tile / 2, mid.r * GAME.tile - 6, 'Ashenveil Forest',
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#a58cff' })).setOrigin(0.5, 1).setDepth(5);
+      const cx = mid.c * GAME.tile + GAME.tile / 2;
+      this.add.image(cx, 56, 'decor_gate').setOrigin(0.5, 1).setDepth(1.5);
+      const haze = this.add.ellipse(cx, 44, 56, 26, 0x9affd0, 0.16).setDepth(1.6);
+      this.tweens.add({ targets: haze, alpha: { from: 0.2, to: 0.06 }, scaleX: { from: 1, to: 1.15 }, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.add.text(cx, 6, 'ASHENVEIL FOREST', sharpText({ fontFamily: FONT, fontSize: '7px', color: '#bff0d0', strokeThickness: 2 }))
+        .setOrigin(0.5, 0).setDepth(5);
     }
 
     // Every unlocked chapter portal beyond Chapter 1's always-open gate.
@@ -845,14 +909,14 @@ export class SanctuaryScene extends Phaser.Scene {
 
   private descend() {
     this.state = 'busy';
-    getRun().depth = 1;
+    startRun();
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
 
-  private descendToChapterPortal(portal: ChapterPortal) {
+  private descendToChapterPortal(_portal: ChapterPortal) {
     this.state = 'busy';
-    getRun().depth = portal.targetDepth;
+    startRun();
     this.cameras.main.fadeOut(250, 7, 6, 14);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Descent'));
   }
@@ -862,13 +926,6 @@ export class SanctuaryScene extends Phaser.Scene {
   private buildShopOptions() {
     const inv = getRun().inventory;
     this.buys = [
-      {
-        kind: 'blessing',
-        label: () => 'Crystal Blessing',
-        price: () => hpBlessingCost(),
-        enabled: () => getRun().gold >= hpBlessingCost(),
-        action: () => { buyHpBlessing(); },
-      },
       ...(['potion', 'tonic'] as const).map((id) => ({
         id, kind: 'buyItem' as const,
         label: () => ITEMS[id].name,
@@ -1060,12 +1117,6 @@ export class SanctuaryScene extends Phaser.Scene {
       box.add(this.add.text(tx, py + 42, o.kind === 'buyItem'
         ? `Buy ${item.buyPrice ?? 0}g   ·   sells back for ${item.sellPrice ?? 0}g`
         : `Sells the whole stack at once — total ${o.price()}g`,
-        sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
-    } else if (o.kind === 'blessing') {
-      head('Crystal Blessing');
-      box.add(this.add.text(42, py + 22, 'Permanent +8 max HP for the whole party. Stacks with every purchase, and heals everyone to full when bought.',
-        sharpText({ fontFamily: FONT, fontSize: '8px', color: '#c9cee8', strokeThickness: 2, wordWrap: { width: 540 } })));
-      box.add(this.add.text(42, py + 44, `Cost rises each time — next: ${hpBlessingCost()}g`,
         sharpText({ fontFamily: FONT, fontSize: '7px', color: '#8a93b8', strokeThickness: 2 })));
     } else if (o.kind === 'sellAll') {
       head('Sell all junk');

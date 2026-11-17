@@ -1,17 +1,17 @@
 import Phaser from 'phaser';
 import { GAME, COLORS, renderScale } from '../config';
 import { Battle } from '../game/battle';
-import { rollBoonChoices } from '../game/boons';
 import { ITEMS, LIMIT_BREAKS, SPELLS } from '../game/content';
-import { getArea, isRiftActive, TOTAL_CHAPTERS } from '../game/chapters';
+import { getArea } from '../game/chapters';
 import { eliteIntro, mechanicBadge, MECHANIC_TIPS } from '../game/enemyMechanics';
-import { applyWipePenalty, ascend, completeQuest, getRun, getSave, grantBattleLoot, hasFlag, returnToTown, saveProgress, setFlag } from '../game/run';
+import { addPendingTalents, completeQuest, getRun, grantBattleLoot, hasFlag, isFinalDepth, recordFoe, recordVictory, rollBoons, saveProgress, setFlag, steadyBetweenStrata, xpMultiplier } from '../game/run';
+import { talentPicksBetween } from '../game/talents';
 import { questRewardText } from '../game/quests';
 import { grantXp, xpForLevel } from '../game/progression';
 import { track, chapterOfDepth } from '../game/analytics';
 import { openFeedback } from '../ui/feedback';
 import { input, attachTouchControls, isTouchDevice } from '../game/input';
-import { music, sfx, type AreaThemeId } from '../audio/music';
+import { music, sfx, type AreaThemeId, type SfxName } from '../audio/music';
 import { sharpText, FONT } from '../ui/text';
 import type { Ailment, BattleEvent, Combatant, Command, Element } from '../game/types';
 
@@ -32,6 +32,7 @@ interface MenuOption {
 interface BarSet {
   bg: Phaser.GameObjects.Rectangle;
   fill: Phaser.GameObjects.Rectangle;
+  ghost?: Phaser.GameObjects.Rectangle;
   label?: Phaser.GameObjects.Text;
 }
 
@@ -48,6 +49,15 @@ interface PartyStatusRow {
   hp: Phaser.GameObjects.Text;
   mp: Phaser.GameObjects.Text;
   ailments: Record<Ailment, Phaser.GameObjects.Text>;
+}
+
+// Talent skills reuse the animation of the spell they grew from.
+const ANIM_ALIAS: Record<string, string> = {
+  bash_plus: 'bash', flurry: 'bash', rend: 'bash', fire_plus: 'fire', frost_plus: 'frost',
+  smite_plus: 'smite', sunfire_blade: 'blade', hoarfrost_blade: 'blade',
+};
+function animId(id: string | undefined): string | undefined {
+  return id ? ANIM_ALIAS[id] ?? id : id;
 }
 
 const ELEMENT_LABEL: Record<string, string> = { physical: 'Physical', fire: 'Fire', ice: 'Ice', holy: 'Holy' };
@@ -154,9 +164,13 @@ export class BattleScene extends Phaser.Scene {
   // Chapter mechanics / elite affixes (enemyMechanics.ts): the live label
   // under each enemy's HP bar, and the ice block over a frozen hero.
   private mechBadges = new Map<string, Phaser.GameObjects.Text>();
+  // Telegraphed enemy intents (battle.ts refreshIntent), drawn beside each foe.
+  private intentLabels = new Map<string, Phaser.GameObjects.Text>();
   private iceBlocks = new Map<string, Phaser.GameObjects.Rectangle>();
   private unsubs: (() => void)[] = [];
   private touchCleanups: (() => void)[] = [];
+  private turboMode = false;
+  private turboBtn?: Phaser.GameObjects.Text;
   // Hit feel (see hitStop/landHit). `impactLandsAt` is the scene time the
   // latest scheduled impact (+ its hit-stop) finishes — a BREAK stamp or
   // death in the same parallel batch waits for it rather than beating the
@@ -207,6 +221,7 @@ export class BattleScene extends Phaser.Scene {
     this.menuBacks = [];
     this.log = [];
     this.mechBadges.clear();
+    this.intentLabels.clear();
     this.iceBlocks.clear();
     this.unsubs = [];
     this.touchCleanups = [];
@@ -264,6 +279,8 @@ export class BattleScene extends Phaser.Scene {
     this.grantsBoon = data.boon !== false;
     this.disambiguateEnemyNames(data.enemies);
     this.battle = new Battle(run.party, data.enemies, run.inventory);
+    const leader = data.enemies.find((e) => e.isBoss) ?? data.enemies.find((e) => e.isElite) ?? data.enemies[0];
+    if (leader) recordFoe(leader.name);
 
     this.buildBackground();
 
@@ -515,6 +532,10 @@ export class BattleScene extends Phaser.Scene {
     this.promptText = this.add.text(10, panelY + 7, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#a58cff' })).setDepth(15);
     this.logText = this.add.text(10, panelY + 26, '', sharpText({ fontFamily: FONT, fontSize: '11px', color: '#dfe4f5', lineSpacing: 5, wordWrap: { width: GAME.width - 226 } })).setDepth(15);
     this.add.text(statusX, panelY + 7, 'PARTY', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#f0d36c' })).setDepth(15);
+    this.turboBtn = this.add.text(GAME.width - 10, 8, this.turboMode ? '⚡ TURBO 2× [T]' : '⚡ SPEED 1× [T]', sharpText({
+      fontFamily: FONT, fontSize: '8px', color: this.turboMode ? '#f0d36c' : '#8a93b8', strokeThickness: 2,
+    })).setOrigin(1, 0).setDepth(30).setInteractive({ useHandCursor: true });
+    this.turboBtn.on('pointerdown', () => this.toggleTurbo());
     this.buildPartyBars();
   }
 
@@ -547,9 +568,10 @@ export class BattleScene extends Phaser.Scene {
       if (!img || this.enemyHpBars.has(e.id)) continue;
       const width = e.isBoss ? 86 : 62;
       const bg = this.add.rectangle(0, 0, width, 5, 0x07060e, 0.88).setDepth(7).setStrokeStyle(1, 0x0c0e16);
+      const ghost = this.add.rectangle(0, 0, width - 2, 3, 0xffffff, 0.85).setOrigin(0, 0.5).setDepth(7.5);
       const fill = this.add.rectangle(0, 0, width - 2, 3, e.isBoss ? 0xff5a6a : 0x6cf0a0, 0.96).setOrigin(0, 0.5).setDepth(8);
       const label = this.add.text(0, 0, e.name, sharpText({ fontFamily: FONT, fontSize: e.isBoss ? '8px' : '7px', color: e.isElite ? '#ffcf6a' : '#dfe4f5', strokeThickness: 2 })).setOrigin(0.5, 1).setDepth(8);
-      this.enemyHpBars.set(e.id, { bg, fill, label });
+      this.enemyHpBars.set(e.id, { bg, fill, ghost, label });
 
       // Weakness badges to the right of the HP bar.
       const weakBadges = (e.weakness ?? []).map((el, i) =>
@@ -603,8 +625,9 @@ export class BattleScene extends Phaser.Scene {
       this.partyStatusRows.set(c.id, { bg: rowBg, name, hp: hpText, mp: mpText, ailments });
 
       const hpBg = this.add.rectangle(statusX + 58, barY, 64, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
+      const hpGhost = this.add.rectangle(statusX + 59, barY, 62, 3, 0xff5a6a, 0.85).setOrigin(0, 0.5).setDepth(16.5);
       const hpFill = this.add.rectangle(statusX + 59, barY, 62, 3, 0x6cf0a0, 0.95).setOrigin(0, 0.5).setDepth(17);
-      this.partyHpBars.set(c.id, { bg: hpBg, fill: hpFill });
+      this.partyHpBars.set(c.id, { bg: hpBg, fill: hpFill, ghost: hpGhost });
 
       const xpBg = this.add.rectangle(statusX + 126, barY, 50, 5, 0x07060e, 0.9).setOrigin(0, 0.5).setDepth(16);
       const xpFill = this.add.rectangle(statusX + 127, barY, 48, 3, 0x8a6cf0, 0.95).setOrigin(0, 0.5).setDepth(17);
@@ -999,6 +1022,13 @@ export class BattleScene extends Phaser.Scene {
     }));
     this.unsubs.push(input.on('confirm', () => this.confirm()));
     this.unsubs.push(input.on('cancel', () => this.cancel()));
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 't' || e.key === 'T') {
+        this.toggleTurbo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    this.unsubs.push(() => window.removeEventListener('keydown', onKey));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.unsubs.forEach((u) => u()));
     attachTouchControls(this, 'top', 'battle');
   }
@@ -1130,10 +1160,11 @@ export class BattleScene extends Phaser.Scene {
     const livingEnemies = this.battle.living('enemy');
     this.subItems = m.spells.map((id) => {
       const s = SPELLS[id];
-      const ok = m.stats.mp >= s.cost;
+      // Rekindle only makes sense while someone is down.
+      const ok = m.stats.mp >= s.cost && (!s.revive || this.battle.party.some((c) => c.stats.hp <= 0));
       const element = s.element && s.element !== 'none' ? s.element : undefined;
       const weak = element ? livingEnemies.some((e) => e.weakness?.includes(element)) : false;
-      return { id, label: `${s.name}  ${s.cost}MP`, desc: s.desc, enabled: ok, element, weak, kind: s.kind };
+      return { id, label: `${s.name}  ${s.cost > 0 ? `${s.cost}MP` : 'free'}`, desc: s.desc, enabled: ok, element, weak, kind: s.kind };
     });
     if (this.subItems.length === 0) {
       this.openMenu();
@@ -1188,11 +1219,11 @@ export class BattleScene extends Phaser.Scene {
         this.commit({ type: 'spell', spellId: sel.id, targetId: first?.id ?? '' });
         return;
       }
-      if (spell.target === 'party') {
+      if (spell.target === 'party' || spell.target === 'self') {
         this.commit({ type: 'spell', spellId: sel.id, targetId: this.activeActor.id });
         return;
       }
-      this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget', false, spell.kind === 'heal');
+      this.beginTargeting(spell.target === 'ally' ? 'party' : 'enemy', 'subtarget', spell.revive != null, spell.kind === 'heal' && !spell.revive);
     } else if (this.pending?.kind === 'item') {
       this.pending.id = sel.id;
       const item = ITEMS[sel.id];
@@ -1409,9 +1440,18 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(Math.round(this.eventHold(ev) * (fast ? FAST_FORWARD : 1)), () => this.playEvents(events, i + 1, onDone));
   }
 
-  /** Hold confirm to fast-forward the round (see HOLD_GRACE_MS). */
+  private toggleTurbo() {
+    this.turboMode = !this.turboMode;
+    sfx.play('confirm');
+    if (this.turboBtn) {
+      this.turboBtn.setText(this.turboMode ? '⚡ TURBO 2× [T]' : '⚡ SPEED 1× [T]');
+      this.turboBtn.setColor(this.turboMode ? '#f0d36c' : '#8a93b8');
+    }
+  }
+
+  /** Hold confirm to fast-forward the round (see HOLD_GRACE_MS), or toggle with T. */
   private fastForward(): boolean {
-    return input.isDown('confirm') && this.time.now - this.committedAt > HOLD_GRACE_MS;
+    return this.turboMode || (input.isDown('confirm') && this.time.now - this.committedAt > HOLD_GRACE_MS);
   }
 
   /** How long an event holds the floor before the next one plays. Hits wait
@@ -1422,6 +1462,7 @@ export class BattleScene extends Phaser.Scene {
       case 'phase': return 950;
       case 'break': return 600;
       case 'limit': return 460;
+      case 'combo': return 480;
       case 'ailment': return 400;
       case 'ko': return 420;
       case 'attack':
@@ -1446,6 +1487,7 @@ export class BattleScene extends Phaser.Scene {
     // hit waits for that hit to land (see afterImpacts).
     else if (ev.kind === 'break') { const id = ev.targetId; this.afterImpacts(() => this.playBreak(id)); }
     else if (ev.kind === 'ailment') { const id = ev.targetId, a = ev.ailment; this.afterImpacts(() => this.playAilment(id, a)); }
+    else if (ev.kind === 'combo') { this.afterImpacts(() => this.playCombo(ev)); }
 
     if (ev.amount != null && ev.targetId) {
       const cur = this.hpDisplay.get(ev.targetId) ?? 0;
@@ -1484,7 +1526,8 @@ export class BattleScene extends Phaser.Scene {
     if (!ev.amount || ev.amount <= 0) return 0;
     if (ev.kind === 'attack') return ATTACK_IMPACT_MS;
     if (ev.kind !== 'spell' || !ev.actorId) return 0;
-    switch (ev.spellId) {
+    switch (animId(ev.spellId)) {
+      case 'blade': return ATTACK_IMPACT_MS;
       case 'bash': return ATTACK_IMPACT_MS;
       case 'requiem': return REQUIEM_IMPACT_MS;
       case 'fire': return FIREBALL_MS;
@@ -1514,7 +1557,7 @@ export class BattleScene extends Phaser.Scene {
   /** Hit-stop length for a direct hit (attacks and damaging spells only —
    *  DoT ticks, thorns and the like just flash). */
   private hitStopMs(ev: BattleEvent): number {
-    if (ev.kind !== 'attack' && ev.kind !== 'spell') return 0;
+    if (ev.kind !== 'attack' && ev.kind !== 'spell' && ev.kind !== 'combo') return 0;
     const w = this.hitWeight(ev);
     return w < 0.2 ? 0 : Math.round(25 + 75 * w);
   }
@@ -1791,15 +1834,22 @@ export class BattleScene extends Phaser.Scene {
     const run = getRun();
     run.gold += this.battle.goldWon;
 
-    // Snapshot pre-XP level/xp for whoever's still standing, so the results
-    // overlay below can animate each bar from its old fill to its new one
-    // (including any level-ups) rather than just snapping to the end state.
+    // Snapshot pre-XP level/xp for the whole party (fallen heroes still
+    // learn), so the results overlay can animate each bar from its old fill
+    // to its new one, including any level-ups.
     const xpSnapshots = this.battle.party
-      .filter((c) => c.stats.hp > 0)
       .map((c) => ({ id: c.id, name: c.name, levelBefore: c.level ?? 1, xpBefore: c.xp ?? 0 }));
 
-    // Award XP and show level-up events in the log.
-    const xpEvents = grantXp(run.party, this.battle.xpWon);
+    // Award XP and show level-up events in the log; every TALENT_EVERY
+    // levels a hero earns a talent pick (TalentScene, right after this).
+    const xpEvents = grantXp(run.party, Math.round(this.battle.xpWon * xpMultiplier()));
+    for (const s of xpSnapshots) {
+      const hero = run.party.find((c) => c.id === s.id);
+      if (hero) addPendingTalents(hero.id, talentPicksBetween(s.levelBefore, hero.level ?? 1));
+    }
+    const bossFoe = this.battle.enemies.find((e) => e.isBoss);
+    const eliteFoe = this.battle.enemies.find((e) => e.isElite);
+    recordVictory(bossFoe ? 'boss' : eliteFoe ? 'elite' : 'fight', chapterOfDepth(run.depth));
     for (const ev of xpEvents) this.pushLog(ev.text);
     if (xpEvents.length > 0) sfx.play('levelup');
     for (const c of this.battle.all()) {
@@ -1813,39 +1863,18 @@ export class BattleScene extends Phaser.Scene {
     const loot = grantBattleLoot(depth, boss, this.isElite);
     if (loot.length > 0) this.pushLog(`Loot: ${loot.join(', ')}`);
 
-    // Show the XP-gain bars before doing anything else — boon pick, chapter
-    // clear, and the Rift tier-up all wait for this short beat to finish.
-    this.showXpResults(xpSnapshots, () => this.proceedAfterVictory(boss, depth));
+    // Show the XP-gain bars before doing anything else, then any earned
+    // talent picks — boon pick and stratum clear wait for both.
+    this.showXpResults(xpSnapshots, () => this.runTalentPicks(() => this.proceedAfterVictory(boss, depth)));
+  }
+
+  /** One TalentScene pass covering every hero with picks waiting. */
+  private runTalentPicks(next: () => void): void {
+    if (Object.keys(getRun().pendingTalents).length === 0) { next(); return; }
+    this.scene.launch('TalentPick', { onDone: next });
   }
 
   private proceedAfterVictory(boss: boolean, depth: number): void {
-    const run = getRun();
-
-    // A Rift boss ends the procedural run: raise the tier and go home, skipping
-    // the chapter-completion flags/dialogue (those are for the fixed story).
-    if (boss && isRiftActive()) {
-      saveProgress();
-      music.fanfare('victory');
-      this.ui = 'over';
-      this.time.delayedCall(1000, () => {
-        const clearedTier = getSave().ngPlus + 1; // tier after this clear
-        const accent = getArea(depth).theme.accent; // Rift theme accent (still active)
-        ascend(); // ngPlus += 1, then returnToTown() restores the party and clears the Rift
-        this.scene.launch('ChapterClear', {
-          chapter: clearedTier,
-          accent,
-          areaName: 'The Rift',
-          rift: true,
-          onDone: () => {
-            this.scene.stop('Descent');
-            this.scene.start('Sanctuary');
-            this.scene.stop();
-          },
-        });
-      });
-      return;
-    }
-
     let firstClear = false;
     const chapter = chapterOfDepth(depth);
     if (boss) {
@@ -1855,7 +1884,7 @@ export class BattleScene extends Phaser.Scene {
       const questId = BattleScene.CHAPTER_QUEST[chapter];
       const completedQuest = completeQuest(questId);
       if (completedQuest) this.pushLog(`Quest complete: ${completedQuest.title} — ${questRewardText(completedQuest)}`);
-      track('chapter_clear', { ch: chapterOfDepth(depth), d: depth });
+      track('chapter_clear', { ch: chapter, d: depth, first: firstClear });
     }
     saveProgress();
     music.fanfare('victory');
@@ -1863,42 +1892,43 @@ export class BattleScene extends Phaser.Scene {
 
     if (boss) {
       this.time.delayedCall(1000, () => {
-        const winScript = BattleScene.CHAPTER_WIN_SCRIPT[chapter];
-        // The full ending + feedback prompt is a one-time capstone for the
-        // first-ever kill of the current final chapter's boss. Later kills
-        // (Ascension replays) still get the win dialogue, just not the
-        // "you finished the game" ceremony again.
-        const isFinalBossFirstClear = chapter >= TOTAL_CHAPTERS && firstClear;
+        const final = isFinalDepth(depth);
+        const isFinalBossFirstClear = final && firstClear;
         if (isFinalBossFirstClear) track('game_complete', { d: depth });
-        // After the ending plays, prompt for feedback once — beating the game
-        // is the single highest-signal moment to ask "how was the journey?".
-        // The overlay's onClose resumes the flow home whether they send or not.
+        // The run keeps going: a stratum clear is a breather and a story beat,
+        // then straight into the next chapter's rooms.
+        const nextStratum = () => this.scene.launch('ChapterClear', {
+          chapter,
+          accent: getArea(depth).theme.accent,
+          areaName: getArea(depth).name,
+          onDone: () => this.descendDeeper(),
+        });
+        const runCleared = () => this.toSummary('clear');
+        // After the first-ever ending, prompt for feedback once: beating the
+        // game is the single highest-signal moment to ask.
         const endingThenFeedback = () => this.scene.launch('Dialogue', {
           scriptId: 'ending',
           onDone: () => openFeedback('ending', {
             title: 'You reached the bottom',
             sub: 'Aether is restored. How was the journey? Anonymous — no account needed.',
-            onClose: () => this.toTown(),
+            onClose: () => runCleared(),
           }),
         });
-        // Non-ending boss wins get the "anchor restored" interstitial between
-        // the victory dialogue and the return to town. The final-boss first
-        // clear keeps its own ending ceremony instead.
-        const chapterClear = () => this.scene.launch('ChapterClear', {
-          chapter: chapterOfDepth(depth),
-          accent: getArea(depth).theme.accent,
-          areaName: getArea(depth).name,
-          onDone: () => this.toTown(),
-        });
-        const afterWin = isFinalBossFirstClear ? endingThenFeedback : chapterClear;
-        this.scene.launch('Dialogue', { scriptId: winScript, onDone: afterWin });
+        const afterWin = isFinalBossFirstClear ? endingThenFeedback : final ? runCleared : nextStratum;
+        // The story beat plays the first time each guardian falls; later runs
+        // keep their momentum.
+        if (firstClear) {
+          this.scene.launch('Dialogue', { scriptId: BattleScene.CHAPTER_WIN_SCRIPT[chapter], onDone: afterWin });
+        } else {
+          afterWin();
+        }
       });
       return;
     }
 
     // Choose a boon before returning to the descent — the roguelite core loop.
     this.time.delayedCall(900, () => {
-      const choices = this.grantsBoon ? rollBoonChoices(run.boons, this.isElite) : [];
+      const choices = this.grantsBoon ? rollBoons(this.isElite) : [];
       const finish = () => {
         this.scene.resume('Descent', { won: true, fromBattle: true });
         this.scene.stop();
@@ -1911,6 +1941,19 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  /** A boss fell mid-run: on to the next chapter's first room. */
+  private descendDeeper() {
+    const run = getRun();
+    run.depth++;
+    run.room = null;
+    run.usedTiles = [];
+    steadyBetweenStrata();
+    saveProgress();
+    this.scene.stop('Descent');
+    this.scene.start('Descent', { stratum: true });
+    this.scene.stop();
+  }
+
   private endBattle(delay: number) {
     this.ui = 'over';
     this.time.delayedCall(delay, () => {
@@ -1921,24 +1964,17 @@ export class BattleScene extends Phaser.Scene {
 
   private gameOver() {
     this.ui = 'over';
-    const depth = getRun().depth;
-    const lost = applyWipePenalty();
     this.pushLog('The Anchor draws you back...');
-    if (lost > 0) this.pushLog(`${lost} gold scatters into the dark.`);
     this.refreshStatus();
     music.fanfare('defeat');
-    this.time.delayedCall(2400, () => {
-      this.scene.stop('Descent');
-      this.scene.start('RunSummary', { reason: 'wipe', lostGold: lost, depth });
-      this.scene.stop();
-    });
+    this.time.delayedCall(2400, () => this.toSummary('wipe'));
   }
 
-  /** Leaves the descent and returns to Sanctuary. */
-  private toTown() {
-    returnToTown();
+  /** Ends the run on its recap screen (Echoes payout), then Sanctuary. */
+  private toSummary(reason: 'wipe' | 'clear') {
+    const depth = getRun().depth;
     this.scene.stop('Descent');
-    this.scene.start('Sanctuary');
+    this.scene.start('RunSummary', { reason, depth });
     this.scene.stop();
   }
 
@@ -2059,6 +2095,7 @@ export class BattleScene extends Phaser.Scene {
       })).setOrigin(0.5, 1).setDepth(40).setScale(1.5);
       this.tweens.add({ targets: tag, scale: 1, duration: 140, ease: 'Back.easeOut' });
       this.tweens.add({ targets: tag, y: tag.y - 14, alpha: 0, delay: 250, duration: 700, ease: 'Sine.easeOut', onComplete: () => tag.destroy() });
+      if (crit && ev?.actorId) this.playBark(ev.actorId, 'crit');
     }
   }
 
@@ -2122,7 +2159,8 @@ export class BattleScene extends Phaser.Scene {
    *  generic per-element projectile. Anything not listed here (a boss's
    *  bespoke special move, say) falls back to the original generic effect. */
   private spellAnim(spellId: string | undefined, actorId: string, targetId: string, element?: string) {
-    switch (spellId) {
+    switch (animId(spellId)) {
+      case 'blade':    this.attackAnim(actorId, targetId, element ?? 'physical'); return;
       case 'bash':     this.guardbreakAnim(actorId, targetId); return;
       case 'cleave':   this.arcSweepAnim(actorId, targetId); return;
       case 'fire':     this.fireballAnim(actorId, targetId); return;
@@ -2472,7 +2510,119 @@ export class BattleScene extends Phaser.Scene {
         alpha: 0, angle: 180, duration: 450, ease: 'Quad.easeOut', onComplete: () => shard.destroy(),
       });
     }
+    const hero = this.battle.party.find((p) => p.stats.hp > 0);
+    if (hero) this.playBark(hero.id, 'break');
     this.refreshEnemyBars();
+  }
+
+  /** Plays spectacular audiovisual synergy reaction for elemental combos. */
+  private playCombo(ev: BattleEvent) {
+    const targetId = ev.targetId;
+    if (!targetId) return;
+    const img = this.sprites.get(targetId);
+    if (!img) return;
+
+    const type = ev.comboType ?? 'shatter';
+    let label = 'COMBO!';
+    let color = '#ffd34d';
+    let tint = 0xffd34d;
+    let sfxKey: SfxName = 'magic';
+
+    if (type === 'shatter') {
+      label = 'SHATTER!';
+      color = '#6cd8f0';
+      tint = 0x6cd8f0;
+      sfxKey = 'shatter';
+    } else if (type === 'combustion') {
+      label = 'COMBUSTION!';
+      color = '#ff6a3c';
+      tint = 0xff6a3c;
+      sfxKey = 'combustion';
+    } else if (type === 'sanctify') {
+      label = 'SANCTIFY!';
+      color = '#ffe27a';
+      tint = 0xffe27a;
+      sfxKey = 'sanctify';
+    } else if (type === 'melt') {
+      label = 'MELT!';
+      color = '#44ffcc';
+      tint = 0x44ffcc;
+      sfxKey = 'magic';
+    }
+
+    sfx.play(sfxKey);
+    this.cameras.main.flash(140, (tint >> 16) & 0xff, (tint >> 8) & 0xff, tint & 0xff);
+    this.shake(220, 0.012);
+
+    // Floating Combo Stamp with spring punch
+    const stamp = this.add.text(img.x, img.y - 12, label, sharpText({
+      fontFamily: FONT, fontSize: '15px', color, strokeThickness: 4,
+    })).setOrigin(0.5).setDepth(46).setScale(1.8).setAngle(Phaser.Math.Between(-6, 6));
+    this.tweens.add({ targets: stamp, scale: 1, duration: 150, ease: 'Back.easeOut' });
+    this.tweens.add({
+      targets: stamp, y: stamp.y - 16, alpha: 0, delay: 600, duration: 400,
+      ease: 'Sine.easeIn', onComplete: () => stamp.destroy(),
+    });
+
+    // Burst particle ring
+    const particleCount = type === 'shatter' || type === 'combustion' ? 12 : 8;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (Math.PI * 2 * i) / particleCount;
+      const dist = Phaser.Math.Between(26, 42);
+      const p = this.add.rectangle(img.x, img.y, 4, 4, tint, 0.95).setDepth(35).setAngle(Phaser.Math.Between(0, 180));
+      this.tweens.add({
+        targets: p, x: img.x + Math.cos(angle) * dist, y: img.y + Math.sin(angle) * (dist * 0.7),
+        alpha: 0, scale: 0.2, duration: 380, ease: 'Cubic.easeOut', onComplete: () => p.destroy(),
+      });
+    }
+
+    // Party shout bark!
+    if (ev.actorId) {
+      this.playBark(ev.actorId, type);
+    }
+  }
+
+  /** Snappy floating battle bark above character head when a big move lands. */
+  private playBark(actorId: string, trigger: string) {
+    const sprite = this.sprites.get(actorId);
+    if (!sprite) return;
+
+    const BARKS: Record<string, Record<string, string[]>> = {
+      kael: {
+        shatter: ['Shatter!', 'Break down!', 'Now!'],
+        crit: ['Direct hit!', 'Take that!'],
+        break: ['Shields down!', 'Finish it!'],
+        melt: ['Armor split!'],
+      },
+      lyra: {
+        combustion: ['Detonate!', 'Burn!', 'Ignite!'],
+        shatter: ['Brittle ice!'],
+        melt: ['Melt to slag!'],
+        crit: ['Power surges!'],
+      },
+      mira: {
+        sanctify: ['Light purges all!', 'Dawn cleanses!'],
+        crit: ['Radiance!'],
+        break: ['An opening!'],
+      },
+    };
+
+    const heroBarks = BARKS[actorId]?.[trigger];
+    if (!heroBarks || heroBarks.length === 0) return;
+    const text = heroBarks[Math.floor(Math.random() * heroBarks.length)];
+
+    const bark = this.add.text(sprite.x, sprite.y - 24, text, sharpText({
+      fontFamily: FONT, fontSize: '9px', color: '#ffffff', strokeThickness: 3,
+    })).setOrigin(0.5, 1).setDepth(48).setAlpha(0);
+
+    const bg = this.add.rectangle(bark.x, bark.y - bark.height / 2, bark.width + 8, bark.height + 4, 0x07060e, 0.8)
+      .setOrigin(0.5).setDepth(47).setStrokeStyle(1, 0x2f3658, 0.8).setAlpha(0);
+
+    this.tweens.add({ targets: [bark, bg], alpha: 1, y: '-=4', duration: 120, ease: 'Sine.easeOut' });
+    this.tweens.add({
+      targets: [bark, bg], alpha: 0, y: '-=10', delay: 850, duration: 300,
+      ease: 'Sine.easeIn', onComplete: () => { bark.destroy(); bg.destroy(); },
+    });
   }
 
   private playPhaseTransition(bossId?: string) {
@@ -2561,6 +2711,7 @@ export class BattleScene extends Phaser.Scene {
     const left = img.x - bar.bg.width / 2 + 1;
 
     bar.bg.setPosition(img.x, y);
+    bar.ghost?.setPosition(left, y);
     bar.fill.setPosition(left, y);
     bar.label?.setPosition(img.x, y - 4);
 
@@ -2601,6 +2752,7 @@ export class BattleScene extends Phaser.Scene {
     this.refreshPartyBars();
     this.refreshEnemyBars();
     this.refreshMechanics();
+    this.refreshIntents();
   }
 
   private refreshEnemyBars() {
@@ -2611,8 +2763,23 @@ export class BattleScene extends Phaser.Scene {
       const hp = Math.round(this.hpDisplay.get(e.id) ?? e.stats.hp);
       const pct = Phaser.Math.Clamp(hp / e.stats.maxHp, 0, 1);
       bar.fill.setScale(pct, 1);
+      if (bar.ghost) {
+        if (pct < bar.ghost.scaleX) {
+          this.tweens.killTweensOf(bar.ghost);
+          this.tweens.add({
+            targets: bar.ghost,
+            scaleX: pct,
+            delay: 160,
+            duration: 280,
+            ease: 'Cubic.easeOut',
+          });
+        } else {
+          bar.ghost.setScale(pct, 1);
+        }
+      }
       bar.bg.setAlpha(hp > 0 ? 0.88 : 0.28);
       bar.fill.setAlpha(hp > 0 ? 0.96 : 0);
+      if (bar.ghost) bar.ghost.setAlpha(hp > 0 ? 0.85 : 0);
       bar.label?.setText(hp > 0 ? `${e.name} ${hp}/${e.stats.maxHp}` : `${e.name} — Fallen`);
 
       const ex = this.enemyExtras.get(e.id);
@@ -2656,7 +2823,23 @@ export class BattleScene extends Phaser.Scene {
       const hp = Math.round(this.hpDisplay.get(c.id) ?? c.stats.hp);
       const hpPct = Phaser.Math.Clamp(hp / c.stats.maxHp, 0, 1);
       const hpBar = this.partyHpBars.get(c.id);
-      if (hpBar) hpBar.fill.setScale(hpPct, 1);
+      if (hpBar) {
+        hpBar.fill.setScale(hpPct, 1);
+        if (hpBar.ghost) {
+          if (hpPct < hpBar.ghost.scaleX) {
+            this.tweens.killTweensOf(hpBar.ghost);
+            this.tweens.add({
+              targets: hpBar.ghost,
+              scaleX: hpPct,
+              delay: 160,
+              duration: 280,
+              ease: 'Cubic.easeOut',
+            });
+          } else {
+            hpBar.ghost.setScale(hpPct, 1);
+          }
+        }
+      }
 
       const needed = xpForLevel(c.level ?? 1);
       const xpPct = Phaser.Math.Clamp((c.xp ?? 0) / needed, 0, 1);
@@ -2719,6 +2902,48 @@ export class BattleScene extends Phaser.Scene {
         this.iceBlocks.delete(c.id);
       }
       block?.setPosition(img.x, img.y);
+    }
+  }
+
+  /** What each living enemy is about to do: who it will hit and with what.
+   *  This is the information Defend, Warden's Call and pre-emptive heals are
+   *  played around, so it sits right beside the enemy instead of in the log. */
+  private refreshIntents() {
+    for (const e of this.battle.enemies) {
+      const img = this.sprites.get(e.id);
+      if (!img) continue;
+      let label = this.intentLabels.get(e.id);
+      const text = e.stats.hp > 0 && !e.broken ? this.intentText(e) : null;
+      if (!text) { label?.setVisible(false); continue; }
+      if (!label) {
+        label = this.add.text(0, 0, '', sharpText({ fontFamily: FONT, fontSize: '8px', color: '#ff8a8a', strokeThickness: 3 })).setDepth(9);
+        this.intentLabels.set(e.id, label);
+      }
+      label.setText(text.text).setColor(text.color).setVisible(true);
+      const home = this.spriteHome.get(e.id) ?? { x: img.x, y: img.y };
+      if (e.isBoss) {
+        label.setOrigin(0.5, 1).setPosition(home.x, home.y - img.displayHeight / 2 - 26);
+      } else {
+        label.setOrigin(1, 0.5).setPosition(home.x - img.displayWidth / 2 - 4, home.y);
+      }
+    }
+  }
+
+  private intentText(e: Combatant): { text: string; color: string } | null {
+    const intent = e.intent;
+    if (!intent) return null;
+    const nameOf = (id: string) => this.battle.byId(id)?.name ?? '?';
+    switch (intent.type) {
+      case 'attack': return { text: `⚔ ${nameOf(intent.targetId)}`, color: '#ff8a8a' };
+      case 'spell': {
+        const spell = SPELLS[intent.spellId];
+        if (!spell) return null;
+        if (spell.kind === 'heal') return { text: `✚ ${spell.name}`, color: '#6cf0a0' };
+        const who = spell.target === 'all-enemies' ? 'ALL' : nameOf(intent.targetId);
+        return { text: `✦ ${spell.name} → ${who}`, color: '#c9a8ff' };
+      }
+      case 'phase': return { text: '!! UNLEASHING POWER', color: '#ffcf6a' };
+      default: return null;
     }
   }
 

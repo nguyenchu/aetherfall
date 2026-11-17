@@ -1,6 +1,36 @@
 # Aetherfall - Context & Decision Log
 
-> Paste this into a new session to continue the work. Last updated: 2026-10-17.
+> Paste this into a new session to continue the work. Last updated: 2026-11-17.
+
+## 2026-11-17 (exits): One Unlabelled Exit Per Room
+
+Generated rooms no longer offer 2-3 labelled doors. Classic RPG flow: each
+room has one exit ('1', row 7) and what's behind it is a surprise.
+`rollDoors` returns a one-element list, weighted as before; after a spring,
+event or shop the next room is always a combat room (replaces the old
+"at least one combat door" swap), and a non-combat kind never repeats.
+The exit tile is a plain teal door with no label/hint, and the prompt says
+"onward" instead of naming the room. `ROOM_INFO` stays for the '?' and
+merchant tints.
+
+## 2026-11-17: Roguelite Redesign (replay value)
+
+Ask: "forbedre gameplay betraktelig, null gjenspillverdi". Cause: permanent
+levels/gear + one-chapter descents. Now a Hades-style run of 12 depths
+(6 strata, 3 rooms each + boss). Levels, gear, gold and items reset every
+run; only **Echoes** persist (earned per run, spent at the Anchor in
+Sanctuary: `meta.ts`).
+
+- In-run leveling with talent drafts every 2 levels (`talents.ts`): new
+  skills, upgrades, passives per hero; rerolls come from Anchor upgrades.
+- Battle: enemy intent labels, MP gained from attacking, taunt, revive,
+  Anchor's Mercy (auto-revive once), talent perks merged via `talentPerks`.
+- Run snapshot in the save (version 2, v1 migrated to Echoes) so a run
+  resumes from Title ("Resume descent"). `finishRun(result)` pays out in
+  RunSummary; `returnToTown` follows.
+- Fixed-map used tiles are per run (`run.usedTiles`), story flags stay in save.
+- Aether Caches ('O' tiles) in generated rooms give gold or a little HP/MP.
+- Not done: gear selling in DungeonShop, GameMenu still says "learns at Lv".
 
 ## 2026-10-17 (merge): Battle Feel + Chapter Mechanics Merged Into Main
 

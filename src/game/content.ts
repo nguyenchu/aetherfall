@@ -82,6 +82,87 @@ export const SPELLS: Record<string, Spell> = {
     id: 'cleave', name: 'Arc Sweep', cost: 4, kind: 'damage', power: 9,
     element: 'physical', target: 'all-enemies', desc: 'Sweeping aether slash on all enemies.',
   },
+
+  // --- Talent skills (talents.ts). Learned and upgraded on level-ups during a
+  // run, so every descent ends with a different kit. "+" versions replace
+  // their base spell in the hero's list. ---
+  // Kael
+  bash_plus: {
+    id: 'bash_plus', name: 'Guardbreak+', cost: 3, kind: 'damage', power: 26,
+    element: 'physical', target: 'enemy', guardHit: 2,
+    desc: 'Heavy aetherblade strike. Always chips 2 guard pips.',
+  },
+  flurry: {
+    id: 'flurry', name: 'Aether Flurry', cost: 5, kind: 'damage', power: 9,
+    element: 'physical', target: 'enemy', hits: 3,
+    desc: 'Three quick slashes at random foes. Each can chip guard on a weakness.',
+  },
+  sunfire_blade: {
+    id: 'sunfire_blade', name: 'Sunfire Blade', cost: 4, kind: 'damage', power: 10,
+    element: 'fire', target: 'enemy', scale: 'str',
+    inflict: { ailment: 'burn', chance: 0.4, rounds: 2 },
+    desc: 'A fire-wreathed cut (scales with STR). May Burn.',
+  },
+  hoarfrost_blade: {
+    id: 'hoarfrost_blade', name: 'Hoarfrost Blade', cost: 4, kind: 'damage', power: 10,
+    element: 'ice', target: 'enemy', scale: 'str',
+    inflict: { ailment: 'chill', chance: 0.4, rounds: 2 },
+    desc: 'A frost-edged cut (scales with STR). May Chill.',
+  },
+  rend: {
+    id: 'rend', name: 'Rending Strike', cost: 4, kind: 'damage', power: 12,
+    element: 'physical', target: 'enemy',
+    inflict: { ailment: 'venom', chance: 1, rounds: 3 },
+    desc: 'Opens a wound that always festers (Venom).',
+  },
+  provoke: {
+    id: 'provoke', name: "Warden's Call", cost: 3, kind: 'buff', power: 0,
+    element: 'none', target: 'self', taunt: 2, shield: { mult: 0.6, turns: 2 },
+    desc: 'Draws every enemy to Kael and braces him (-40% damage) for 2 turns.',
+  },
+  // Lyra
+  fire_plus: {
+    id: 'fire_plus', name: 'Ember Hex+', cost: 4, kind: 'damage', power: 22,
+    element: 'fire', target: 'enemy', desc: 'Searing fire hex. Usually Burns.',
+    inflict: { ailment: 'burn', chance: 0.7, rounds: 3 },
+  },
+  frost_plus: {
+    id: 'frost_plus', name: 'Rime Hex+', cost: 5, kind: 'damage', power: 24,
+    element: 'ice', target: 'enemy', desc: 'Biting ice hex. Usually Chills.',
+    inflict: { ailment: 'chill', chance: 0.7, rounds: 3 },
+  },
+  blight: {
+    id: 'blight', name: 'Blight Hex', cost: 3, kind: 'damage', power: 8,
+    element: 'none', target: 'all-enemies', desc: 'A creeping curse on all enemies. Always Venoms.',
+    inflict: { ailment: 'venom', chance: 1, rounds: 3 },
+  },
+  siphon: {
+    id: 'siphon', name: 'Aether Siphon', cost: 0, kind: 'damage', power: 12,
+    element: 'none', target: 'enemy', drainMp: 0.5,
+    desc: 'Free. Drains a foe; half the damage returns to Lyra as MP.',
+  },
+  // Mira
+  cure_plus: {
+    id: 'cure_plus', name: 'Dawnmend+', cost: 4, kind: 'heal', power: 42,
+    element: 'none', target: 'ally', cleanse: true, desc: 'Strong heal that also cleanses ailments.',
+  },
+  smite_plus: {
+    id: 'smite_plus', name: 'Dawnstrike+', cost: 6, kind: 'damage', power: 28,
+    element: 'holy', target: 'enemy', guardHit: 1, desc: 'Holy lance. Always chips 1 guard pip.',
+  },
+  radiant_ward: {
+    id: 'radiant_ward', name: 'Radiant Ward', cost: 4, kind: 'buff', power: 0,
+    element: 'none', target: 'ally', shield: { mult: 0.5, turns: 2 },
+    desc: 'Halves the damage an ally takes for 2 turns.',
+  },
+  rekindle: {
+    id: 'rekindle', name: 'Rekindle', cost: 10, kind: 'heal', power: 0,
+    element: 'none', target: 'ally', revive: 0.4, desc: 'Brings a fallen ally back at 40% HP.',
+  },
+  holy_nova: {
+    id: 'holy_nova', name: 'Dawnburst', cost: 8, kind: 'damage', power: 12,
+    element: 'holy', target: 'all-enemies', desc: 'Holy light bursts over every enemy.',
+  },
 };
 
 export const ITEMS: Record<string, Item> = {
@@ -303,21 +384,21 @@ export function makeParty(): Combatant[] {
       color: C.warrior, size: 22, spells: ['bash'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 60, maxMp: 8, str: 14, agi: 8, vit: 10, int: 2 }),
       growth: { maxHp: 10, maxMp: 2, str: 2, vit: 2, agi: 1 },
-      learnset: { 4: ['cleave'] },
+      learnset: {}, talents: [],
     },
     {
       id: 'lyra', name: 'Lyra', side: 'party', spriteKey: 'c_lyra',
       color: C.mage, size: 20, spells: ['fire', 'frost'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 36, maxMp: 18, str: 6, agi: 11, vit: 5, int: 14 }),
       growth: { maxHp: 5, maxMp: 4, int: 2, agi: 1, str: 1, vit: 1 },
-      learnset: { 4: ['firewave'], 7: ['blizzard'] },
+      learnset: {}, talents: [],
     },
     {
       id: 'mira', name: 'Mira', side: 'party', spriteKey: 'c_mira',
       color: C.cleric, size: 21, spells: ['cure', 'smite'], level: 1, xp: 0, limit: 0,
       stats: stats({ maxHp: 44, maxMp: 14, str: 9, agi: 7, vit: 8, int: 11 }),
       growth: { maxHp: 7, maxMp: 3, int: 2, str: 1, vit: 1, agi: 1 },
-      learnset: { 3: ['haste'], 5: ['cureall'] },
+      learnset: {}, talents: [],
     },
   ];
 }

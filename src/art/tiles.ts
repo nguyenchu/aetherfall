@@ -212,3 +212,29 @@ export function aetherGlow(): PixGrid {
   }
   return g;
 }
+
+/** Sanctuary garden grass: dark moonlit turf with blade flecks. */
+export function grassFloor(base: number, seed: number): PixGrid {
+  const rnd = mulberry32(seed);
+  const g = filled(base);
+  speckle(g, base, rnd, 26, 6);
+  for (let i = 0; i < 9; i++) {
+    const x = Math.floor(rnd() * T), y = 1 + Math.floor(rnd() * (T - 2));
+    pset(g, x, y, shade(base, 14));
+    pset(g, x, y - 1, shade(base, 22));
+  }
+  return g;
+}
+
+/** Paved avenue: lighter, warmer slabs with a tight grid so roads read apart from the plaza cobbles. */
+export function pavedFloor(base: number, seed: number): PixGrid {
+  const rnd = mulberry32(seed);
+  const g = filled(base);
+  const seam = shade(base, -16);
+  for (let i = 0; i < T; i++) { pset(g, i, 7, seam); pset(g, i, 15, seam); }
+  for (let y = 0; y < 8; y++) pset(g, 3, y, seam);
+  for (let y = 8; y < 16; y++) pset(g, 11, y, seam);
+  for (let y = 0; y < 7; y++) pset(g, 0, y, shade(base, 8));
+  speckle(g, base, rnd, 10, 5);
+  return g;
+}
